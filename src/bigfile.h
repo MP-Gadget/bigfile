@@ -97,6 +97,7 @@ int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array);
 int big_block_set_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb);
 int big_block_get_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb);
 BigBlockAttr * big_block_lookup_attr(BigBlock * block, char * attrname);
+BigBlockAttr * big_block_list_attrs(BigBlock * block, size_t * count);
 
 int dtype_normalize(char * dst, char * src);
 void dtype_format(char * buffer, char * dtype, void * data);

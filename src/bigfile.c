@@ -269,7 +269,7 @@ static BigBlockAttr * attrset_append_attr(BigBlockAttrSet * attrset) {
         attrset->listsize = 16;
     }
     while(attrset->listsize - attrset->listused < 1) {
-        attrset->attrlist = realloc(attrset->attrlist, attrset->listsize * 2);
+        attrset->attrlist = realloc(attrset->attrlist, attrset->listsize * 2 * sizeof(BigBlockAttr));
         attrset->listsize *= 2;
     }
     BigBlockAttr * a = & (attrset->attrlist[attrset->listused++]);
@@ -321,6 +321,13 @@ BigBlockAttr * big_block_lookup_attr(BigBlock * block, char * attrname) {
     BigBlockAttr * found = bsearch(&lookup, attrset->attrlist, attrset->listused, sizeof(BigBlockAttr), attr_cmp);
     return found;
 }
+
+BigBlockAttr * big_block_list_attrs(BigBlock * block, size_t * count) {
+    BigBlockAttrSet * attrset = &block->attrset;
+    *count = attrset->listused;
+    return attrset->attrlist; 
+}
+
 int big_block_set_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb) {
     BigBlockAttrSet * attrset = &block->attrset;
     attrset->dirty = 1;
