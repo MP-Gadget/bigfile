@@ -34,6 +34,10 @@ int main(int argc, char * argv[]) {
     BigFile bf = {0};
     BigBlock bb = {0};
 
+    if(argc < 3) {
+        fprintf(stderr, "usage: bigfile-attrdump filepath block [attr1] [attr2] ...\n");
+        exit(1);
+    }
     big_file_open(&bf, argv[1]);
     big_file_open_block(&bf, &bb, argv[2]);
     int i; 
