@@ -4,20 +4,20 @@ from libc.string cimport strcpy
 import numpy
 
 cdef extern from "bigfile.c":
-    struct BigFile:
+    struct CBigFile "BigFile":
         char * basename
 
-    struct BigBlock:
+    struct CBigBlock "BigBlock":
         char * dtype
         int nmemb
         char * basename
         size_t size
         int Nfile
 
-    struct BigBlockPtr:
+    struct CBigBlockPtr "BigBlockPtr":
         pass
 
-    struct BigArray:
+    struct CBigArray "BigArray":
         int ndim
         char * dtype
         ptrdiff_t * dims
@@ -25,38 +25,38 @@ cdef extern from "bigfile.c":
         size_t size
         void * data
 
-    struct BigBlockAttr:
+    struct CBigBlockAttr "BigBlockAttr":
         int nmemb
         char dtype[8]
         char * name
         char * data
 
     void big_file_set_buffer_size(size_t bytes)
-    int big_block_open(BigBlock * bb, char * basename)
-    int big_block_create(BigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[])
-    int big_block_close(BigBlock * block)
-    int big_block_seek(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t offset)
-    int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel)
-    int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
-    int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
-    int big_block_set_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
-    int big_block_get_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
-    BigBlockAttr * big_block_lookup_attr(BigBlock * block, char * attrname)
-    BigBlockAttr * big_block_list_attrs(BigBlock * block, size_t * count)
-    int big_array_init(BigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[])
+    int big_block_open(CBigBlock * bb, char * basename)
+    int big_block_create(CBigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[])
+    int big_block_close(CBigBlock * block)
+    int big_block_seek(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t offset)
+    int big_block_seek_rel(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t rel)
+    int big_block_read(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array)
+    int big_block_write(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array)
+    int big_block_set_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
+    int big_block_get_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
+    CBigBlockAttr * big_block_lookup_attr(CBigBlock * block, char * attrname)
+    CBigBlockAttr * big_block_list_attrs(CBigBlock * block, size_t * count)
+    int big_array_init(CBigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[])
 
-    int big_file_open_block(BigFile * bf, BigBlock * block, char * blockname)
-    int big_file_create_block(BigFile * bf, BigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[])
-    int big_file_open(BigFile * bf, char * basename)
-    void big_file_close(BigFile * bf)
+    int big_file_open_block(CBigFile * bf, CBigBlock * block, char * blockname)
+    int big_file_create_block(CBigFile * bf, CBigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[])
+    int big_file_open(CBigFile * bf, char * basename)
+    void big_file_close(CBigFile * bf)
 
 def set_buffer_size(bytes):
     big_file_set_buffer_size(bytes)
 
 class BigFileError(Exception):
     pass
-cdef class PyBigFile:
-    cdef BigFile bf
+cdef class BigFile:
+    cdef CBigFile bf
     cdef int closed
 
     def __cinit__(self):
@@ -80,18 +80,18 @@ cdef class PyBigFile:
         self.closed = True
 
     def open(self, block):
-        cdef PyBigBlock rt = PyBigBlock()
+        cdef BigBlock rt = BigBlock()
         if 0 != big_file_open_block(&self.bf, &rt.bb, block):
             raise BigFileError("can't open block")
         rt.closed = False
         return rt
 
-cdef class PyBigBlockAttrSet:
-    cdef BigBlock * bb
+cdef class BigBlockAttrSet:
+    cdef CBigBlock * bb
     property keys:
         def __get__(self):
             cdef size_t count
-            cdef BigBlockAttr * list
+            cdef CBigBlockAttr * list
             list = big_block_list_attrs(self.bb, &count)
             return [list[i].name for i in range(count)]
 
@@ -99,13 +99,13 @@ cdef class PyBigBlockAttrSet:
         return iter(self.keys)
 
     def __contains__(self, name):
-        cdef BigBlockAttr * attr = big_block_lookup_attr(self.bb, name)
+        cdef CBigBlockAttr * attr = big_block_lookup_attr(self.bb, name)
         if attr == NULL:
             return False
         return True
 
     def __getitem__(self, name):
-        cdef BigBlockAttr * attr = big_block_lookup_attr(self.bb, name)
+        cdef CBigBlockAttr * attr = big_block_lookup_attr(self.bb, name)
         if attr == NULL:
             raise KeyError("attr not found")
         cdef numpy.ndarray result = numpy.empty(attr[0].nmemb, attr[0].dtype)
@@ -122,11 +122,11 @@ cdef class PyBigBlockAttrSet:
                 array.shape[0])):
             raise BigFileError("Failed to save attr");
 
-cdef class PyBigBlock:
-    cdef BigBlock bb
+cdef class BigBlock:
+    cdef CBigBlock bb
     cdef int closed
 
-    cdef readonly PyBigBlockAttrSet attrs
+    cdef readonly BigBlockAttrSet attrs
 
     property size:
         def __get__(self):
@@ -138,7 +138,7 @@ cdef class PyBigBlock:
 
     def __cinit__(self):
         self.closed = True
-        self.attrs = PyBigBlockAttrSet()
+        self.attrs = BigBlockAttrSet()
         self.attrs.bb = &self.bb
 
     def __init__(self):
@@ -157,14 +157,14 @@ cdef class PyBigBlock:
 
     @staticmethod
     def open(filename):
-        cdef PyBigBlock self = PyBigBlock()
+        cdef BigBlock self = BigBlock()
         if 0 != big_block_open(&self.bb, filename):
             raise BigFileError("Failed to open file")
         self.closed = False
         return self
     @staticmethod
     def create(filename, Nfile, dtype, size):
-        cdef PyBigBlock self = PyBigBlock()
+        cdef BigBlock self = BigBlock()
         dtype = numpy.dtype(dtype)
         assert len(dtype.shape) <= 1
         if len(dtype.shape) == 0:
@@ -181,8 +181,8 @@ cdef class PyBigBlock:
         return self
 
     def write(self, start, numpy.ndarray buf):
-        cdef BigArray array
-        cdef BigBlockPtr ptr
+        cdef CBigArray array
+        cdef CBigBlockPtr ptr
         big_array_init(&array, buf.data, buf.dtype.str, 
                 buf.ndim, 
                 <size_t *> buf.shape,
@@ -192,8 +192,8 @@ cdef class PyBigBlock:
 
     def read(self, start, length):
         cdef numpy.ndarray result 
-        cdef BigArray array
-        cdef BigBlockPtr ptr
+        cdef CBigArray array
+        cdef CBigBlockPtr ptr
         cdef int i
         if length == -1:
             length = self.size - start
@@ -218,7 +218,7 @@ cdef class PyBigBlock:
             big_block_close(&self.bb)
 
     def __repr__(self):
-        return "<BigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
+        return "<CBigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
                 self.dtype, self.size)
 
 

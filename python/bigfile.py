@@ -1,8 +1,8 @@
-from pyxbigfile import PyBigBlock as BigBlock
+from pyxbigfile import BigBlock
+from pyxbigfile import BigFile
 from pyxbigfile import set_buffer_size
 
 import numpy
-
 
 def test():
     set_buffer_size(128);
