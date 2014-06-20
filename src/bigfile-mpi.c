@@ -49,6 +49,8 @@ int big_file_mpi_close(BigFile * bf, MPI_Comm comm) {
 }
 
 static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm);
+static void big_file_mpi_broadcast_error(int root, MPI_Comm comm);
+
 
 int big_block_mpi_open(BigBlock * bb, char * basename, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
