@@ -60,9 +60,7 @@ int big_block_mpi_open(BigBlock * bb, char * basename, MPI_Comm comm) {
     }
     MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
     if(rt) {
-        char * error = big_file_get_error_message();
-        MPI_Bcast(&error, sizeof(error), MPI_BYTE, 0, comm);
-        big_file_set_error_message(error);
+        big_file_mpi_broadcast_error(0, comm);
         return rt;
     }
     big_block_mpi_broadcast(bb, 0, comm);
@@ -78,9 +76,7 @@ int big_block_mpi_create(BigBlock * bb, char * basename, char * dtype, int nmemb
     }
     MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
     if(rt) {
-        char * error = big_file_get_error_message();
-        MPI_Bcast(&error, sizeof(error), MPI_BYTE, 0, comm);
-        big_file_set_error_message(error);
+        big_file_mpi_broadcast_error(0, comm);
         return rt;
     }
     big_block_mpi_broadcast(bb, 0, comm);
@@ -105,15 +101,27 @@ int big_block_mpi_close(BigBlock * block, MPI_Comm comm) {
     }
     MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
     if(rt) {
-        char * error = big_file_get_error_message();
-        MPI_Bcast(&error, sizeof(error), MPI_BYTE, 0, comm);
-        big_file_set_error_message(error);
+        big_file_mpi_broadcast_error(0, comm);
         return rt;
     }
     MPI_Barrier(comm);
     return 0;
 }
 
+static void big_file_mpi_broadcast_error(int root, MPI_Comm comm) {
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+    char * error = big_file_get_error_message();
+    int errorlen = strlen(error);
+    MPI_Bcast(&errorlen, 1, MPI_INT, root, comm);
+    if(rank != root) {
+        error = alloca(errorlen + 1);
+    }
+    MPI_Bcast(error, errorlen + 1, MPI_BYTE, root, comm);
+    if(rank != root) {
+        big_file_set_error_message(error);
+    }
+}
 static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm) {
     ptrdiff_t i;
     int rank;
