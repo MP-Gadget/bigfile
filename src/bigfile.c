@@ -8,7 +8,7 @@
 #include <sys/types.h>
 
 #include "bigfile.h"
-#define RAISE(ex, errormsg) { if(errormsg) { big_file_set_error_message2(errormsg, __FILE__, __LINE__); } goto ex; } 
+#define RAISE(ex, errormsg) { big_file_set_error_message2(errormsg, __FILE__, __LINE__); goto ex; } 
 #define RAISEIF(condition, ex, errormsg) { if(condition) RAISE(ex, errormsg); }
 
 static char * ERRORSTR = NULL;
@@ -22,7 +22,8 @@ int big_file_set_buffer_size(size_t bytes) {
 char * big_file_get_error_message() {
     return ERRORSTR;
 }
-static void big_file_set_error_message2(char * msg, char * file, int line) {
+static void big_file_set_error_message2(const char * msg, const char * file, const int line) {
+    if(!msg) return;
     if(ERRORSTR) free(ERRORSTR);
     ERRORSTR = malloc(strlen(msg) + 128);
     sprintf(ERRORSTR, "%s (%s:%d)", msg, file, line); 
