@@ -272,7 +272,7 @@ int big_block_flush(BigBlock * block) {
         block->dirty = 0;
     }
     if(block->attrset.dirty) {
-        RAISEIF(!big_block_write_attr_set(block),
+        RAISEIF(0 != big_block_write_attr_set(block),
             ex_write_attr,
             NULL);
         block->attrset.dirty = 0;
