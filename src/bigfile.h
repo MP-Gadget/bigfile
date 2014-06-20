@@ -78,12 +78,14 @@ typedef struct BigArrayIter {
 } BigArrayIter;
 
 int big_file_set_buffer_size(size_t bytes);
+char * big_file_get_error_message(void);
+void big_file_set_error_message(char * msg);
 
 int big_file_open(BigFile * bf, char * basename);
 int big_file_create(BigFile * bf, char * basename);
 int big_file_open_block(BigFile * bf, BigBlock * block, char * blockname);
 int big_file_create_block(BigFile * bf, BigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[]);
-void big_file_close(BigFile * bf);
+int big_file_close(BigFile * bf);
 int big_block_flush(BigBlock * block);
 int big_file_mksubdir_r(char * pathname, char * subdir);
 

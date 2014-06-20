@@ -8,23 +8,51 @@
 #include <sys/types.h>
 
 #include "bigfile.h"
+#define RAISE(ex, errormsg) { if(errormsg) { big_file_set_error_message2(errormsg, __FILE__, __LINE__); } goto ex; } 
+#define RAISEIF(condition, ex, errormsg) { if(condition) RAISE(ex, errormsg); }
+
+static char * ERRORSTR = NULL;
+static size_t CHUNK_BYTES = 64 * 1024 * 1024;
+
+int big_file_set_buffer_size(size_t bytes) {
+    CHUNK_BYTES = bytes;
+    return 0;
+}
+
+char * big_file_get_error_message() {
+    return ERRORSTR;
+}
+static void big_file_set_error_message2(char * msg, char * file, int line) {
+    if(ERRORSTR) free(ERRORSTR);
+    ERRORSTR = malloc(strlen(msg) + 128);
+    sprintf(ERRORSTR, "%s (%s:%d)", msg, file, line); 
+}
+void big_file_set_error_message(char * msg) {
+    if(ERRORSTR) free(ERRORSTR);
+    ERRORSTR = strdup(msg);
+}
 
 int big_file_open(BigFile * bf, char * basename) {
     struct stat st;
-    if(0 != stat(basename, &st)) {
-        return -1;
-    }
+    RAISEIF(0 != stat(basename, &st),
+            ex_stat,
+            "Big File does not exists");
     bf->basename = strdup(basename);
     return 0;
+ex_stat:
+    return -1;
 }
 
 int big_file_create(BigFile * bf, char * basename) {
     bf->basename = strdup(basename);
-    if(0 != big_file_mksubdir_r("", basename)) {
-        return -1;
-    }
+    RAISEIF(0 != big_file_mksubdir_r("", basename),
+        ex_subdir,
+        "Failed to create directory structure");
     return 0;
+ex_subdir:
+    return -1;
 }
+
 int big_file_open_block(BigFile * bf, BigBlock * block, char * blockname) {
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
@@ -32,13 +60,18 @@ int big_file_open_block(BigFile * bf, BigBlock * block, char * blockname) {
 }
 int big_file_create_block(BigFile * bf, BigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[]) {
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
-    big_file_mksubdir_r(bf->basename, blockname);
+    RAISEIF(0 != big_file_mksubdir_r(bf->basename, blockname),
+            ex_subdir,
+            "Failed to make directory structure");
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return big_block_create(block, basename, dtype, nmemb, Nfile, fsize);
+ex_subdir:
+    return -1;
 }
-void big_file_close(BigFile * bf) {
+int big_file_close(BigFile * bf) {
     free(bf->basename);
     bf->basename = NULL;
+    return 0;
 }
 
 static void path_join(char * dst, char * path1, char * path2) {
@@ -72,12 +105,6 @@ int big_file_mksubdir_r(char * pathname, char * subdir) {
 #define EXT_DATA   "%06X"
 #define FILEID_ATTR -2
 #define FILEID_HEADER -1
-static size_t CHUNK_BYTES = 64 * 1024 * 1024;
-
-int big_file_set_buffer_size(size_t bytes) {
-    CHUNK_BYTES = bytes;
-    return 0;
-}
 
 static void sysvsum(unsigned int * sum, void * buf, size_t size);
 /* */
@@ -101,37 +128,66 @@ int big_block_open(BigBlock * bb, char * basename) {
     bb->basename = strdup(basename);
     bb->dirty = 0;
     FILE * fheader = open_a_file(bb->basename, FILEID_HEADER, "r");
-    if (!fheader) {
-        return -1;
-    }
-    fscanf(fheader, " DTYPE: %s", bb->dtype);
-    fscanf(fheader, " NMEMB: %d", &(bb->nmemb));
-    fscanf(fheader, " NFILE: %d", &(bb->Nfile));
+    RAISEIF (!fheader,
+            ex_open,
+            "failed to open header of a block");
+
+    RAISEIF(
+           (1 != fscanf(fheader, " DTYPE: %s", bb->dtype)) ||
+           (1 != fscanf(fheader, " NMEMB: %d", &(bb->nmemb))) ||
+           (1 != fscanf(fheader, " NFILE: %d", &(bb->Nfile))),
+           ex_fscanf,
+           "failed to reader header");
+
     bb->fsize = calloc(bb->Nfile, sizeof(size_t));
+    RAISEIF(!bb->fsize,
+            ex_fsize,
+            "Failed to alloc memory");
     bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
+    RAISEIF(!bb->foffset,
+            ex_foffset,
+            "Failed to alloc memory");
     bb->fchecksum = calloc(bb->Nfile, sizeof(int));
-    if (!bb->fsize) { return -1; }
-    if (!bb->foffset) { return -1; }
-    if (!bb->fchecksum) { return -1; }
+    RAISEIF(!bb->fchecksum,
+            ex_fchecksum,
+            "Failed to alloc memory");
     int i;
     for(i = 0; i < bb->Nfile; i ++) {
         int fid; 
         size_t size;
         unsigned int cksum;
         unsigned int sysv;
-        fscanf(fheader, " " EXT_DATA ": %td : %u : %u", &fid, &size, &cksum, &sysv);
+        RAISEIF(4 != fscanf(fheader, " " EXT_DATA ": %td : %u : %u", &fid, &size, &cksum, &sysv),
+                ex_fscanf1,
+                "Failed to readin physical file layout");
         bb->fsize[fid] = size;
         bb->fchecksum[fid] = cksum;
     }
-    fclose(fheader);
     bb->foffset[0] = 0;
     for(i = 0; i < bb->Nfile; i ++) {
         bb->foffset[i + 1] = bb->foffset[i] + bb->fsize[i];
     }
     bb->size = bb->foffset[bb->Nfile];
 
-    big_block_read_attr_set(bb);
+    RAISEIF(0 != big_block_read_attr_set(bb),
+            ex_readattr,
+            NULL);
+
+    fclose(fheader);
     return 0;
+
+ex_readattr:
+ex_fscanf1:
+    free(bb->fchecksum);
+ex_fchecksum:
+    free(bb->foffset);
+ex_foffset:
+    free(bb->fsize);
+ex_fsize:
+ex_fscanf:
+    fclose(fheader);
+ex_open:
+    return -1;
 }
 
 int big_block_create(BigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[]) {
@@ -149,11 +205,11 @@ int big_block_create(BigBlock * bb, char * basename, char * dtype, int nmemb, in
     bb->Nfile = Nfile;
     bb->nmemb = nmemb;
     bb->fsize = calloc(bb->Nfile, sizeof(size_t));
+    RAISEIF(!bb->fsize, ex_fsize, "No memory"); 
     bb->fchecksum = calloc(bb->Nfile, sizeof(int));
+    RAISEIF(!bb->fchecksum, ex_fchecksum, "No memory"); 
     bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
-    if (!bb->fsize) { return -1; }
-    if (!bb->foffset) { return -1; }
-    if (!bb->fchecksum) { return -1; }
+    RAISEIF(!bb->foffset, ex_foffset, "No memory"); 
     int i;
     bb->foffset[0] = 0;
     for(i = 0; i < bb->Nfile; i ++) {
@@ -166,43 +222,74 @@ int big_block_create(BigBlock * bb, char * basename, char * dtype, int nmemb, in
     memset(&bb->attrset, 0, sizeof(bb->attrset));
 
     bb->dirty = 1;
-    big_block_flush(bb);
+    RAISEIF(0 != big_block_flush(bb), 
+            ex_flush, NULL);
+
     /* now truncate all files */
     for(i = 0; i < bb->Nfile; i ++) {
         FILE * fp = open_a_file(bb->basename, i, "w");
+        RAISEIF(fp == NULL, 
+                ex_fileio, 
+                "Failed to create files");
         fclose(fp);
     }
     bb->dirty = 0;
+
     return 0;
+
+ex_flush:
+ex_fileio:
+    free(bb->foffset);
+ex_foffset:
+    free(bb->fchecksum);
+ex_fchecksum:
+    free(bb->fsize);
+ex_fsize:
+    return -1;
 }
 
 int big_block_flush(BigBlock * block) {
+    FILE * fheader = NULL;
     if(block->dirty) {
         int i;
-        FILE * fheader = open_a_file(block->basename, FILEID_HEADER, "w+");
-        if (!fheader) {
-            return -1;
-        }
-        fprintf(fheader, "DTYPE: %s\n", block->dtype);
-        fprintf(fheader, "NMEMB: %d\n", block->nmemb);
-        fprintf(fheader, "NFILE: %d\n", block->Nfile);
+        fheader = open_a_file(block->basename, FILEID_HEADER, "w+");
+        RAISEIF(fheader == NULL, ex_fileio, "Failed to open file");
+        RAISEIF(
+            (0 > fprintf(fheader, "DTYPE: %s\n", block->dtype)) ||
+            (0 > fprintf(fheader, "NMEMB: %d\n", block->nmemb)) ||
+            (0 > fprintf(fheader, "NFILE: %d\n", block->Nfile)),
+                ex_fprintf,
+                "Writing file header");
         for(i = 0; i < block->Nfile; i ++) {
             unsigned int s = block->fchecksum[i];
             unsigned int r = (s & 0xffff) + ((s & 0xffffffff) >> 16);
             unsigned int checksum = (r & 0xffff) + (r >> 16);
-            fprintf(fheader, EXT_DATA ": %td : %u : %u\n", i, block->fsize[i], block->fchecksum[i], checksum);
+            RAISEIF(0 > fprintf(fheader, EXT_DATA ": %td : %u : %u\n", i, block->fsize[i], block->fchecksum[i], checksum),
+                ex_fprintf, "Writing file information to header");
         }
         fclose(fheader);
         block->dirty = 0;
     }
     if(block->attrset.dirty) {
-        big_block_write_attr_set(block);
+        RAISEIF(!big_block_write_attr_set(block),
+            ex_write_attr,
+            NULL);
         block->attrset.dirty = 0;
     }
     return 0;
+
+ex_fprintf:
+    fclose(fheader);
+ex_write_attr:
+ex_fileio:
+    return -1;
 }
 int big_block_close(BigBlock * block) {
-    big_block_flush(block);
+    int rt = 0;
+    RAISEIF(0 != big_block_flush(block),
+            ex_flush,
+            NULL);
+finalize:
     if(block->attrset.attrbuf)
         free(block->attrset.attrbuf);
     if(block->attrset.attrlist)
@@ -212,10 +299,16 @@ int big_block_close(BigBlock * block) {
     free(block->fsize);
     free(block->foffset);
     memset(block, 0, sizeof(BigBlock));
-    return 0;
+    return rt;
+
+ex_flush:
+    rt = -1;
+    goto finalize;
 }
 
 static int big_block_read_attr_set(BigBlock * bb) {
+    bb->attrset.dirty = 0;
+
     FILE * fattr = open_a_file(bb->basename, FILEID_ATTR, "r");
     if(fattr == NULL) {
         return 0;
@@ -227,35 +320,59 @@ static int big_block_read_attr_set(BigBlock * bb) {
     char * name;
     while(!feof(fattr)) {
         if(1 != fread(&nmemb, sizeof(int), 1, fattr)) break;
-        if(1 != fread(&lname, sizeof(int), 1, fattr)) return -1;
-        if(1 != fread(&dtype, 8, 1, fattr)) return -1;
-        name = alloca(lname + 1);
-        if(1 != fread(name, lname, 1, fattr)) return -1;
-        name[lname] = 0;
+        RAISEIF(
+            (1 != fread(&lname, sizeof(int), 1, fattr)) ||
+            (1 != fread(&dtype, 8, 1, fattr)),
+            ex_fread,
+            "Failed to read from file"
+                )
         int ldata = dtype_itemsize(dtype) * nmemb;
         data = alloca(ldata);
-        if(1 != fread(data, ldata, 1, fattr)) return -1;
-        big_block_set_attr(bb, name, data, dtype, nmemb);
+        name = alloca(lname + 1);
+        RAISEIF(
+            (1 != fread(name, lname, 1, fattr)) ||
+            (1 != fread(data, ldata, 1, fattr)),
+            ex_fread,
+            "Failed to read from file");
+
+        name[lname] = 0;
+        RAISEIF(0 != big_block_set_attr(bb, name, data, dtype, nmemb),
+            ex_set_attr,
+            NULL);
     } 
-    bb->attrset.dirty = 0;
     fclose(fattr);
     return 0;
+ex_set_attr:
+ex_fread:
+    fclose(fattr);
+    return -1;
 }
 static int big_block_write_attr_set(BigBlock * bb) {
     FILE * fattr = open_a_file(bb->basename, FILEID_ATTR, "w");
+    RAISEIF(fattr == NULL,
+            ex_open,
+            "Failed to open file");
     ptrdiff_t i;
     for(i = 0; i < bb->attrset.listused; i ++) {
         BigBlockAttr * a = & bb->attrset.attrlist[i];
-        if(1 != fwrite(&a->nmemb, sizeof(int), 1, fattr)) return -1;
         int lname = strlen(a->name);
-        if(1 != fwrite(&lname, sizeof(int), 1, fattr)) return -1;
-        if(1 != fwrite(a->dtype, 8, 1, fattr)) return -1;
-        if(1 != fwrite(a->name, lname, 1, fattr)) return -1;
         int ldata = dtype_itemsize(a->dtype) * a->nmemb;
-        if(1 != fwrite(a->data, ldata, 1, fattr)) return -1;
+        RAISEIF(
+            (1 != fwrite(&a->nmemb, sizeof(int), 1, fattr)) ||
+            (1 != fwrite(&lname, sizeof(int), 1, fattr)) ||
+            (1 != fwrite(a->dtype, 8, 1, fattr)) ||
+            (1 != fwrite(a->name, lname, 1, fattr)) ||
+            (1 != fwrite(a->data, ldata, 1, fattr)),
+            ex_write,
+            "Failed to write to file");
     } 
     fclose(fattr);
     return 0;
+
+ex_write:
+    fclose(fattr);
+ex_open:
+    return -1;
 }
 static int attr_cmp(const void * p1, const void * p2) {
     const BigBlockAttr * c1 = p1;
@@ -333,19 +450,31 @@ int big_block_set_attr(BigBlock * block, char * attrname, void * data, char * dt
     attrset->dirty = 1;
     BigBlockAttr * found = big_block_lookup_attr(block, attrname);
     if(!found) {
-        big_block_add_attr(block, attrname, dtype, nmemb);
+        RAISEIF(0 != big_block_add_attr(block, attrname, dtype, nmemb),
+                ex_add,
+                "Failed to add attr");
     }
     found = big_block_lookup_attr(block, attrname);
-    if(found->nmemb != nmemb) { abort(); }
+    RAISEIF(found->nmemb != nmemb,
+            ex_mismatch,
+            "attr nmemb mismatch");
     dtype_convert_simple(found->data, found->dtype, data, dtype, found->nmemb);
     return 0;
+
+ex_mismatch:
+ex_add:
+    return -1;
 }
 int big_block_get_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb) {
     BigBlockAttr * found = big_block_lookup_attr(block, attrname);
-    if(!found) return -1;
-    if(found->nmemb != nmemb) { abort(); }
+    RAISEIF(!found, ex_notfound, "attr not found");
+    RAISEIF(found->nmemb != nmemb, ex_mismatch, "attr nmemb mismatch");
     dtype_convert_simple(data, dtype, found->data, found->dtype, found->nmemb);
     return 0;
+
+ex_mismatch:
+ex_notfound:
+    return -1;
 }
 /* *
  * seek ptr to offset, on bb
@@ -368,11 +497,11 @@ int big_block_seek(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t offset) {
     }
     /* handle negatives */
     if(offset < 0) offset += bb->foffset[bb->Nfile];
-    if(offset > bb->size) {
+    RAISEIF(offset > bb->size, 
+            ex_eof,
         /* over the end of file */
         /* note that we allow seeking at the end of file */
-        return -1;
-    }
+            "Over the end of file");
     ptr->aoffset = offset;
 
     int left = 0;
@@ -388,6 +517,8 @@ int big_block_seek(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t offset) {
     ptr->fileid = left;
     ptr->roffset = offset - bb->foffset[left];
     return 0;
+ex_eof:
+    return -1;
 }
 
 int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel) {
@@ -397,6 +528,9 @@ int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel) {
 
 int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     char * chunkbuf = malloc(CHUNK_BYTES);
+    RAISEIF(chunkbuf == NULL,
+            ex_malloc,
+            "Not enough memory for chunkbuf");
 
     int felsize = dtype_itemsize(bb->dtype) * bb->nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
@@ -412,6 +546,7 @@ int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     big_array_iter_init(&array_iter, array);
 
     ptrdiff_t toread = array->size / bb->nmemb;
+    FILE * fp = NULL;
     while(toread > 0) {
         size_t chunk_size = CHUNK_SIZE;
         /* remaining items in the file */
@@ -425,29 +560,51 @@ int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
         /* read to the beginning of chunk */
         big_array_iter_init(&chunk_iter, &chunk_array);
 
-        FILE * fp = open_a_file(bb->basename, ptr->fileid, "r");
-        fseek(fp, ptr->roffset * felsize, SEEK_SET);
-        fread(chunkbuf, chunk_size, felsize, fp);
+        fp = open_a_file(bb->basename, ptr->fileid, "r");
+        RAISEIF(fp == NULL,
+                ex_open,
+                "Failed to open file");
+        RAISEIF(0 > fseek(fp, ptr->roffset * felsize, SEEK_SET),
+                ex_seek,
+                "Failed to seek in physical file");
+        RAISEIF(chunk_size != fread(chunkbuf, felsize, chunk_size, fp),
+                ex_read,
+                "Failed to read from file");
+
         fclose(fp);
 
         /* now translate the data from chunkbuf to mptr */
         dtype_convert(&array_iter, &chunk_iter, chunk_size * bb->nmemb);
 
         toread -= chunk_size;
-        big_block_seek_rel(bb, ptr, chunk_size);
+        RAISEIF(0 != big_block_seek_rel(bb, ptr, chunk_size),
+                ex_blockseek,
+                NULL);
     }
     if(toread != 0) {
         abort();
     }
     free(chunkbuf);
     return 0;
+
+ex_read:
+ex_seek:
+    fclose(fp);
+ex_blockseek:
+ex_open:
+    free(chunkbuf);
+ex_malloc:
+    return -1;
 }
 
 int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     if(array->size == 0) return 0;
-
+    /* the file header is modified */
     bb->dirty = 1;
     char * chunkbuf = malloc(CHUNK_BYTES);
+    RAISEIF(chunkbuf == NULL,
+            ex_malloc,
+            "not enough memory for chunkbuf");
 
     int felsize = dtype_itemsize(bb->dtype) * bb->nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
@@ -463,6 +620,7 @@ int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     big_array_iter_init(&array_iter, array);
 
     ptrdiff_t towrite = array->size / bb->nmemb;
+    FILE * fp;
     while(towrite > 0) {
         size_t chunk_size = CHUNK_SIZE;
         /* remaining items in the file */
@@ -481,19 +639,36 @@ int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
 
         sysvsum(&bb->fchecksum[ptr->fileid], chunkbuf, chunk_size * felsize);
 
-        FILE * fp = open_a_file(bb->basename, ptr->fileid, "r+");
-        fseek(fp, ptr->roffset * felsize, SEEK_SET);
-        fwrite(chunkbuf, chunk_size, felsize, fp);
+        fp = open_a_file(bb->basename, ptr->fileid, "r+");
+        RAISEIF(fp == NULL,
+                ex_open,
+                "Failed to open file");
+        RAISEIF(0 > fseek(fp, ptr->roffset * felsize, SEEK_SET),
+                ex_seek,
+                "Failed to seek physical file");
+        RAISEIF(chunk_size != fwrite(chunkbuf, felsize, chunk_size, fp),
+                ex_write,
+                "Failed to write physical file");
         fclose(fp);
 
         towrite -= chunk_size;
-        big_block_seek_rel(bb, ptr, chunk_size);
+        RAISEIF(0 != big_block_seek_rel(bb, ptr, chunk_size),
+                ex_blockseek, NULL);
     }
-    free(chunkbuf);
     if(towrite != 0) {
         abort();
     }
+
+    free(chunkbuf);
     return 0;
+ex_write:
+ex_seek:
+    fclose(fp);
+ex_open:
+ex_blockseek:
+    free(chunkbuf);
+ex_malloc:
+    return -1;
 }
 
 /**

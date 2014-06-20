@@ -7,18 +7,18 @@ int big_file_mpi_open(BigFile * bf, char * basename, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
-    big_file_open(bf, basename);
+    int rt = big_file_open(bf, basename);
     MPI_Barrier(comm);
-    return 0;
+    return rt;
 }
 
 int big_file_mpi_create(BigFile * bf, char * basename, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
-    big_file_create(bf, basename);
+    int rt = big_file_create(bf, basename);
     MPI_Barrier(comm);
-    return 0;
+    return rt;
 }
 int big_file_mpi_open_block(BigFile * bf, BigBlock * block, char * blockname, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
@@ -36,15 +36,16 @@ int big_file_mpi_create_block(BigFile * bf, BigBlock * block, char * blockname, 
     }
     if(comm == MPI_COMM_NULL) return 0;
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
-    big_file_mksubdir_r(bf->basename, blockname);
+    if(0 != big_file_mksubdir_r(bf->basename, blockname)) return -1;
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return big_block_mpi_create(block, basename, dtype, nmemb, Nfile, fsize, comm);
 }
 
-void big_file_mpi_close(BigFile * bf, MPI_Comm comm) {
-    if(comm == MPI_COMM_NULL) return ;
-    big_file_close(bf);
+int big_file_mpi_close(BigFile * bf, MPI_Comm comm) {
+    if(comm == MPI_COMM_NULL) return 0;
+    int rt = big_file_close(bf);
     MPI_Barrier(comm);
+    return rt;
 }
 
 static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm);
@@ -58,7 +59,12 @@ int big_block_mpi_open(BigBlock * bb, char * basename, MPI_Comm comm) {
         rt = big_block_open(bb, basename);
     }
     MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
-    if(rt) return rt;
+    if(rt) {
+        char * error = big_file_get_error_message();
+        MPI_Bcast(&error, sizeof(error), MPI_BYTE, 0, comm);
+        big_file_set_error_message(error);
+        return rt;
+    }
     big_block_mpi_broadcast(bb, 0, comm);
     return 0;
 }
@@ -67,12 +73,16 @@ int big_block_mpi_create(BigBlock * bb, char * basename, char * dtype, int nmemb
     int rank;
     MPI_Comm_rank(comm, &rank);
     int rt;
-    int rt1;
     if(rank == 0) { 
         rt = big_block_create(bb, basename, dtype, nmemb, Nfile, fsize);
     }
     MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
-    if(rt) return rt;
+    if(rt) {
+        char * error = big_file_get_error_message();
+        MPI_Bcast(&error, sizeof(error), MPI_BYTE, 0, comm);
+        big_file_set_error_message(error);
+        return rt;
+    }
     big_block_mpi_broadcast(bb, 0, comm);
     return 0;
 }
@@ -84,13 +94,21 @@ int big_block_mpi_close(BigBlock * block, MPI_Comm comm) {
     MPI_Reduce(block->fchecksum, checksum, block->Nfile, MPI_UNSIGNED, MPI_SUM, 0, comm);
     int dirty;
     MPI_Reduce(&block->dirty, &dirty, 1, MPI_INT, MPI_LOR, 0, comm);
+    int rt;
     if(rank == 0) {
         int i;
         block->dirty = dirty;
         for(i = 0; i < block->Nfile; i ++) {
             block->fchecksum[i] = checksum[i];
         }
-        big_block_close(block);
+        rt = big_block_close(block);
+    }
+    MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
+    if(rt) {
+        char * error = big_file_get_error_message();
+        MPI_Bcast(&error, sizeof(error), MPI_BYTE, 0, comm);
+        big_file_set_error_message(error);
+        return rt;
     }
     MPI_Barrier(comm);
     return 0;
