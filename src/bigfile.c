@@ -498,26 +498,28 @@ int big_block_seek(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t offset) {
     }
     /* handle negatives */
     if(offset < 0) offset += bb->foffset[bb->Nfile];
+
     RAISEIF(offset > bb->size, 
             ex_eof,
         /* over the end of file */
         /* note that we allow seeking at the end of file */
             "Over the end of file");
-    ptr->aoffset = offset;
-
-    int left = 0;
-    int right = bb->Nfile;
-    while(right > left + 1) {
-        int mid = ((right - left) >> 1) + left;
-        if(bb->foffset[mid] <= offset) {
-            left = mid;
-        } else {
-            right = mid;
+    {
+        int left = 0;
+        int right = bb->Nfile;
+        while(right > left + 1) {
+            int mid = ((right - left) >> 1) + left;
+            if(bb->foffset[mid] <= offset) {
+                left = mid;
+            } else {
+                right = mid;
+            }
         }
+        ptr->fileid = left;
+        ptr->roffset = offset - bb->foffset[left];
+        ptr->aoffset = offset;
+        return 0;
     }
-    ptr->fileid = left;
-    ptr->roffset = offset - bb->foffset[left];
-    return 0;
 ex_eof:
     return -1;
 }
@@ -529,10 +531,6 @@ int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel) {
 
 int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     char * chunkbuf = malloc(CHUNK_BYTES);
-    RAISEIF(chunkbuf == NULL,
-            ex_malloc,
-            "Not enough memory for chunkbuf");
-
     int felsize = dtype_itemsize(bb->dtype) * bb->nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
 
@@ -540,14 +538,21 @@ int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     size_t dims[2];
     dims[0] = CHUNK_SIZE;
     dims[1] = bb->nmemb;
-    
-    big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
+
     BigArrayIter chunk_iter;
     BigArrayIter array_iter;
+
+    FILE * fp = NULL;
+    ptrdiff_t toread = 0;
+
+    RAISEIF(chunkbuf == NULL,
+            ex_malloc,
+            "Not enough memory for chunkbuf");
+    
+    big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
     big_array_iter_init(&array_iter, array);
 
-    ptrdiff_t toread = array->size / bb->nmemb;
-    FILE * fp = NULL;
+    toread = array->size / bb->nmemb;
     while(toread > 0) {
         size_t chunk_size = CHUNK_SIZE;
         /* remaining items in the file */
@@ -603,10 +608,6 @@ int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     /* the file header is modified */
     bb->dirty = 1;
     char * chunkbuf = malloc(CHUNK_BYTES);
-    RAISEIF(chunkbuf == NULL,
-            ex_malloc,
-            "not enough memory for chunkbuf");
-
     int felsize = dtype_itemsize(bb->dtype) * bb->nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
 
@@ -614,14 +615,20 @@ int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     size_t dims[2];
     dims[0] = CHUNK_SIZE;
     dims[1] = bb->nmemb;
-    
-    big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
+
     BigArrayIter chunk_iter;
     BigArrayIter array_iter;
+    ptrdiff_t towrite = 0;
+    FILE * fp;
+
+    RAISEIF(chunkbuf == NULL,
+            ex_malloc,
+            "not enough memory for chunkbuf");
+    
+    big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
     big_array_iter_init(&array_iter, array);
 
-    ptrdiff_t towrite = array->size / bb->nmemb;
-    FILE * fp;
+    towrite = array->size / bb->nmemb;
     while(towrite > 0) {
         size_t chunk_size = CHUNK_SIZE;
         /* remaining items in the file */
