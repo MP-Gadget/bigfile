@@ -1,3 +1,7 @@
+#ifndef _BIGFILE_H_
+#define _BIGFILE_H_
+#include <stddef.h>
+
 typedef struct BigFile {
     char * basename;
 } BigFile;
@@ -112,3 +116,4 @@ int dtype_itemsize(char * dtype);
 
 int big_array_init(BigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[]);
 int big_array_iter_init(BigArrayIter * iter, BigArray * array);
+#endif

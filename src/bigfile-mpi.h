@@ -1,3 +1,5 @@
+#ifndef _BIGFILE_MPI_H_
+#define _BIGFILE_MPI_H_
 #include <mpi.h>
 #include "bigfile.h"
 
@@ -10,3 +12,4 @@ int big_file_mpi_close(BigFile * bf, MPI_Comm comm);
 int big_block_mpi_create(BigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[], MPI_Comm comm);
 int big_block_mpi_close(BigBlock * block, MPI_Comm comm);
 int big_block_mpi_open(BigBlock * bb, char * basename, MPI_Comm comm);
+#endif
