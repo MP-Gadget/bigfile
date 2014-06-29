@@ -766,8 +766,23 @@ int big_array_init(BigArray * array, void * buf, char * dtype, int ndim, size_t 
 
 int big_array_iter_init(BigArrayIter * iter, BigArray * array) {
     iter->array = array;
+
     memset(iter->pos, 0, sizeof(ptrdiff_t) * 32);
     iter->dataptr = array->data;
+
+    /* see if the iter is contiguous */
+    size_t elsize = dtype_itemsize(array->dtype);
+
+    int i = 0; 
+    ptrdiff_t stride_contiguous = elsize;
+    iter->contiguous = 1;
+    for(i = array->ndim - 1; i >= 0; i --) {
+        if(array->strides[i] != stride_contiguous) {
+            iter->contiguous = 0;
+            break;
+        }
+        stride_contiguous *= array->dims[i];
+    }
     return 0;
 }
 
@@ -849,6 +864,11 @@ int dtype_convert(BigArrayIter * dst, BigArrayIter * src, size_t nmemb) {
 
 static void advance(BigArrayIter * iter) {
     BigArray * array = iter->array;
+
+    if(iter->contiguous) {
+        iter->dataptr = (char*) iter->dataptr + array->strides[array->ndim - 1];
+        return;
+    }
     int k;
     iter->pos[array->ndim - 1] ++;
     iter->dataptr = ((char*) iter->dataptr) + array->strides[array->ndim - 1];
@@ -903,6 +923,13 @@ static void cast(BigArrayIter * dst, BigArrayIter * src, size_t nmemb) {
     /* convert buf2 to buf1, both are native;
      * dtype has no endian-ness prefix
      *   */
+    if((dst->contiguous && src->contiguous) 
+    && !strcmp(dst->array->dtype + 1, src->array->dtype + 1)) {
+        memcpy(dst->dataptr, src->dataptr, nmemb * dst->array->strides[dst->array->ndim-1]);
+        dst->dataptr = (char*) dst->dataptr + nmemb * dst->array->strides[dst->array->ndim - 1];
+        src->dataptr = (char*) src->dataptr + nmemb * src->array->strides[src->array->ndim - 1];
+        return;
+    }
     if(!strcmp(dst->array->dtype + 1, "i8")) {
         CAST_CONVERTER("i8", int64_t, "i8", int64_t);
         CAST_CONVERTER("i8", int64_t, "i4", int32_t);

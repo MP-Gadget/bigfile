@@ -78,6 +78,7 @@ typedef struct BigArray {
 typedef struct BigArrayIter {
     ptrdiff_t pos[32];
     BigArray * array;
+    int contiguous;
     void * dataptr;
 } BigArrayIter;
 
