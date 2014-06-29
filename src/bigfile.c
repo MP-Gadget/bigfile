@@ -37,7 +37,7 @@ int big_file_open(BigFile * bf, char * basename) {
     struct stat st;
     RAISEIF(0 != stat(basename, &st),
             ex_stat,
-            "Big File does not exists");
+            "Big File does not exist");
     bf->basename = strdup(basename);
     return 0;
 ex_stat:
