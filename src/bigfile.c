@@ -865,6 +865,9 @@ static void advance(BigArrayIter * iter) {
         }
     }
 }
+void big_array_iter_advance(BigArrayIter * iter) {
+    advance(iter);
+}
 static void byte_swap(BigArrayIter * iter, size_t nmemb) {
     /* swap a buffer in-place */
     int elsize = dtype_itemsize(iter->array->dtype);

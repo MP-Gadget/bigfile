@@ -116,4 +116,5 @@ int dtype_itemsize(char * dtype);
 
 int big_array_init(BigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[]);
 int big_array_iter_init(BigArrayIter * iter, BigArray * array);
+void big_array_iter_advance(BigArrayIter * iter);
 #endif
