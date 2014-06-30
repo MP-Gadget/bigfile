@@ -3,6 +3,7 @@ bigfile
 
 scalable large data io for peta scale apps on bluewaters.
 
+
 These Bigfiles are really big. 
 
 Developed for the BlueTides simulation on BlueWaters at NCSA. 
@@ -18,20 +19,21 @@ Logically, a file consists of many blocks. A block is a two dimension table of a
 type, of 'nmemb' columns and 'size' rows. Attributes can be attached to a block. Read/Write
 operation automatically cast the buffer to requrested datatype. 
 
-There is a python API;
-There is a C API;
-There is a C MPI API.
+
+- There is a python API;
+- There is a C API;
+- There is a C MPI API.
 
 There are also tools to inspect these files:
 
-bigfile-cat
-bigfile-repartition
-bigfile-ls
-bigfile-get-attr
+- bigfile-cat
+- bigfile-repartition
+- bigfile-ls
+- bigfile-get-attr
 
 We originally plan
 to use HDF5, but it does not integrate with our simulation software very well.
 HDF5 does not provide a unified interface to access data spread into many files.
 
 
-- Yu Feng
+ Yu Feng
