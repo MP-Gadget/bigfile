@@ -531,6 +531,45 @@ int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel) {
     return big_block_seek(bb, ptr, abs);
 }
 
+/* 
+ * this function will alloc memory in array and read from offset start 
+ * size of rows from the block. 
+ * free(array->data) after using it.
+ * */
+int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array) {
+    BigBlockPtr ptr = {0};
+    void * buffer;
+    size_t dims[2];
+
+    RAISEIF(0 != big_block_seek(bb, &ptr, start),
+       ex_seek,
+       "failed to seek"       
+    );
+
+    if(start + size > bb->size){
+        size = bb->size - start;
+    }
+    RAISEIF(size < 0,
+            ex_seek,
+            "failed to seek");
+
+    buffer = malloc(size * dtype_itemsize(bb->dtype) * bb->nmemb);
+
+    dims[0] = size;
+    dims[1] = bb->nmemb;
+
+    big_array_init(array, buffer, bb->dtype, 2, dims, NULL);
+
+    RAISEIF(0 != big_block_read(bb, &ptr, array),
+            ex_read,
+            "failed to read");
+    return 0;
+ex_read:
+    free(buffer);
+    array->data = NULL;
+ex_seek:
+    return -1;
+}
 int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     char * chunkbuf = malloc(CHUNK_BYTES);
     int felsize = dtype_itemsize(bb->dtype) * bb->nmemb;

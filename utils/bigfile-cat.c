@@ -61,9 +61,6 @@ int main(int argc, char * argv[]) {
 
     ptrdiff_t end = start + size;
 
-    /* copy data */
-    char * buffer = malloc(buffersize);
-
     size_t chunksize = buffersize / (bb.nmemb * dtype_itemsize(bb.dtype));
     BigBlockPtr ptr;
     BigBlockPtr ptrnew;
@@ -71,24 +68,11 @@ int main(int argc, char * argv[]) {
     BigArray array;
 
     for(offset = start; offset < end; ) {
-        size_t readsize = chunksize;
-        if(readsize > end - offset) {
-            readsize = end - offset;
-        }
-        size_t dims[2] = {readsize, bb.nmemb};
-        ptrdiff_t strides[2] = {bb.nmemb * dtype_itemsize(bb.dtype), dtype_itemsize(bb.dtype)};
-
-        big_array_init(&array, buffer, bb.dtype, 2, dims, strides);
-
-        if(0 != big_block_seek(&bb, &ptr, offset)) {
-            fprintf(stderr, "failed to seek original: %s\n", big_file_get_error_message());
-            exit(1);
-        }
-
-        if(0 != big_block_read(&bb, &ptr, &array)) {
+        if(0 != big_block_read_simple(&bb, offset, chunksize, &array)) {
             fprintf(stderr, "failed to read original: %s\n", big_file_get_error_message());
             exit(1);
         }
+
         if(!humane) {
             fwrite(array.data, dtype_itemsize(bb.dtype), array.size, stdout);
         } else {
@@ -96,7 +80,7 @@ int main(int argc, char * argv[]) {
             BigArrayIter iter;
             big_array_iter_init(&iter, &array);
             size_t i;
-            for(i = 0; i < readsize; i++) {
+            for(i = 0; i < array.dims[0]; i++) {
                 int j;
                 for(j = 0; j < bb.nmemb; j ++) {
                     dtype_format(str, array.dtype, iter.dataptr);
@@ -106,7 +90,8 @@ int main(int argc, char * argv[]) {
                 fprintf(stdout, "\n");
             }
         }
-        offset += readsize;
+        free(array.data);
+        offset += array.dims[0];
     }
     big_block_close(&bb);
     big_file_close(&bf);
