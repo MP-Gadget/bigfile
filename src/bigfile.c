@@ -341,10 +341,12 @@ static int big_block_read_attr_set(BigBlock * bb) {
             ex_set_attr,
             NULL);
     } 
+    bb->attrset.dirty = 0;
     fclose(fattr);
     return 0;
 ex_set_attr:
 ex_fread:
+    bb->attrset.dirty = 0;
     fclose(fattr);
     return -1;
 }
