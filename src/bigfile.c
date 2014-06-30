@@ -535,9 +535,17 @@ int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel) {
  * this function will alloc memory in array and read from offset start 
  * size of rows from the block. 
  * free(array->data) after using it.
+ *
+ * at most size rows are read, array.dims[0] has the number that's read.
+ *
+ * if dtype is NULL use the dtype of the block.
+ * otherwise cast the array to the dtype
  * */
-int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array) {
+int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array, char * dtype) {
     BigBlockPtr ptr = {0};
+    if(dtype == NULL) {
+        dtype = bb->dtype;
+    }
     void * buffer;
     size_t dims[2];
 
@@ -553,12 +561,12 @@ int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArr
             ex_seek,
             "failed to seek");
 
-    buffer = malloc(size * dtype_itemsize(bb->dtype) * bb->nmemb);
+    buffer = malloc(size * dtype_itemsize(dtype) * bb->nmemb);
 
     dims[0] = size;
     dims[1] = bb->nmemb;
 
-    big_array_init(array, buffer, bb->dtype, 2, dims, NULL);
+    big_array_init(array, buffer, dtype, 2, dims, NULL);
 
     RAISEIF(0 != big_block_read(bb, &ptr, array),
             ex_read,

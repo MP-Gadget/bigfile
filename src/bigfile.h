@@ -100,7 +100,7 @@ int big_block_close(BigBlock * block);
 int big_block_seek(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t offset);
 int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel);
 int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array);
-int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array);
+int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array, char * dtype);
 
 int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array);
 int big_block_set_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb);

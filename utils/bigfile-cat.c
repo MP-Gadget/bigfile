@@ -68,7 +68,7 @@ int main(int argc, char * argv[]) {
     BigArray array;
 
     for(offset = start; offset < end; ) {
-        if(0 != big_block_read_simple(&bb, offset, chunksize, &array)) {
+        if(0 != big_block_read_simple(&bb, offset, chunksize, &array, NULL)) {
             fprintf(stderr, "failed to read original: %s\n", big_file_get_error_message());
             exit(1);
         }
