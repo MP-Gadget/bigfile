@@ -114,7 +114,10 @@ static void big_file_mpi_broadcast_error(int root, MPI_Comm comm) {
     int rank;
     MPI_Comm_rank(comm, &rank);
     char * error = big_file_get_error_message();
-    int errorlen = strlen(error);
+    int errorlen;
+    if(rank == root) {
+        errorlen = strlen(error);
+    }
     MPI_Bcast(&errorlen, 1, MPI_INT, root, comm);
     if(rank != root) {
         error = alloca(errorlen + 1);
