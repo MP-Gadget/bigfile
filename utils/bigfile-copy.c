@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <unistd.h>
-
 #include "bigfile.h"
+
 void usage() {
     fprintf(stderr, "usage: bigfile-copy [-n Nfile] filepath block newblock\n");
     exit(1);
@@ -99,7 +99,7 @@ int main(int argc, char * argv[]) {
             free(array.data);
             offset += array.dims[0];
             if(verbose) {
-                fprintf(stderr, "%td / %td done\r", offset, bb.size);
+                fprintf(stderr, "%td / %td done (%0.4g%%)\r", offset, bb.size, (100. / bb.size) * offset);
             }
         }
     }
