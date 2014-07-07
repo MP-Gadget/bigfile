@@ -34,7 +34,7 @@ int main(int argc, char * argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &ThisTask);
     MPI_Comm_size(MPI_COMM_WORLD, &NTask);
 
-    MPI_Type_contiguous(MPI_LONG, 2, &MPI_TYPE_WORK);
+    MPI_Type_contiguous(2, MPI_LONG, &MPI_TYPE_WORK);
     MPI_Type_commit(&MPI_TYPE_WORK);
 
     int ch;
