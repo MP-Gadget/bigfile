@@ -3,13 +3,14 @@
 #include <string.h>
 #include <stdint.h>
 #include <stddef.h>
-
+#include <stdarg.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include "bigfile.h"
-#define RAISE(ex, errormsg) { big_file_set_error_message2(errormsg, __FILE__, __LINE__); goto ex; } 
-#define RAISEIF(condition, ex, errormsg) { if(condition) RAISE(ex, errormsg); }
+#define RAISE(ex, errormsg, ...) { big_file_set_error_message2(errormsg, __FILE__, __LINE__, ##__VA_ARGS__); goto ex; } 
+#define RAISEIF(condition, ex, errormsg, ...) { if(condition) RAISE(ex, errormsg, ##__VA_ARGS__); }
 
 static char * ERRORSTR = NULL;
 static size_t CHUNK_BYTES = 64 * 1024 * 1024;
@@ -22,11 +23,28 @@ int big_file_set_buffer_size(size_t bytes) {
 char * big_file_get_error_message() {
     return ERRORSTR;
 }
-static void big_file_set_error_message2(const char * msg, const char * file, const int line) {
-    if(!msg) return;
+static void big_file_set_error_message2(const char * msg, const char * file, const int line, ...) {
+    char * mymsg;
+    if(!msg) {
+        if(ERRORSTR) {
+            mymsg = strdup(ERRORSTR);
+        } else {
+            mymsg = strdup("UNKNOWN ERROR");
+        }
+    } else {
+        mymsg = strdup(msg);
+    }
+
     if(ERRORSTR) free(ERRORSTR);
-    ERRORSTR = malloc(strlen(msg) + 128);
-    sprintf(ERRORSTR, "%s (%s:%d)", msg, file, line); 
+    ERRORSTR = malloc(strlen(mymsg) + 512);
+
+    char * fmtstr = alloca(strlen(mymsg) + 512);
+    sprintf(fmtstr, "%s @(%s:%d)", mymsg, file, line);
+    free(mymsg);
+    va_list va;
+    va_start(va, line);
+    vsprintf(ERRORSTR, fmtstr, va); 
+    va_end(va);
 }
 void big_file_set_error_message(char * msg) {
     if(ERRORSTR) free(ERRORSTR);
@@ -37,7 +55,8 @@ int big_file_open(BigFile * bf, char * basename) {
     struct stat st;
     RAISEIF(0 != stat(basename, &st),
             ex_stat,
-            "Big File does not exist");
+            "Big File `%s' does not exist (%s)", basename,
+            strerror(errno));
     bf->basename = strdup(basename);
     return 0;
 ex_stat:
@@ -48,7 +67,7 @@ int big_file_create(BigFile * bf, char * basename) {
     bf->basename = strdup(basename);
     RAISEIF(0 != big_file_mksubdir_r("", basename),
         ex_subdir,
-        "Failed to create directory structure");
+        NULL);
     return 0;
 ex_subdir:
     return -1;
@@ -63,7 +82,7 @@ int big_file_create_block(BigFile * bf, BigBlock * block, char * blockname, char
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     RAISEIF(0 != big_file_mksubdir_r(bf->basename, blockname),
             ex_subdir,
-            "Failed to make directory structure");
+            NULL);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return big_block_create(block, basename, dtype, nmemb, Nfile, fsize);
 ex_subdir:
@@ -98,7 +117,15 @@ int big_file_mksubdir_r(char * pathname, char * subdir) {
     path_join(mydirname, pathname, subdirname);
     mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     struct stat buf;
-    return stat(mydirname, &buf);
+    RAISEIF(0 != stat(mydirname, &buf),
+            ex_mkdir,
+            "Failed to create directory structure at `%s' (%s)", 
+            mydirname,
+            strerror(errno)
+    );
+    return 0;
+ex_mkdir:
+    return -1;
 }
 
 #define EXT_HEADER "header"
@@ -119,7 +146,13 @@ static FILE * open_a_file(char * basename, int fileid, char * mode) {
     } else {
         sprintf(filename, "%s" EXT_DATA, basename, fileid);
     }
-    return fopen(filename, mode); 
+    FILE * fp = fopen(filename, mode); 
+    RAISEIF(fp == NULL,
+        ex_fopen,
+        "Failed to open physical file `%s' with mode `%s' (%s)", 
+        filename, mode, strerror(errno));
+ex_fopen:
+    return fp;
 }
 static int big_block_read_attr_set(BigBlock * bb);
 static int big_block_write_attr_set(BigBlock * bb);
@@ -131,27 +164,27 @@ int big_block_open(BigBlock * bb, char * basename) {
     FILE * fheader = open_a_file(bb->basename, FILEID_HEADER, "r");
     RAISEIF (!fheader,
             ex_open,
-            "failed to open header of a block");
+            NULL);
 
     RAISEIF(
            (1 != fscanf(fheader, " DTYPE: %s", bb->dtype)) ||
            (1 != fscanf(fheader, " NMEMB: %d", &(bb->nmemb))) ||
            (1 != fscanf(fheader, " NFILE: %d", &(bb->Nfile))),
            ex_fscanf,
-           "failed to reader header");
+           "Failed to read header of block `%s' (%s)", bb->basename, strerror(errno));
 
     bb->fsize = calloc(bb->Nfile, sizeof(size_t));
     RAISEIF(!bb->fsize,
             ex_fsize,
-            "Failed to alloc memory");
+            "Failed to alloc memory of block `%s'", bb->basename);
     bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
     RAISEIF(!bb->foffset,
             ex_foffset,
-            "Failed to alloc memory");
+            "Failed to alloc memory of block `%s'", bb->basename);
     bb->fchecksum = calloc(bb->Nfile, sizeof(int));
     RAISEIF(!bb->fchecksum,
             ex_fchecksum,
-            "Failed to alloc memory");
+            "Failed to alloc memory `%s'", bb->basename);
     int i;
     for(i = 0; i < bb->Nfile; i ++) {
         int fid; 
@@ -160,7 +193,8 @@ int big_block_open(BigBlock * bb, char * basename) {
         unsigned int sysv;
         RAISEIF(4 != fscanf(fheader, " " EXT_DATA ": %td : %u : %u", &fid, &size, &cksum, &sysv),
                 ex_fscanf1,
-                "Failed to readin physical file layout");
+                "Failed to readin physical file layout `%s' %d (%s)", bb->basename, fid,
+                strerror(errno));
         bb->fsize[fid] = size;
         bb->fchecksum[fid] = cksum;
     }
@@ -231,7 +265,7 @@ int big_block_create(BigBlock * bb, char * basename, char * dtype, int nmemb, in
         FILE * fp = open_a_file(bb->basename, i, "w");
         RAISEIF(fp == NULL, 
                 ex_fileio, 
-                "Failed to create files");
+                NULL);
         fclose(fp);
     }
     bb->dirty = 0;
@@ -254,7 +288,7 @@ int big_block_flush(BigBlock * block) {
     if(block->dirty) {
         int i;
         fheader = open_a_file(block->basename, FILEID_HEADER, "w+");
-        RAISEIF(fheader == NULL, ex_fileio, "Failed to open file");
+        RAISEIF(fheader == NULL, ex_fileio, NULL);
         RAISEIF(
             (0 > fprintf(fheader, "DTYPE: %s\n", block->dtype)) ||
             (0 > fprintf(fheader, "NMEMB: %d\n", block->nmemb)) ||
@@ -354,7 +388,7 @@ static int big_block_write_attr_set(BigBlock * bb) {
     FILE * fattr = open_a_file(bb->basename, FILEID_ATTR, "w");
     RAISEIF(fattr == NULL,
             ex_open,
-            "Failed to open file");
+            NULL);
     ptrdiff_t i;
     for(i = 0; i < bb->attrset.listused; i ++) {
         BigBlockAttr * a = & bb->attrset.attrlist[i];
@@ -618,14 +652,15 @@ int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
         fp = open_a_file(bb->basename, ptr->fileid, "r");
         RAISEIF(fp == NULL,
                 ex_open,
-                "Failed to open file");
+                NULL);
         RAISEIF(0 > fseek(fp, ptr->roffset * felsize, SEEK_SET),
                 ex_seek,
-                "Failed to seek in physical file");
+                "Failed to seek in block `%s' at (%d:%td) (%s)", 
+                bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
         RAISEIF(chunk_size != fread(chunkbuf, felsize, chunk_size, fp),
                 ex_read,
-                "Failed to read from file");
-
+                "Failed to read in block `%s' at (%d:%td) (%s)",
+                bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
         fclose(fp);
 
         /* now translate the data from chunkbuf to mptr */
@@ -672,7 +707,7 @@ int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
 
     RAISEIF(chunkbuf == NULL,
             ex_malloc,
-            "not enough memory for chunkbuf");
+            "not enough memory for chunkbuf of size %d bytes", CHUNK_BYTES);
     
     big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
     big_array_iter_init(&array_iter, array);
@@ -699,13 +734,15 @@ int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
         fp = open_a_file(bb->basename, ptr->fileid, "r+");
         RAISEIF(fp == NULL,
                 ex_open,
-                "Failed to open file");
+                NULL);
         RAISEIF(0 > fseek(fp, ptr->roffset * felsize, SEEK_SET),
                 ex_seek,
-                "Failed to seek physical file");
+                "Failed to seek in block `%s' at (%d:%td) (%s)", 
+                bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
         RAISEIF(chunk_size != fwrite(chunkbuf, felsize, chunk_size, fp),
                 ex_write,
-                "Failed to write physical file");
+                "Failed to write in block `%s' at (%d:%td) (%s)",
+                bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
         fclose(fp);
 
         towrite -= chunk_size;
