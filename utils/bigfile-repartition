@@ -41,8 +41,13 @@ repart() {
     $ROOT/bigfile-copy $VERBOSE -n $NFILE $FILE ${BLOCK}-REPBAK ${BLOCK} ||fail
     $ROOT/bigfile-rm $FILE ${BLOCK}-REPBAK ||fail
 }
+if [ -z $1 ]; then
+    BLOCKS=`$ROOT/bigfile-ls $FILE`
+else
+    BLOCKS="$*"
+fi
 
-for block in $*; do
+for block in $BLOCKS ; do
     repart $block
 done
 
