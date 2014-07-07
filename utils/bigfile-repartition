@@ -1,16 +1,48 @@
 #! /bin/bash
 
 usage() {
-    echo 'Usage: bigfile-repartition file block Nfile' >&2
+    echo 'Usage: bigfile-repartition file Nfile block ...' >&2
     exit;
 }
 
 fail () {
     exit;
 }
-ROOT=`dirname $0`
 
-$ROOT/bigfile-rename $1 $2 $2-REPBAK || fail
-$ROOT/bigfile-copy -n $3 $1 $2-REPBAK $2 ||fail
-$ROOT/bigfile-rm $1 $2-REPBAK ||fail
+
+VERBOSE=0
+while getopts ":v" opt; do
+    case $opt in 
+        v )
+        VERBOSE="-v"
+        ;;
+        \? )
+        usage
+        ;;
+    esac
+done
+
+shift $(($OPTIND-1))
+ROOT=`dirname $0`
+FILE=$1
+shift
+NFILE=$1
+shift
+
+repart() {
+    local BLOCK
+    BLOCK=$1
+    
+
+    if [ $VERBOSE ]; then
+        echo Repartitioning $BLOCK >&2
+    fi;
+    $ROOT/bigfile-rename $FILE $BLOCK ${BLOCK}-REPBAK || fail
+    $ROOT/bigfile-copy $VERBOSE -n $NFILE $FILE ${BLOCK}-REPBAK ${BLOCK} ||fail
+    $ROOT/bigfile-rm $FILE ${BLOCK}-REPBAK ||fail
+}
+
+for block in $*; do
+    repart $block
+done
 
