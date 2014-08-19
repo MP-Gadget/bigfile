@@ -48,6 +48,6 @@ else
 fi
 
 for block in $BLOCKS ; do
-    repart $block
+    ( repart $block ) &
 done
-
+wait
