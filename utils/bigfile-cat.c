@@ -25,8 +25,14 @@ int main(int argc, char * argv[]) {
     ptrdiff_t size = -1;
 
     size_t buffersize = 256 * 1024 * 1024;
-    while(-1 != (opt = getopt(argc, argv, "bo:c:B:"))) {
+
+    char * fmt = NULL;
+
+    while(-1 != (opt = getopt(argc, argv, "bo:c:B:f:"))) {
         switch(opt) {
+            case 'f':
+                fmt = optarg;
+                break;
             case 'b':
                 humane = 0;
                 break;
@@ -84,7 +90,7 @@ int main(int argc, char * argv[]) {
             for(i = 0; i < array.dims[0]; i++) {
                 int j;
                 for(j = 0; j < bb.nmemb; j ++) {
-                    dtype_format(str, array.dtype, iter.dataptr);
+                    dtype_format(str, array.dtype, iter.dataptr, fmt);
                     big_array_iter_advance(&iter);
                     fprintf(stdout, "%s ", str);
                 }

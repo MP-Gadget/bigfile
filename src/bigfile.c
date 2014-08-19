@@ -873,7 +873,7 @@ int big_array_iter_init(BigArrayIter * iter, BigArray * array) {
 }
 
 /* format data in dtype to a string in buffer */
-void dtype_format(char * buffer, char * dtype, void * data) {
+void dtype_format(char * buffer, char * dtype, void * data, char * fmt) {
     char ndtype[8];
     char ndtype2[8];
     union {
@@ -888,30 +888,27 @@ void dtype_format(char * buffer, char * dtype, void * data) {
 
     /* handle the endianness stuff in case it is not machine */
     char converted[128];
+
     dtype_normalize(ndtype2, dtype);
     ndtype2[0] = '=';
     dtype_normalize(ndtype, ndtype2);
     dtype_convert_simple(converted, ndtype, data, dtype, 1);
 
     p.v = converted;
-    if(!strcmp(ndtype + 1, "i8")) {
-        sprintf(buffer, "%ld", *p.i8);
-    } else 
-    if(!strcmp(ndtype + 1, "i4")) {
-        sprintf(buffer, "%d", *p.i4);
-    } else 
-    if(!strcmp(ndtype + 1, "u8")) {
-        sprintf(buffer, "%lu", *p.u8);
-    } else 
-    if(!strcmp(ndtype + 1, "u4")) {
-        sprintf(buffer, "%u", *p.u4);
-    } else 
-    if(!strcmp(ndtype + 1, "f8")) {
-        sprintf(buffer, "%g", *p.f8);
-    } else 
-    if(!strcmp(ndtype + 1, "f4")) {
-        sprintf(buffer, "%g", (double) *p.f4);
-    }
+#define _HANDLE_FMT_(dtype, defaultfmt) \
+    if(!strcmp(ndtype + 1, # dtype)) { \
+        if(fmt == NULL) fmt = defaultfmt; \
+        sprintf(buffer, fmt, *p.dtype); \
+    } else
+
+    _HANDLE_FMT_(i8, "%ld")
+    _HANDLE_FMT_(i4, "%d")
+    _HANDLE_FMT_(u8, "%lu")
+    _HANDLE_FMT_(u4, "%u")
+    _HANDLE_FMT_(f8, "%g")
+    _HANDLE_FMT_(f4, "%g")
+    abort();
+#undef _HANDLE_FMT_
 }
 
 int dtype_convert_simple(void * dst, char * dstdtype, void * src, char * srcdtype, size_t nmemb) {

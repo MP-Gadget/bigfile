@@ -29,7 +29,7 @@ static void print_attr(BigBlockAttr * attr, int brief) {
         } else {
             endl = "";
         }
-        dtype_format(buffer, attr->dtype, data);
+        dtype_format(buffer, attr->dtype, data, NULL);
         printf("%s%s", buffer, endl);
         data += dtype_itemsize(attr->dtype);
     }
