@@ -911,6 +911,47 @@ void dtype_format(char * buffer, char * dtype, void * data, char * fmt) {
 #undef _HANDLE_FMT_
 }
 
+/* parse data in dtype to a string in buffer */
+void dtype_parse(char * buffer, char * dtype, void * data, char * fmt) {
+    char ndtype[8];
+    char ndtype2[8];
+    union {
+        int64_t *i8;
+        uint64_t *u8;
+        double *f8;
+        int32_t *i4;
+        uint32_t *u4;
+        float *f4;
+        void * v;
+    } p;
+
+    /* handle the endianness stuff in case it is not machine */
+    char converted[128];
+
+    dtype_normalize(ndtype2, dtype);
+    ndtype2[0] = '=';
+    dtype_normalize(ndtype, ndtype2);
+
+    p.v = converted;
+#define _HANDLE_FMT_(dtype, defaultfmt) \
+    if(!strcmp(ndtype + 1, # dtype)) { \
+        if(fmt == NULL) fmt = defaultfmt; \
+        sscanf(buffer, fmt, p.dtype); \
+    } else
+
+    _HANDLE_FMT_(i8, "%ld")
+    _HANDLE_FMT_(i4, "%d")
+    _HANDLE_FMT_(u8, "%lu")
+    _HANDLE_FMT_(u4, "%u")
+    _HANDLE_FMT_(f8, "%lf")
+    _HANDLE_FMT_(f4, "%f")
+    abort();
+#undef _HANDLE_FMT_
+
+    dtype_convert_simple(data, dtype, converted, ndtype, 1);
+
+}
+
 int dtype_convert_simple(void * dst, char * dstdtype, void * src, char * srcdtype, size_t nmemb) {
     BigArray dst_array, src_array;
     BigArrayIter dst_iter, src_iter;

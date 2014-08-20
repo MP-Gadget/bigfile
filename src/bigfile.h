@@ -110,6 +110,7 @@ BigBlockAttr * big_block_list_attrs(BigBlock * block, size_t * count);
 
 int dtype_normalize(char * dst, char * src);
 void dtype_format(char * buffer, char * dtype, void * data, char * flags);
+void dtype_parse(char * buffer, char * dtype, void * data, char * fmt);
 int dtype_convert(BigArrayIter * dst, BigArrayIter * src, size_t nmemb);
 int dtype_convert_simple(void * dst, char * dstdtype, void * src, char * srcdtype, size_t nmemb);
 int dtype_cmp(char * dtype1, char * dtype2);

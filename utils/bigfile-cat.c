@@ -5,8 +5,19 @@
 #include <stddef.h>
 
 #include <unistd.h>
+#include <signal.h>
 #include "bigfile.h"
 
+static size_t countin;
+static size_t count;
+
+static void usr1(int j) {
+    fprintf(stderr, "bigfile-cat[%d]: %td/%td %g%%\n",
+        getpid(), 
+        countin,
+        count,
+        1.0 * countin / count * 100.);
+}
 static void usage() {
     fprintf(stderr, "usage: bigfile-cat [-b] [-o offset] [-c count] [-B buffersize] filepath block \n");
     fprintf(stderr, "-b direct binary dump \n");
@@ -65,6 +76,10 @@ int main(int argc, char * argv[]) {
         size = bb.size - start;
     } 
 
+    count = size;
+
+    signal(SIGUSR1, usr1);
+
     ptrdiff_t end = start + size;
 
     size_t chunksize = buffersize / (bb.nmemb * dtype_itemsize(bb.dtype));
@@ -99,6 +114,7 @@ int main(int argc, char * argv[]) {
         }
         free(array.data);
         offset += array.dims[0];
+        countin += array.dims[0];
     }
     big_block_close(&bb);
     big_file_close(&bf);

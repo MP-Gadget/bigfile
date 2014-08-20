@@ -7,24 +7,29 @@
 #include "bigfile.h"
 
 void usage() {
-    fprintf(stderr, "usage: bigfile-copy [-n Nfile] filepath block newblock\n");
+    fprintf(stderr, "usage: bigfile-copy [-n Nfile] [-f newfilepath] filepath block newblock\n");
     exit(1);
 
 }
 int main(int argc, char * argv[]) {
     BigFile bf = {0};
+    BigFile bfnew = {0};
     BigBlock bb = {0};
     BigBlock bbnew = {0};
     int verbose = 0;
     int ch;
     int Nfile = -1;
     size_t buffersize = 256 * 1024 * 1024;
-    while(-1 != (ch = getopt(argc, argv, "n:vb:"))) {
+    char * newfile = NULL;
+    while(-1 != (ch = getopt(argc, argv, "n:vB:f:"))) {
         switch(ch) {
+            case 'f':
+                newfile = optarg;
+                break;
             case 'n':
                 Nfile = atoi(optarg);
                 break;
-            case 'b':
+            case 'B':
                 sscanf(optarg, "%td", &buffersize);
                 break;
             case 'v':
@@ -42,6 +47,14 @@ int main(int argc, char * argv[]) {
         fprintf(stderr, "failed to open: %s\n", big_file_get_error_message());
         exit(1);
     }
+    if(newfile == NULL) {
+        newfile = argv[1];
+    }
+    if(0 != big_file_create(&bfnew, newfile)) {
+        fprintf(stderr, "failed to open: %s\n", big_file_get_error_message());
+        exit(1);
+    }
+    
     if(0 != big_file_open_block(&bf, &bb, argv[2])) {
         fprintf(stderr, "failed to open: %s\n", big_file_get_error_message());
         exit(1);
@@ -57,7 +70,7 @@ int main(int argc, char * argv[]) {
             - i * bb.size / Nfile;
     }
 
-    if(0 != big_file_create_block(&bf, &bbnew, argv[3], bb.dtype, bb.nmemb, Nfile, newsize)) {
+    if(0 != big_file_create_block(&bfnew, &bbnew, argv[3], bb.dtype, bb.nmemb, Nfile, newsize)) {
         fprintf(stderr, "failed to create temp: %s\n", big_file_get_error_message());
         exit(1);
     }
@@ -109,5 +122,6 @@ int main(int argc, char * argv[]) {
     }
     big_block_close(&bb);
     big_file_close(&bf);
+    big_file_close(&bfnew);
     return 0;
 }
