@@ -6,7 +6,7 @@ extensions = [
             include_dirs = ["../src"])]
 
 setup(
-    name="bigfile", version="0.1",
+    name="bigfilepy", version="0.1",
     author="Yu Feng",
     description="python binding of BigFile, a peta scale IO format",
     package_dir = {'bigfilepy': 'src'},
