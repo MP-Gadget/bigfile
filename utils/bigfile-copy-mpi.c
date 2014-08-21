@@ -7,7 +7,7 @@
 #include "bigfile-mpi.h"
 
 void usage() {
-    fprintf(stderr, "usage: bigfile-copy-mpi [-n Nfile] filepath block newblock\n");
+    fprintf(stderr, "usage: bigfile-copy-mpi [-N Nfile] [-f newfilepath] filepath block newblock\n");
     exit(1);
 
 }
@@ -18,12 +18,14 @@ void usage() {
 
 MPI_Datatype MPI_TYPE_WORK;
 BigFile bf = {0};
+BigFile bfnew = {0};
 BigBlock bb = {0};
 BigBlock bbnew = {0};
 int verbose = 0;
 int Nfile = -1;
 size_t buffersize = 256 * 1024 * 1024;
 int ThisTask, NTask;
+char * newfilepath = NULL;
 void slave(void);
 void server(void);
 
@@ -38,13 +40,17 @@ int main(int argc, char * argv[]) {
     MPI_Type_commit(&MPI_TYPE_WORK);
 
     int ch;
-    while(-1 != (ch = getopt(argc, argv, "n:vb:"))) {
+    while(-1 != (ch = getopt(argc, argv, "n:N:vb:f:"))) {
         switch(ch) {
+            case 'N':
             case 'n':
                 Nfile = atoi(optarg);
                 break;
             case 'b':
                 sscanf(optarg, "%td", &buffersize);
+                break;
+            case 'f':
+                newfilepath = optarg;
                 break;
             case 'v':
                 verbose = 1;
@@ -68,8 +74,14 @@ int main(int argc, char * argv[]) {
     if(Nfile == -1 || bb.Nfile == 0) {
         Nfile = bb.Nfile;
     }
-
-    if(0 != big_file_mpi_create_block(&bf, &bbnew, argv[3], bb.dtype, bb.nmemb, Nfile, bb.size, MPI_COMM_WORLD)) {
+    if(newfilepath == NULL) {
+        newfilepath = argv[1];
+    }
+    if(0 != big_file_mpi_create(&bfnew, newfilepath, MPI_COMM_WORLD)) {
+        fprintf(stderr, "failed to open: %s\n", big_file_get_error_message());
+        exit(1);
+    }
+    if(0 != big_file_mpi_create_block(&bfnew, &bbnew, argv[3], bb.dtype, bb.nmemb, Nfile, bb.size, MPI_COMM_WORLD)) {
         fprintf(stderr, "failed to create temp: %s\n", big_file_get_error_message());
         exit(1);
     }
@@ -101,6 +113,7 @@ int main(int argc, char * argv[]) {
     }
     big_block_mpi_close(&bb, MPI_COMM_WORLD);
     big_file_mpi_close(&bf, MPI_COMM_WORLD);
+    big_file_mpi_close(&bfnew, MPI_COMM_WORLD);
     return 0;
 }
 
