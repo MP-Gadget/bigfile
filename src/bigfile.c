@@ -135,6 +135,9 @@ ex_mkdir:
 #define FILEID_HEADER -1
 
 static void sysvsum(unsigned int * sum, void * buf, size_t size);
+void big_file_checksum(unsigned int * sum, void * buf, size_t size) {
+    sysvsum(sum, buf, size);
+}
 /* */
 static FILE * open_a_file(char * basename, int fileid, char * mode) {
     char * filename = alloca(strlen(basename) + 128);
