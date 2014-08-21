@@ -4,6 +4,7 @@ all: \
 	bigfile-set-attr \
 	bigfile-copy \
 	bigfile-copy-mpi \
+	bigfile-sample-mpi \
 	bigfile-cat \
 	bigfile-create \
 	bigfile-ls \
@@ -17,6 +18,8 @@ bigfile-copy: bigfile-copy.c ../src/bigfile.a
 	$(CC) -o $@ $< ../src/bigfile.a -I../src
 bigfile-copy-mpi: bigfile-copy-mpi.c ../src/bigfile.a ../src/bigfile-mpi.a
 	$(CC) -o $@ $< ../src/bigfile.a ../src/bigfile-mpi.a -I../src
+bigfile-sample-mpi: bigfile-sample-mpi.c ../src/bigfile.a ../src/bigfile-mpi.a
+	$(CC) -o $@ $< ../src/bigfile.a ../src/bigfile-mpi.a -I../src -lgsl -lgslcblas -lm
 bigfile-cat: bigfile-cat.c ../src/bigfile.a
 	$(CC) -o $@ $< ../src/bigfile.a -I../src
 bigfile-create: bigfile-create.c ../src/bigfile.a
