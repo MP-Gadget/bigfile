@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include "bigfile.h"
+#include <sys/stat.h>
 
 int longfmt = 0;
 
@@ -30,18 +31,23 @@ void listbigfile(char * filename) {
 }
 static int (filter)(const struct dirent * ent) {
     if(ent->d_name[0] == '.') return 0;
-    if(ent->d_type != DT_DIR) return 0;
+//    printf("%s %d\n", ent->d_name, ent->d_type);
+// ent->d_type is unknown on COMA.
+//if(ent->d_type != DT_DIR) return 0;
     return 1;
 }
 
 static void listbigfile_r(BigFile * bf, char * path) {
     struct dirent **namelist;
+    struct stat st;
     int n;
     char * buf = alloca(strlen(bf->basename) + strlen(path) + 10);
     if(strlen(path) > 0) 
         sprintf(buf, "%s/%s", bf->basename, path);
     else
         sprintf(buf, "%s", bf->basename);
+    stat(buf, &st);
+    if(!S_ISDIR(st.st_mode)) return;
     n = scandir(buf, &namelist, filter, alphasort);
     if (n < 0) {
         fprintf(stderr, "cannot open dir: %s\n", buf);
