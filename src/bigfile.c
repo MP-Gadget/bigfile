@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
+#include <dirent.h>
 
 #include "bigfile.h"
 #define RAISE(ex, errormsg, ...) { big_file_set_error_message2(errormsg, __FILE__, __LINE__, ##__VA_ARGS__); goto ex; } 
@@ -72,6 +74,76 @@ int big_file_create(BigFile * bf, char * basename) {
 ex_subdir:
     return -1;
 }
+
+struct bblist {
+    struct bblist * next;
+    char * blockname;
+};
+static int (filter)(const struct dirent * ent) {
+    if(ent->d_name[0] == '.') return 0;
+//    printf("%s %d\n", ent->d_name, ent->d_type);
+// ent->d_type is unknown on COMA.
+//if(ent->d_type != DT_DIR) return 0;
+    return 1;
+}
+static struct bblist * listbigfile_r(BigFile * bf, char * path, struct bblist * bblist) {
+    struct dirent **namelist;
+    struct stat st;
+    int n;
+    char * buf = alloca(strlen(bf->basename) + strlen(path) + 10);
+    if(strlen(path) > 0) 
+        sprintf(buf, "%s/%s", bf->basename, path);
+    else
+        sprintf(buf, "%s", bf->basename);
+    stat(buf, &st);
+    if(!S_ISDIR(st.st_mode)) return bblist;
+    n = scandir(buf, &namelist, filter, alphasort);
+    if (n < 0) {
+        fprintf(stderr, "cannot open dir: %s\n", buf);
+    } else {
+        int i;
+        for(i = 0; i < n ; i ++) {
+            char * blockname = alloca(strlen(namelist[i]->d_name) + strlen(path) + 10);
+            if(strlen(path) > 0) 
+                sprintf(blockname, "%s/%s", path, namelist[i]->d_name);
+            else
+                sprintf(blockname, "%s", namelist[i]->d_name);
+            struct BigBlock bb = {0};
+            if(0 != big_file_open_block(bf, &bb, blockname)) {
+                bblist = listbigfile_r(bf, blockname, bblist);
+            } else {
+                struct bblist * n = malloc(sizeof(struct bblist) + strlen(blockname) + 1);
+                n->next = bblist;
+                n->blockname = (char*) &n[1];
+                strcpy(n->blockname, blockname);
+                bblist = n;
+                big_block_close(&bb);
+            }
+            free(namelist[i]);
+        }
+        free(namelist);
+    }
+    return bblist;
+}
+int big_file_list(BigFile * bf, char *** blocknames, int * Nblocks) {
+    struct bblist * bblist = listbigfile_r(bf, "", NULL);
+    struct bblist * p;
+    int N = 0;
+    int i;
+    for(p = bblist; p; p = p->next) {
+        N ++;
+    }
+    *Nblocks = N;
+    *blocknames = malloc(sizeof(char*) * N);
+    for(i = 0; i < N; i ++) {
+        (*blocknames)[i] = strdup(bblist->blockname);
+        p = bblist;
+        bblist = bblist->next;
+        free(p); 
+    }
+    return 0;
+}
+
 
 int big_file_open_block(BigFile * bf, BigBlock * block, char * blockname) {
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);

@@ -2,6 +2,7 @@
 cimport numpy
 from libc.stddef cimport ptrdiff_t
 from libc.string cimport strcpy
+from libc.stdlib cimport free
 import numpy
 
 cdef extern from "bigfile.c":
@@ -50,6 +51,7 @@ cdef extern from "bigfile.c":
     int big_file_open_block(CBigFile * bf, CBigBlock * block, char * blockname)
     int big_file_create_block(CBigFile * bf, CBigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[])
     int big_file_open(CBigFile * bf, char * basename)
+    int big_file_list(CBigFile * bf, char *** list, int * N)
     int big_file_create(CBigFile * bf, char * basename)
     int big_file_close(CBigFile * bf)
 
@@ -86,6 +88,17 @@ cdef class BigFile:
 
     def __exit__(self, type, value, tb):
         self.close()
+
+    property blocks:
+        def __get__(self):
+            cdef char ** list
+            cdef int N
+            big_file_list(&self.bf, &list, &N)
+            rt = [list[i] for i in range(N)]
+            for i in range(N):
+                free(list[i])
+            free(list)
+            return rt
 
     def close(self):
         if 0 != big_file_close(&self.bf):
@@ -177,6 +190,9 @@ cdef class BigBlock:
     property attrs:
         def __get__(self):
             return BigBlockAttrSet(self)
+    property Nfile:
+        def __get__(self):
+            return self.bb.Nfile
 
     def __cinit__(self):
         self.closed = True
@@ -238,6 +254,15 @@ cdef class BigBlock:
             raise BigFileError()
         if 0 != big_block_write(&self.bb, &ptr, &array):
             raise BigFileError()
+
+    def __getitem__(self, sl):
+        """ returns a copy of data """
+        if not isinstance(sl, slice):
+            raise TypeError('expecting a slice')
+        start, end, stop = sl.indices(self.size)
+        if stop != 1:
+            raise ValueError('must request a continous chunk')
+        return self.read(start, end-start)
 
     def read(self, start, length):
         cdef numpy.ndarray result 

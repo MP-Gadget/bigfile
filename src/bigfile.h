@@ -89,6 +89,7 @@ void big_file_checksum(unsigned int * sum, void * buf, size_t size);
 
 int big_file_open(BigFile * bf, char * basename);
 int big_file_create(BigFile * bf, char * basename);
+int big_file_list(BigFile * bf, char *** blocknames, int * Nblocks);
 int big_file_open_block(BigFile * bf, BigBlock * block, char * blockname);
 int big_file_create_block(BigFile * bf, BigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[]);
 int big_file_close(BigFile * bf);
