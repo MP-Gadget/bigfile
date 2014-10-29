@@ -53,7 +53,7 @@ void big_file_set_error_message(char * msg) {
     ERRORSTR = strdup(msg);
 }
 
-int big_file_open(BigFile * bf, char * basename) {
+int big_file_open(BigFile * bf, const char * basename) {
     struct stat st;
     RAISEIF(0 != stat(basename, &st),
             ex_stat,
@@ -65,7 +65,7 @@ ex_stat:
     return -1;
 }
 
-int big_file_create(BigFile * bf, char * basename) {
+int big_file_create(BigFile * bf, const char * basename) {
     bf->basename = strdup(basename);
     RAISEIF(0 != big_file_mksubdir_r("", basename),
         ex_subdir,
@@ -145,12 +145,12 @@ int big_file_list(BigFile * bf, char *** blocknames, int * Nblocks) {
 }
 
 
-int big_file_open_block(BigFile * bf, BigBlock * block, char * blockname) {
+int big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname) {
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return big_block_open(block, basename);
 }
-int big_file_create_block(BigFile * bf, BigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[]) {
+int big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, const size_t fsize[]) {
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     RAISEIF(0 != big_file_mksubdir_r(bf->basename, blockname),
             ex_subdir,
@@ -166,7 +166,7 @@ int big_file_close(BigFile * bf) {
     return 0;
 }
 
-static void path_join(char * dst, char * path1, char * path2) {
+static void path_join(char * dst, const char * path1, const char * path2) {
     if(strlen(path1) > 0) {
         sprintf(dst, "%s/%s", path1, path2);
     } else {
@@ -174,7 +174,7 @@ static void path_join(char * dst, char * path1, char * path2) {
     }
 }
 /* make subdir rel to pathname, recursively making parents */
-int big_file_mksubdir_r(char * pathname, char * subdir) {
+int big_file_mksubdir_r(const char * pathname, const char * subdir) {
     char * subdirname = alloca(strlen(subdir) + 10);
     char * mydirname = alloca(strlen(subdir) + strlen(pathname) + 10);
     strcpy(subdirname, subdir);
@@ -232,7 +232,7 @@ ex_fopen:
 static int big_block_read_attr_set(BigBlock * bb);
 static int big_block_write_attr_set(BigBlock * bb);
 
-int big_block_open(BigBlock * bb, char * basename) {
+int big_block_open(BigBlock * bb, const char * basename) {
     if(basename == NULL) basename = "";
     bb->basename = strdup(basename);
     bb->dirty = 0;
@@ -300,7 +300,7 @@ ex_open:
     return -1;
 }
 
-int big_block_create(BigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[]) {
+int big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[]) {
     if(basename == NULL) basename = "";
     bb->basename = strdup(basename);
 
@@ -356,6 +356,11 @@ ex_fchecksum:
     free(bb->fsize);
 ex_fsize:
     return -1;
+}
+
+int big_block_clear_checksum(BigBlock * bb) {
+    memset(bb->fchecksum, bb->Nfile * sizeof(int), 0);
+    return 0;
 }
 
 int big_block_flush(BigBlock * block) {
@@ -505,7 +510,7 @@ static BigBlockAttr * attrset_append_attr(BigBlockAttrSet * attrset) {
     memset(a, 0, sizeof(BigBlockAttr));
     return a;
 }
-int big_block_add_attr(BigBlock * block, char * attrname, char * dtype, int nmemb) {
+int big_block_add_attr(BigBlock * block, const char * attrname, const char * dtype, int nmemb) {
     BigBlockAttrSet * attrset = &block->attrset;
     size_t size = dtype_itemsize(dtype) * nmemb + strlen(attrname) + 1;
     if(attrset->bufsize == 0) {
@@ -543,10 +548,10 @@ int big_block_add_attr(BigBlock * block, char * attrname, char * dtype, int nmem
 
     return 0;
 }
-BigBlockAttr * big_block_lookup_attr(BigBlock * block, char * attrname) {
+BigBlockAttr * big_block_lookup_attr(BigBlock * block, const char * attrname) {
     BigBlockAttrSet * attrset = &block->attrset;
     BigBlockAttr lookup = {0};
-    lookup.name = attrname;
+    lookup.name = (char*) attrname;
     BigBlockAttr * found = bsearch(&lookup, attrset->attrlist, attrset->listused, sizeof(BigBlockAttr), attr_cmp);
     return found;
 }
@@ -557,7 +562,7 @@ BigBlockAttr * big_block_list_attrs(BigBlock * block, size_t * count) {
     return attrset->attrlist; 
 }
 
-int big_block_set_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb) {
+int big_block_set_attr(BigBlock * block, const char * attrname, const void * data, const char * dtype, int nmemb) {
     BigBlockAttrSet * attrset = &block->attrset;
     attrset->dirty = 1;
     BigBlockAttr * found = big_block_lookup_attr(block, attrname);
@@ -577,7 +582,7 @@ ex_mismatch:
 ex_add:
     return -1;
 }
-int big_block_get_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb) {
+int big_block_get_attr(BigBlock * block, const char * attrname, void * data, const char * dtype, int nmemb) {
     BigBlockAttr * found = big_block_lookup_attr(block, attrname);
     RAISEIF(!found, ex_notfound, "attr not found");
     RAISEIF(found->nmemb != nmemb, ex_mismatch, "attr nmemb mismatch");
@@ -650,7 +655,7 @@ int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel) {
  * if dtype is NULL use the dtype of the block.
  * otherwise cast the array to the dtype
  * */
-int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array, char * dtype) {
+int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array, const char * dtype) {
     BigBlockPtr ptr = {0};
     if(dtype == NULL) {
         dtype = bb->dtype;
@@ -854,7 +859,7 @@ static char MACHINE_ENDIAN_F(void) {
     }
 }
 
-int dtype_normalize(char * dst, char * src) {
+int dtype_normalize(char * dst, const char * src) {
 /* normalize a dtype, so that
  * dst[0] is the endian-ness
  * dst[1] is the type kind char
@@ -877,30 +882,30 @@ int dtype_normalize(char * dst, char * src) {
     return 0;
 }
 
-int dtype_itemsize(char * dtype) {
+int dtype_itemsize(const char * dtype) {
     char ndtype[8];
     dtype_normalize(ndtype, dtype);
     return atoi(&ndtype[2]);
 }
 
-int dtype_needswap(char * dtype) {
+int dtype_needswap(const char * dtype) {
     char ndtype[8];
     dtype_normalize(ndtype, dtype);
     return dtype[0] != MACHINE_ENDIANNESS;
 }
 
-char dtype_kind(char * dtype) {
+char dtype_kind(const char * dtype) {
     char ndtype[8];
     dtype_normalize(ndtype, dtype);
     return dtype[1];
 }
-int dtype_cmp(char * dtype1, char * dtype2) {
+int dtype_cmp(const char * dtype1, const char * dtype2) {
     char ndtype1[8], ndtype2[8];
     dtype_normalize(ndtype1, dtype1);
     dtype_normalize(ndtype2, dtype2);
     return strcmp(ndtype1, ndtype2);
 }
-int big_array_init(BigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[]) {
+int big_array_init(BigArray * array, void * buf, const char * dtype, int ndim, const size_t dims[], const ptrdiff_t strides[]) {
     dtype_normalize(array->dtype, dtype);
     array->data = buf;
     array->ndim = ndim;
@@ -948,7 +953,7 @@ int big_array_iter_init(BigArrayIter * iter, BigArray * array) {
 }
 
 /* format data in dtype to a string in buffer */
-void dtype_format(char * buffer, char * dtype, void * data, char * fmt) {
+void dtype_format(char * buffer, const char * dtype, const void * data, const char * fmt) {
     char ndtype[8];
     char ndtype2[8];
     union {
@@ -987,7 +992,7 @@ void dtype_format(char * buffer, char * dtype, void * data, char * fmt) {
 }
 
 /* parse data in dtype to a string in buffer */
-void dtype_parse(char * buffer, char * dtype, void * data, char * fmt) {
+void dtype_parse(const char * buffer, const char * dtype, void * data, const char * fmt) {
     char ndtype[8];
     char ndtype2[8];
     union {
@@ -1027,11 +1032,11 @@ void dtype_parse(char * buffer, char * dtype, void * data, char * fmt) {
 
 }
 
-int dtype_convert_simple(void * dst, char * dstdtype, void * src, char * srcdtype, size_t nmemb) {
+int dtype_convert_simple(void * dst, const char * dstdtype, const void * src, const char * srcdtype, size_t nmemb) {
     BigArray dst_array, src_array;
     BigArrayIter dst_iter, src_iter;
     big_array_init(&dst_array, dst, dstdtype, 1, &nmemb, NULL);
-    big_array_init(&src_array, src, srcdtype, 1, &nmemb, NULL);
+    big_array_init(&src_array, (void*) src, srcdtype, 1, &nmemb, NULL);
     big_array_iter_init(&dst_iter, &dst_array);
     big_array_iter_init(&src_iter, &src_array);
     return dtype_convert(&dst_iter, &src_iter, nmemb);

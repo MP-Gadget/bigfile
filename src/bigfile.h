@@ -87,40 +87,41 @@ char * big_file_get_error_message(void);
 void big_file_set_error_message(char * msg);
 void big_file_checksum(unsigned int * sum, void * buf, size_t size);
 
-int big_file_open(BigFile * bf, char * basename);
-int big_file_create(BigFile * bf, char * basename);
+int big_file_open(BigFile * bf, const char * basename);
+int big_file_create(BigFile * bf, const char * basename);
 int big_file_list(BigFile * bf, char *** blocknames, int * Nblocks);
-int big_file_open_block(BigFile * bf, BigBlock * block, char * blockname);
-int big_file_create_block(BigFile * bf, BigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[]);
+int big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname);
+int big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, const size_t fsize[]);
 int big_file_close(BigFile * bf);
 int big_block_flush(BigBlock * block);
-int big_file_mksubdir_r(char * pathname, char * subdir);
+int big_file_mksubdir_r(const char * pathname, const char * subdir);
 
-int big_block_open(BigBlock * bb, char * basename);
-int big_block_create(BigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[]);
+int big_block_open(BigBlock * bb, const char * basename);
+int big_block_clear_checksum(BigBlock * bb);
+int big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[]);
 int big_block_close(BigBlock * block);
 int big_block_seek(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t offset);
 int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel);
 int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array);
-int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array, char * dtype);
+int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array, const char * dtype);
 
 int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array);
-int big_block_set_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb);
-int big_block_get_attr(BigBlock * block, char * attrname, void * data, char * dtype, int nmemb);
-BigBlockAttr * big_block_lookup_attr(BigBlock * block, char * attrname);
+int big_block_set_attr(BigBlock * block, const char * attrname, const void * data, const char * dtype, int nmemb);
+int big_block_get_attr(BigBlock * block, const char * attrname, void * data, const char * dtype, int nmemb);
+BigBlockAttr * big_block_lookup_attr(BigBlock * block, const char * attrname);
 BigBlockAttr * big_block_list_attrs(BigBlock * block, size_t * count);
 
-int dtype_normalize(char * dst, char * src);
-void dtype_format(char * buffer, char * dtype, void * data, char * flags);
-void dtype_parse(char * buffer, char * dtype, void * data, char * fmt);
+int dtype_normalize(char * dst, const char * src);
+void dtype_format(char * buffer, const char * dtype, const void * data, const char * flags);
+void dtype_parse(const char * buffer, const char * dtype, void * data, const char * fmt);
 int dtype_convert(BigArrayIter * dst, BigArrayIter * src, size_t nmemb);
-int dtype_convert_simple(void * dst, char * dstdtype, void * src, char * srcdtype, size_t nmemb);
-int dtype_cmp(char * dtype1, char * dtype2);
-char dtype_kind(char * dtype);
-int dtype_needswap(char * dtype);
-int dtype_itemsize(char * dtype);
+int dtype_convert_simple(void * dst, const char * dstdtype, const void * src, const char * srcdtype, size_t nmemb);
+int dtype_cmp(const char * dtype1, const char * dtype2);
+char dtype_kind(const char * dtype);
+int dtype_needswap(const char * dtype);
+int dtype_itemsize(const char * dtype);
 
-int big_array_init(BigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[]);
+int big_array_init(BigArray * array, void * buf, const char * dtype, int ndim, const size_t dims[], const ptrdiff_t strides[]);
 int big_array_iter_init(BigArrayIter * iter, BigArray * array);
 void big_array_iter_advance(BigArrayIter * iter);
 #endif
