@@ -726,6 +726,11 @@ int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
         if(chunk_size > toread) {
             chunk_size = toread;
         }
+        RAISEIF(chunk_size == 0,
+            ex_insuf,
+            "Insufficient number of items in file `%s' at (%d:%td)",
+            bb->basename, ptr->fileid, ptr->roffset * felsize);
+
         /* read to the beginning of chunk */
         big_array_iter_init(&chunk_iter, &chunk_array);
 
@@ -754,9 +759,11 @@ int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     if(toread != 0) {
         abort();
     }
+
     free(chunkbuf);
     return 0;
 
+ex_insuf:
 ex_read:
 ex_seek:
     fclose(fp);
