@@ -36,6 +36,7 @@ cdef extern from "bigfile.c":
     char * big_file_get_error_message()
     void big_file_set_buffer_size(size_t bytes)
     int big_block_open(CBigBlock * bb, char * basename)
+    int big_block_clear_checksum(CBigBlock * bb)
     int big_block_create(CBigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[])
     int big_block_close(CBigBlock * block)
     int big_block_seek(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t offset)
@@ -141,6 +142,8 @@ cdef class BigBlockAttrSet:
 
     property keys:
         def __get__(self):
+            if self.bb.closed:
+                raise BigFileError("block closed")
             cdef size_t count
             cdef CBigBlockAttr * list
             list = big_block_list_attrs(&self.bb.bb, &count)
@@ -150,15 +153,21 @@ cdef class BigBlockAttrSet:
         self.bb = bb
 
     def __iter__(self):
+        if self.bb.closed:
+            raise BigFileError("block closed")
         return iter(self.keys)
 
     def __contains__(self, name):
+        if self.bb.closed:
+            raise BigFileError("block closed")
         cdef CBigBlockAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
             return False
         return True
 
     def __getitem__(self, name):
+        if self.bb.closed:
+            raise BigFileError("block closed")
         cdef CBigBlockAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
             raise KeyError("attr not found")
@@ -169,6 +178,8 @@ cdef class BigBlockAttrSet:
         return result
 
     def __setitem__(self, name, value):
+        if self.bb.closed:
+            raise BigFileError("block closed")
         cdef numpy.ndarray array = numpy.atleast_1d(value).ravel()
 
         if(0 != big_block_set_attr(&self.bb.bb, name, array.data, 
@@ -242,6 +253,11 @@ cdef class BigBlock:
                 raise BigFileError()
         self.closed = False
         return self
+
+    def clear_checksum(self):
+        """ reset the checksum to zero for freshly overwriting the data set
+        """
+        big_block_clear_checksum(&self.bb)
 
     def write(self, start, numpy.ndarray buf):
         cdef CBigArray array
