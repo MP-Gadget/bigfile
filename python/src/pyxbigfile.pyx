@@ -39,6 +39,7 @@ cdef extern from "bigfile.c":
     int big_block_clear_checksum(CBigBlock * bb)
     int big_block_create(CBigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[])
     int big_block_close(CBigBlock * block)
+    int big_block_flush(CBigBlock * block)
     int big_block_seek(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t offset)
     int big_block_seek_rel(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t rel)
     int big_block_read(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array)
@@ -299,6 +300,11 @@ cdef class BigBlock:
         if 0 != big_block_read(&self.bb, &ptr, &array):
             raise BigFileError()
         return result
+
+    def flush(self):
+        if not self.closed:
+            if 0 != big_block_flush(&self.bb):
+                raise BigFileError()
 
     def close(self):
         if not self.closed:
