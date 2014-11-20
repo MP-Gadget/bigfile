@@ -96,11 +96,12 @@ cdef class BigFile:
             cdef char ** list
             cdef int N
             big_file_list(&self.bf, &list, &N)
-            rt = [list[i] for i in range(N)]
-            for i in range(N):
-                free(list[i])
-            free(list)
-            return rt
+            try:
+                return [list[i] for i in range(N)]
+            finally:
+                for i in range(N):
+                    free(list[i])
+                free(list)
 
     def close(self):
         if 0 != big_file_close(&self.bf):
@@ -137,6 +138,15 @@ cdef class BigFile:
                 raise BigFileError()
         rt.closed = False
         return rt
+
+    def __getitem__(self, key):
+        return self.open(key)
+
+    def __contains__(self, key):
+        return key in self.blocks
+
+    def __iter__(self):
+        return iter(self.blocks)
 
 cdef class BigBlockAttrSet:
     cdef readonly BigBlock bb
@@ -210,11 +220,6 @@ cdef class BigBlock:
         self.closed = True
 
     def __init__(self):
-#        , filename, create=False, Nfile=None, dtype=None, size=None):
-#        if create:
-#            self.create(filename, Nfile, dtype, size)
-#        else:
-#            self.open(filename)
         pass
 
     def __enter__(self):
@@ -273,13 +278,19 @@ cdef class BigBlock:
             raise BigFileError()
 
     def __getitem__(self, sl):
-        """ returns a copy of data """
-        if not isinstance(sl, slice):
-            raise TypeError('expecting a slice')
-        start, end, stop = sl.indices(self.size)
-        if stop != 1:
-            raise ValueError('must request a continous chunk')
-        return self.read(start, end-start)
+        """ returns a copy of data, sl can be a slice or a scalar
+        """
+        if isinstance(sl, slice):
+            start, end, stop = sl.indices(self.size)
+            if stop != 1:
+                raise ValueError('must request a continous chunk')
+            return self.read(start, end-start)
+        elif numpy.isscalar(sl):
+            sl = slice(sl, sl + 1)
+            return self[sl][0]
+        else:
+            raise TypeError('Expecting a slice or a scalar, got a `%s`' %
+                    str(type(sl)))
 
     def read(self, start, length):
         cdef numpy.ndarray result 
