@@ -108,7 +108,7 @@ static struct bblist * listbigfile_r(BigFile * bf, char * path, struct bblist * 
                 sprintf(blockname, "%s/%s", path, namelist[i]->d_name);
             else
                 sprintf(blockname, "%s", namelist[i]->d_name);
-            struct BigBlock bb = {0};
+            BigBlock bb = {0};
             if(0 != big_file_open_block(bf, &bb, blockname)) {
                 bblist = listbigfile_r(bf, blockname, bblist);
             } else {
