@@ -1,4 +1,5 @@
 CC=mpiicc
+MPICC=mpicc
 PREFIX=/usr
 all: libbigfile.a libbigfile-mpi.a
 
@@ -13,7 +14,7 @@ bigfile.o: bigfile.c bigfile.h
 libbigfile.a: bigfile.o
 	ar r $@ bigfile.o
 bigfile-mpi.o: bigfile-mpi.c bigfile-mpi.h
-	$(CC) -o $@ -c bigfile-mpi.c
+	$(MPICC) -o $@ -c bigfile-mpi.c
 libbigfile-mpi.a: bigfile.o bigfile-mpi.o
 	ar r $@ bigfile.o bigfile-mpi.o
 clean: 
