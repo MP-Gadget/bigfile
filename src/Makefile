@@ -15,7 +15,7 @@ libbigfile.a: bigfile.o
 	ar r $@ bigfile.o
 bigfile-mpi.o: bigfile-mpi.c bigfile-mpi.h
 	$(MPICC) -o $@ -c bigfile-mpi.c
-libbigfile-mpi.a: bigfile.o bigfile-mpi.o
-	ar r $@ bigfile.o bigfile-mpi.o
+libbigfile-mpi.a: bigfile-mpi.o
+	ar r $@ bigfile-mpi.o
 clean: 
 	rm *.a *.o
