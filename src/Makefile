@@ -10,12 +10,12 @@ install: libbigfile.a libbigfile-mpi.a
 	install bigfile.h $(PREFIX)/include/bigfile-mpi.h
 
 bigfile.o: bigfile.c bigfile.h
-	$(CC) -o $@ -c bigfile.c
+	$(CC) $(CFLAGS) -o $@ -c bigfile.c
 libbigfile.a: bigfile.o
 	ar r $@ bigfile.o
 	ranlib $@
 bigfile-mpi.o: bigfile-mpi.c bigfile-mpi.h
-	$(MPICC) -o $@ -c bigfile-mpi.c
+	$(MPICC) $(CFLAGS) -o $@ -c bigfile-mpi.c
 libbigfile-mpi.a: bigfile-mpi.o
 	ar r $@ bigfile-mpi.o
 	ranlib $@
