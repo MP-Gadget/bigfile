@@ -2,18 +2,20 @@ from distutils.core import setup
 from Cython.Build import cythonize
 from distutils.extension import Extension
 import numpy
+
 extensions = [
-        Extension("bigfile.pyxbigfile", ["src/pyxbigfile.pyx"],
-            include_dirs = ["../src", numpy.get_include()])]
+        Extension("bigfile.pyxbigfile", ["python/pyxbigfile.pyx"],
+            include_dirs = ["src/", numpy.get_include()])]
 
 setup(
-    name="bigfile", version="0.1",
+    name="bigfile", version="0.1pre",
     author="Yu Feng",
+    author_email="rainwoodman@gmail.com",
+    url="http://github.com/rainwoodman/bigfile",
     description="python binding of BigFile, a peta scale IO format",
-    package_dir = {'bigfile': 'src'},
+    package_dir = {'bigfile': 'python'},
     install_requires=['cython', 'numpy'],
     packages= ['bigfile'],
     requires=['numpy'],
     ext_modules = cythonize(extensions)
 )
-
