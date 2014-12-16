@@ -13,6 +13,7 @@ setup(
     author_email="rainwoodman@gmail.com",
     url="http://github.com/rainwoodman/bigfile",
     description="python binding of BigFile, a peta scale IO format",
+    zip_safe = False,
     package_dir = {'bigfile': 'python'},
     install_requires=['cython', 'numpy'],
     packages= ['bigfile'],
