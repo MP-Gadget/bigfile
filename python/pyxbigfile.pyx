@@ -266,6 +266,10 @@ cdef class BigBlock:
         big_block_clear_checksum(&self.bb)
 
     def write(self, start, numpy.ndarray buf):
+        """ write at offset `start' a chunk of data inf buf.
+           
+            no checking is performed. assuming buf is of the correct dtype.
+        """
         cdef CBigArray array
         cdef CBigBlockPtr ptr
         big_array_init(&array, buf.data, buf.dtype.str, 
@@ -292,7 +296,14 @@ cdef class BigBlock:
             raise TypeError('Expecting a slice or a scalar, got a `%s`' %
                     str(type(sl)))
 
-    def read(self, start, length):
+    def read(self, start, length, out=None):
+        """ read from offset `start' a chunk of data of length `length', 
+            into array `out'.
+
+            out shall match length and self.dtype
+
+            returns out, or a newly allocated array of out is None.
+        """
         cdef numpy.ndarray result 
         cdef CBigArray array
         cdef CBigBlockPtr ptr
@@ -301,7 +312,15 @@ cdef class BigBlock:
             length = self.size - start
         if length + start > self.size:
             length = self.size - start
-        result = numpy.empty(dtype=self.dtype, shape=length)
+        if out is None:
+            result = numpy.empty(dtype=self.dtype, shape=length)
+        else:
+            result = out
+            if result.shape[0] != length:
+                raise ValueError("output array length mismatches with the request")
+            if result.dtype.base != self.dtype.base:
+                raise ValueError("output array type mismatches with the block")
+            
         big_array_init(&array, result.data, self.bb.dtype, 
                 result.ndim, 
                 <size_t *> result.shape,
