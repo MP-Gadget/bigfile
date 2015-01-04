@@ -318,7 +318,7 @@ cdef class BigBlock:
             result = out
             if result.shape[0] != length:
                 raise ValueError("output array length mismatches with the request")
-            if result.dtype.base != self.dtype.base:
+            if result.dtype.base.itemsize != self.dtype.base.itemsize:
                 raise ValueError("output array type mismatches with the block")
             
         big_array_init(&array, result.data, self.bb.dtype, 
