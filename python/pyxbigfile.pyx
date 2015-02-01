@@ -73,6 +73,7 @@ cdef class BigFile:
     def __cinit__(self):
         self.closed = True
     def __init__(self, filename, create=True):
+        """ if create is True, create the file if it is nonexisting"""
         if create:
             if 0 != big_file_create(&self.bf, filename):
                 raise BigFileError()
