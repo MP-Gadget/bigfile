@@ -1,9 +1,17 @@
 import numpy
+import time
 def create_block(comm, file, block, dtype=None, size=None, Nfile=1):
     if comm.rank == 0:
-        b = file.create(block, dtype, size, Nfile)
-        b.close()
+        with file.create(block, dtype, size, Nfile) as b:
+            pass
     comm.barrier()
+    i = 0
+    while i < 100:
+        try:
+            return file.open(block)
+        except Exception as e:
+            time.sleep(0.01)
+            i = i + 1
     return file.open(block)
 
 def write_block(comm, file, block, data, Nfile=1):
