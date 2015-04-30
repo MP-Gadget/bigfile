@@ -34,6 +34,21 @@ TODO
 
 Document the API. At least the python API!
 
+.. code:: python
+
+    import bigfile
+
+    f = bigfile.BigFile('PART_018')
+
+    print (f.blocks)
+
+    block = f['0/Position']
+    
+    print (block.size)
+
+    print block[10:30]
+
+    
 Install
 -------
 
