@@ -1,3 +1,4 @@
 include src/*.c
 include src/*.h
 include python/*.pyx
+README.rst
