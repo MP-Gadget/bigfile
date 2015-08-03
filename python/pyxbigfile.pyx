@@ -5,6 +5,8 @@ from libc.string cimport strcpy
 from libc.stdlib cimport free
 import numpy
 
+numpy.import_array()
+
 cdef extern from "bigfile.c":
     struct CBigFile "BigFile":
         char * basename

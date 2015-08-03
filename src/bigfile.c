@@ -359,7 +359,7 @@ ex_fsize:
 }
 
 int big_block_clear_checksum(BigBlock * bb) {
-    memset(bb->fchecksum, bb->Nfile * sizeof(int), 0);
+    memset(bb->fchecksum, 0, bb->Nfile * sizeof(int));
     return 0;
 }
 
