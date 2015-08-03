@@ -1,4 +1,3 @@
-import sharedmem
 import sys
 import os
 
