@@ -3,7 +3,8 @@ import sys
 import os
 
 from numpy.testing import Tester
-sys.path.insert(0, os.path.abspath('.'))
+
+# need an install to run these tests
 
 from sys import argv
 
