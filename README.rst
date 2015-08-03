@@ -6,6 +6,10 @@ A Scalable BigData file format for PetaScale Applications
 bigfile is originally developed for the BlueTides simulation 
 on BlueWaters at NCSA. 
 
+.. image:: https://api.travis-ci.org/rainwoodman/bigfile.svg
+    :alt: Build Status
+    :target: https://travis-ci.org/rainwoodman/bigfile/
+
 These Bigfiles are really big.  
 A snapshot file of BlueTides can be 45TB in size; 
 With the help of :code:`bigfile` it took 10 minutess 
