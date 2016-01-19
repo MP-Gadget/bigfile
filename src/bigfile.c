@@ -645,6 +645,11 @@ int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel) {
     return big_block_seek(bb, ptr, abs);
 }
 
+int big_block_eof(BigBlock * bb, BigBlockPtr * ptr) {
+    ptrdiff_t abs = bb->foffset[ptr->fileid] + ptr->roffset;
+    return abs >= bb->size;
+}
+
 /* 
  * this function will alloc memory in array and read from offset start 
  * size of rows from the block. 
@@ -716,7 +721,14 @@ int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     big_array_iter_init(&array_iter, array);
 
     toread = array->size / bb->nmemb;
-    while(toread > 0) {
+
+    ptrdiff_t abs = bb->foffset[ptr->fileid] + ptr->roffset + toread;
+    RAISEIF(abs > bb->size,
+                ex_eof,
+                "Reading beyond the block `%s` at (%d:%td)",
+                bb->basename, ptr->fileid, ptr->roffset * felsize);
+
+    while(toread > 0 && ! big_block_eof(bb, ptr)) {
         size_t chunk_size = CHUNK_SIZE;
         /* remaining items in the file */
         if(chunk_size > bb->fsize[ptr->fileid] - ptr->roffset) {
@@ -756,13 +768,9 @@ int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
                 ex_blockseek,
                 NULL);
     }
-    if(toread != 0) {
-        abort();
-    }
 
     free(chunkbuf);
     return 0;
-
 ex_insuf:
 ex_read:
 ex_seek:
@@ -770,6 +778,7 @@ ex_seek:
 ex_blockseek:
 ex_open:
     free(chunkbuf);
+ex_eof:
 ex_malloc:
     return -1;
 }
@@ -800,7 +809,14 @@ int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
     big_array_iter_init(&array_iter, array);
 
     towrite = array->size / bb->nmemb;
-    while(towrite > 0) {
+
+    ptrdiff_t abs = bb->foffset[ptr->fileid] + ptr->roffset + towrite;
+    RAISEIF(abs > bb->size,
+                ex_eof,
+                "Writing beyond the block `%s` at (%d:%td)",
+                bb->basename, ptr->fileid, ptr->roffset * felsize);
+
+    while(towrite > 0 && ! big_block_eof(bb, ptr)) {
         size_t chunk_size = CHUNK_SIZE;
         /* remaining items in the file */
         if(chunk_size > bb->fsize[ptr->fileid] - ptr->roffset) {
@@ -836,10 +852,6 @@ int big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array) {
         RAISEIF(0 != big_block_seek_rel(bb, ptr, chunk_size),
                 ex_blockseek, NULL);
     }
-    if(towrite != 0) {
-        abort();
-    }
-
     free(chunkbuf);
     return 0;
 ex_write:
@@ -848,6 +860,7 @@ ex_seek:
 ex_open:
 ex_blockseek:
     free(chunkbuf);
+ex_eof:
 ex_malloc:
     return -1;
 }

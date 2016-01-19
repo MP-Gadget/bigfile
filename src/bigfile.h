@@ -102,6 +102,7 @@ int big_block_create(BigBlock * bb, const char * basename, const char * dtype, i
 int big_block_close(BigBlock * block);
 int big_block_seek(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t offset);
 int big_block_seek_rel(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t rel);
+int big_block_eof(BigBlock * bb, BigBlockPtr * ptr);
 int big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array);
 int big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray * array, const char * dtype);
 

@@ -37,5 +37,14 @@ def test_create():
             b.write(1, data[0:1])
             assert_equal(b[1:2], data[0:1].astype(d.base))
 
+        # test writing beyond file length
+        with x[d.str] as b:
+            caught = False
+            try:
+                b.write(1, data)
+            except:
+                caught = True
+            assert caught
     assert set(x.blocks) == set([numpy.dtype(d).str for d in dtypes])
     shutil.rmtree(fname)
+
