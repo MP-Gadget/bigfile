@@ -88,11 +88,9 @@ cdef class BigFile:
         if not self.closed:
             big_file_close(&self.bf)
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, tb):
-        self.close()
+    property basename:
+        def __get__(self):
+            return '%s' % self.bf.basename
 
     property blocks:
         def __get__(self):
@@ -141,15 +139,6 @@ cdef class BigFile:
                 raise BigFileError()
         rt.closed = False
         return rt
-
-    def __getitem__(self, key):
-        return self.open(key)
-
-    def __contains__(self, key):
-        return key in self.blocks
-
-    def __iter__(self):
-        return iter(self.blocks)
 
 cdef class BigBlockAttrSet:
     cdef readonly BigBlock bb
