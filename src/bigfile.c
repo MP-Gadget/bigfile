@@ -236,7 +236,6 @@ ex_fopen:
 }
 static int big_block_read_attr_set_v1(BigBlock * bb);
 static int big_block_read_attr_set_v2(BigBlock * bb);
-static int big_block_write_attr_set_v1(BigBlock * bb);
 static int big_block_write_attr_set_v2(BigBlock * bb);
 
 int big_block_open(BigBlock * bb, const char * basename) {
@@ -398,12 +397,6 @@ int big_block_flush(BigBlock * block) {
         block->dirty = 0;
     }
     if(block->attrset.dirty) {
-/*
-        DO NOT WRITE V1 attr FILES.
-        RAISEIF(0 != big_block_write_attr_set_v1(block),
-            ex_write_attr,
-            NULL);
-*/
         RAISEIF(0 != big_block_write_attr_set_v2(block),
             ex_write_attr,
             NULL);
@@ -551,33 +544,6 @@ ex_set_attr:
     free(data);
     return -1;
 }
-static int big_block_write_attr_set_v1(BigBlock * bb) {
-    FILE * fattr = open_a_file(bb->basename, FILEID_ATTR, "w");
-    RAISEIF(fattr == NULL,
-            ex_open,
-            NULL);
-    ptrdiff_t i;
-    for(i = 0; i < bb->attrset.listused; i ++) {
-        BigBlockAttr * a = & bb->attrset.attrlist[i];
-        int lname = strlen(a->name);
-        int ldata = dtype_itemsize(a->dtype) * a->nmemb;
-        RAISEIF(
-            (1 != fwrite(&a->nmemb, sizeof(int), 1, fattr)) ||
-            (1 != fwrite(&lname, sizeof(int), 1, fattr)) ||
-            (1 != fwrite(a->dtype, 8, 1, fattr)) ||
-            (1 != fwrite(a->name, lname, 1, fattr)) ||
-            (1 != fwrite(a->data, ldata, 1, fattr)),
-            ex_write,
-            "Failed to write to file");
-    } 
-    fclose(fattr);
-    return 0;
-
-ex_write:
-    fclose(fattr);
-ex_open:
-    return -1;
-}
 static int big_block_write_attr_set_v2(BigBlock * bb) {
     static char conv[] = "0123456789ABCDEF";
     bb->attrset.dirty = 0;
@@ -590,9 +556,12 @@ static int big_block_write_attr_set_v2(BigBlock * bb) {
     ptrdiff_t i;
     for(i = 0; i < bb->attrset.listused; i ++) {
         BigBlockAttr * a = & bb->attrset.attrlist[i];
-        int ldata = dtype_itemsize(a->dtype) * a->nmemb;
+        int itemsize = dtype_itemsize(a->dtype);
+        int ldata = itemsize * a->nmemb;
 
         char * rawdata = malloc(ldata * 2 + 1);
+        char * textual = malloc(a->nmemb * 32 + 1);
+        textual[0] = 0;
         unsigned char * adata = (unsigned char*) a->data;
         int j, k; 
         for(j = 0, k = 0; k < ldata; k ++, j+=2) {
@@ -600,10 +569,19 @@ static int big_block_write_attr_set_v2(BigBlock * bb) {
             rawdata[j + 1] = conv[adata[k] % 16];
         }
         rawdata[j] = 0;
-        int rt = fprintf(fattr, "%s\t%s\t%d\t%s\t\n", 
-                a->name, a->dtype, a->nmemb, rawdata
+        for(j = 0; j < a->nmemb; j ++) {
+            char buf[128];
+            dtype_format(buf, a->dtype, &adata[j * itemsize], NULL);
+            strcat(textual, buf);
+            if(j != a->nmemb - 1) {
+                strcat(textual, ", ");
+            }
+        }
+        int rt = fprintf(fattr, "%s %s %d %s #HUMANE [ %s ]\n", 
+                a->name, a->dtype, a->nmemb, rawdata, textual
                );
         free(rawdata);
+        free(textual);
         RAISEIF(rt <= 0,
             ex_write,
             "Failed to write to file");
