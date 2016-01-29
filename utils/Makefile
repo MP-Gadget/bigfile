@@ -1,4 +1,4 @@
-CC=mpiicc -g -O0
+CC=mpicc -g -O0
 all: \
 	bigfile-get-attr \
 	bigfile-set-attr \
