@@ -20,10 +20,14 @@ int main(int argc, char * argv[]) {
 
     int opt;
     char * dtype = NULL;
+    char ndtype[8];
     int nmemb = 0;
-    
-    while(-1 != (opt = getopt(argc, argv, "t:n:"))) {
+    int force = 0; 
+    while(-1 != (opt = getopt(argc, argv, "ft:n:"))) {
         switch(opt) {
+            case 'f':
+                force = 1;
+                break;
             case 't':
                 dtype = optarg;
                 break;
@@ -48,7 +52,12 @@ int main(int argc, char * argv[]) {
         exit(1);
     }
     int i; 
-    BigBlockAttr * attr = big_block_lookup_attr(&bb, argv[3]);
+    BigBlockAttr * attr;
+
+    if(force) 
+        big_block_remove_attr(&bb, argv[3]);
+
+    attr = big_block_lookup_attr(&bb, argv[3]);
     if(attr) {
         if(dtype == NULL) {
             dtype = attr->dtype;
@@ -57,20 +66,33 @@ int main(int argc, char * argv[]) {
             nmemb = attr->nmemb;
         }
     }
-    if(nmemb == 0) nmemb = argc - optind + 1 - 4;
-    if(nmemb != argc - optind + 1 - 4) {
-        fprintf(stderr, "nmemb and number of arguments mismatch\n");
-        exit(1);
-    }
-    char * data = malloc(dtype_itemsize(dtype) * nmemb);
+    dtype_normalize(ndtype, dtype);
+    char * data;
 
-    for(i = 4; i < argc - optind + 1; i ++) {
-        char * p = data + (i - 4) * dtype_itemsize(dtype);
-        dtype_parse(argv[i], dtype, p, NULL);
+    if(ndtype[1] == 'c') {
+        if (nmemb == 0) nmemb = strlen(argv[4]) + 1;
+        if (nmemb != strlen(argv[4]) + 1) {
+            fprintf(stderr, "nmemb and number of arguments mismatch\n");
+            exit(1);
+        }
+        data = malloc(dtype_itemsize(ndtype) * nmemb);
+        memcpy(data, argv[4], strlen(argv[4]) + 1); 
+    } else {
+        if (nmemb == 0) nmemb = argc - optind + 1 - 4;
+        if (nmemb != argc - optind + 1 - 4) {
+            fprintf(stderr, "nmemb and number of arguments mismatch\n");
+            exit(1);
+        }
+        data = malloc(dtype_itemsize(ndtype) * nmemb);
+        for(i = 4; i < argc - optind + 1; i ++) {
+            char * p = data + (i - 4) * dtype_itemsize(ndtype);
+            dtype_parse(argv[i], dtype, p, NULL);
+        }
     }
 
     big_block_set_attr(&bb, argv[3], data, dtype, nmemb);
 
+    free(data);
     big_block_close(&bb);
     big_file_close(&bf);
     return 0;

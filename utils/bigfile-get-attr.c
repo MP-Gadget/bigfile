@@ -24,7 +24,7 @@ static void print_attr(BigBlockAttr * attr, int brief) {
     }
     for(i = 0; i < attr->nmemb; i ++) {
         char * endl;
-        if(i != attr->nmemb - 1) {
+        if(i != attr->nmemb - 1 && attr->dtype[1] != 'c') {
             endl = " ";
         } else {
             endl = "";
