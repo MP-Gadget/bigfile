@@ -1,8 +1,8 @@
-from pyxbigfile import BigBlock
-from pyxbigfile import BigFileError
-from pyxbigfile import BigFile as BigFileBase
-from pyxbigfile import set_buffer_size
-import bigfilempi
+from .pyxbigfile import BigBlock
+from .pyxbigfile import BigFileError
+from .pyxbigfile import BigFile as BigFileBase
+from .pyxbigfile import set_buffer_size
+from . import bigfilempi
 
 import os
 import numpy
