@@ -7,6 +7,14 @@ import bigfilempi
 import os
 import numpy
 
+try:
+    basestring  # attempt to evaluate basestring
+    def isstr(s):
+        return isinstance(s, basestring)
+except NameError:
+    def isstr(s):
+        return isinstance(s, str)
+
 class BigFile(BigFileBase):
     def mpi_create(self, comm, block, dtype=None, size=None,
             Nfile=1):
@@ -59,6 +67,8 @@ class BigData:
             for block in self.blocknames:
                 result[block][:] = self.blocks[block][sl]
             return result
+        elif isstr(sl):
+            return self.blocks[sl]
         elif numpy.isscalar(sl):
             sl = slice(sl, sl + 1)
             return self[sl][0]
