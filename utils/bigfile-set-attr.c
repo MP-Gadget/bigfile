@@ -69,7 +69,7 @@ int main(int argc, char * argv[]) {
     dtype_normalize(ndtype, dtype);
     char * data;
 
-    if(ndtype[1] == 'c') {
+    if(ndtype[1] == 'S') {
         if (nmemb == 0) nmemb = strlen(argv[4]) + 1;
         if (nmemb != strlen(argv[4]) + 1) {
             fprintf(stderr, "nmemb and number of arguments mismatch\n");

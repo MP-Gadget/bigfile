@@ -570,7 +570,7 @@ static int big_block_write_attr_set_v2(BigBlock * bb) {
         }
         rawdata[j] = 0;
         for(j = 0; j < a->nmemb; j ++) {
-            if(a->dtype[1] != 'c') {
+            if(a->dtype[1] != 'S') {
                 char buf[128];
                 dtype_format(buf, a->dtype, &adata[j * itemsize], NULL);
                 strcat(textual, buf);
@@ -1104,7 +1104,7 @@ void dtype_format(char * buffer, const char * dtype, const void * data, const ch
     char ndtype[8];
     char ndtype2[8];
     union {
-        char *c1;
+        char *S1;
         int64_t *i8;
         uint64_t *u8;
         double *f8;
@@ -1129,7 +1129,7 @@ void dtype_format(char * buffer, const char * dtype, const void * data, const ch
         sprintf(buffer, fmt, *p.dtype); \
     } else
 
-    _HANDLE_FMT_(c1, "%c")
+    _HANDLE_FMT_(S1, "%c")
     _HANDLE_FMT_(i8, "%ld")
     _HANDLE_FMT_(i4, "%d")
     _HANDLE_FMT_(u8, "%lu")
@@ -1145,7 +1145,7 @@ void dtype_parse(const char * buffer, const char * dtype, void * data, const cha
     char ndtype[8];
     char ndtype2[8];
     union {
-        char *c1;
+        char *S1;
         int64_t *i8;
         uint64_t *u8;
         double *f8;
@@ -1169,7 +1169,7 @@ void dtype_parse(const char * buffer, const char * dtype, void * data, const cha
         sscanf(buffer, fmt, p.dtype); \
     } else
 
-    _HANDLE_FMT_(c1, "%c")
+    _HANDLE_FMT_(S1, "%c")
     _HANDLE_FMT_(i8, "%ld")
     _HANDLE_FMT_(i4, "%d")
     _HANDLE_FMT_(u8, "%lu")
@@ -1333,8 +1333,8 @@ static void cast(BigArrayIter * dst, BigArrayIter * src, size_t nmemb) {
         CAST_CONVERTER("f4", float, "u4", uint32_t);
         CAST_CONVERTER("f4", float, "u8", uint64_t);
     } else
-    if(!strcmp(dst->array->dtype + 1, "c1")) {
-        CAST_CONVERTER("c1", char, "c1", char);
+    if(!strcmp(dst->array->dtype + 1, "S1")) {
+        CAST_CONVERTER("S1", char, "S1", char);
     }
     /* */
     fprintf(stderr, "Unsupported conversion from %s to %s\n", src->array->dtype, dst->array->dtype);
