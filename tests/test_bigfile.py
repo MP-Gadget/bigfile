@@ -48,3 +48,25 @@ def test_create():
     assert set(x.blocks) == set([numpy.dtype(d).str for d in dtypes])
     shutil.rmtree(fname)
 
+def test_attr():
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    with x.create('header', Nfile=1, dtype='i8', size=0) as b:
+        b.attrs['int'] = 128
+        b.attrs['float'] = [128.0, 3, 4]
+        b.attrs['string'] = 'abcdefg'
+
+    with x.open('header') as b:
+        assert_equal(b.attrs['int'], 128)
+        assert_equal(b.attrs['float'], [128.0, 3, 4])
+        assert_equal(b.attrs['string'],  'abcdefg')
+        b.attrs['int'] = 30
+        b.attrs['float'] = [3, 4]
+        b.attrs['string'] = 'defg'
+
+    with x.open('header') as b:
+        assert_equal(b.attrs['int'], 30)
+        assert_equal(b.attrs['float'], [3, 4])
+        assert_equal(b.attrs['string'],  'defg')
+
+    shutil.rmtree(fname)

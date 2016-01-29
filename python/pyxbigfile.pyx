@@ -47,6 +47,7 @@ cdef extern from "bigfile.c":
     int big_block_read(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array)
     int big_block_write(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array)
     int big_block_set_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
+    int big_block_remove_attr(CBigBlock * block, char * attrname)
     int big_block_get_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
     CBigBlockAttr * big_block_lookup_attr(CBigBlock * block, char * attrname)
     CBigBlockAttr * big_block_list_attrs(CBigBlock * block, size_t * count)
@@ -178,15 +179,29 @@ cdef class BigBlockAttrSet:
         if(0 != big_block_get_attr(&self.bb.bb, name, result.data, attr[0].dtype,
             attr[0].nmemb)):
             raise BigFileError()
+        if attr[0].dtype[1] == 'S':
+            return result.tostring()
         return result
+
+    def __delitem__(self, name):
+        if self.bb.closed:
+            raise BigFileError("block closed")
+        cdef CBigBlockAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
+        if attr == NULL:
+            raise KeyError("attr not found")
+        big_block_remove_attr(&self.bb.bb, name)
 
     def __setitem__(self, name, value):
         if self.bb.closed:
             raise BigFileError("block closed")
         cdef numpy.ndarray array = numpy.atleast_1d(value).ravel()
-
+        if array.dtype.char == 'S':
+            array = array.view(dtype='S1')
+            dtype = 'S1'
+        else:
+            dtype = array.dtype.base.str
         if(0 != big_block_set_attr(&self.bb.bb, name, array.data, 
-                array.dtype.base.str,
+                dtype,
                 array.shape[0])):
             raise BigFileError();
 
