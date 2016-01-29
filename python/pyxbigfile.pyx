@@ -7,6 +7,15 @@ import numpy
 
 numpy.import_array()
 
+try:
+    basestring  # attempt to evaluate basestring
+    def isstr(s):
+        return isinstance(s, basestring)
+except NameError:
+    def isstr(s):
+        return isinstance(s, str)
+
+
 cdef extern from "bigfile.c":
     struct CBigFile "BigFile":
         char * basename
@@ -77,6 +86,7 @@ cdef class BigFile:
         self.closed = True
     def __init__(self, filename, create=True):
         """ if create is True, create the file if it is nonexisting"""
+        filename = filename.encode()
         if create:
             if 0 != big_file_create(&self.bf, filename):
                 raise BigFileError()
@@ -99,7 +109,7 @@ cdef class BigFile:
             cdef int N
             big_file_list(&self.bf, &list, &N)
             try:
-                return [list[i] for i in range(N)]
+                return [list[i].decode() for i in range(N)]
             finally:
                 for i in range(N):
                     free(list[i])
@@ -111,6 +121,7 @@ cdef class BigFile:
         self.closed = True
 
     def open(self, block):
+        block = block.encode()
         cdef BigBlock rt = BigBlock()
         if 0 != big_file_open_block(&self.bf, &rt.bb, block):
             raise BigFileError()
@@ -118,6 +129,7 @@ cdef class BigFile:
         return rt
 
     def create(self, block, dtype=None, size=None, Nfile=1):
+        block = block.encode()
         cdef BigBlock rt = BigBlock()
         cdef numpy.ndarray fsize
         if dtype is None:
@@ -135,7 +147,7 @@ cdef class BigFile:
             fsize = numpy.empty(dtype='intp', shape=Nfile)
             fsize[:] = (numpy.arange(Nfile) + 1) * size / Nfile \
                      - (numpy.arange(Nfile)) * size / Nfile
-            if 0 != big_file_create_block(&self.bf, &rt.bb, block, dtype.base.str,
+            if 0 != big_file_create_block(&self.bf, &rt.bb, block, dtype.base.str.encode(),
                     items, Nfile, <size_t*> fsize.data):
                 raise BigFileError()
         rt.closed = False
@@ -162,6 +174,7 @@ cdef class BigBlockAttrSet:
         return iter(self.keys)
 
     def __contains__(self, name):
+        name = name.encode()
         if self.bb.closed:
             raise BigFileError("block closed")
         cdef CBigBlockAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
@@ -170,6 +183,7 @@ cdef class BigBlockAttrSet:
         return True
 
     def __getitem__(self, name):
+        name = name.encode()
         if self.bb.closed:
             raise BigFileError("block closed")
         cdef CBigBlockAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
@@ -180,10 +194,11 @@ cdef class BigBlockAttrSet:
             attr[0].nmemb)):
             raise BigFileError()
         if attr[0].dtype[1] == 'S':
-            return result.tostring()
+            return result.tostring().decode()
         return result
 
     def __delitem__(self, name):
+        name = name.encode()
         if self.bb.closed:
             raise BigFileError("block closed")
         cdef CBigBlockAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
@@ -192,14 +207,17 @@ cdef class BigBlockAttrSet:
         big_block_remove_attr(&self.bb.bb, name)
 
     def __setitem__(self, name, value):
+        name = name.encode()
         if self.bb.closed:
             raise BigFileError("block closed")
+        if isstr(value): 
+            value = value.encode()
         cdef numpy.ndarray array = numpy.atleast_1d(value).ravel()
         if array.dtype.char == 'S':
             array = array.view(dtype='S1')
-            dtype = 'S1'
+            dtype = 'S1'.encode()
         else:
-            dtype = array.dtype.base.str
+            dtype = array.dtype.base.str.encode()
         if(0 != big_block_set_attr(&self.bb.bb, name, array.data, 
                 dtype,
                 array.shape[0])):
@@ -237,6 +255,7 @@ cdef class BigBlock:
 
     @staticmethod
     def open(filename):
+        filename = filename.encode()
         cdef BigBlock self = BigBlock()
         if 0 != big_block_open(&self.bb, filename):
             raise BigFileError()
@@ -244,6 +263,7 @@ cdef class BigBlock:
         return self
     @staticmethod
     def create(filename, dtype=None, size=None, Nfile=1):
+        filename = filename.encode()
         cdef BigBlock self = BigBlock()
         cdef numpy.ndarray fsize
 
@@ -279,7 +299,7 @@ cdef class BigBlock:
         """
         cdef CBigArray array
         cdef CBigBlockPtr ptr
-        big_array_init(&array, buf.data, buf.dtype.str, 
+        big_array_init(&array, buf.data, buf.dtype.str.encode(), 
                 buf.ndim, 
                 <size_t *> buf.shape,
                 <ptrdiff_t *> buf.strides)

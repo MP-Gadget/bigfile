@@ -45,7 +45,7 @@ def test_create():
             except:
                 caught = True
             assert caught
-    assert set(x.blocks) == set([numpy.dtype(d).str for d in dtypes])
+    assert_equal(set(x.blocks), set([numpy.dtype(d).str for d in dtypes]))
     shutil.rmtree(fname)
 
 def test_attr():
