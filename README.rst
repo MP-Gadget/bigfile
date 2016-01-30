@@ -12,12 +12,15 @@ Build status
     :alt: Build Status
     :target: https://travis-ci.org/rainwoodman/bigfile/
 
-These Bigfiles are really big.  
+Description
+-----------
+
 A snapshot file of BlueTides can be 45TB in size; 
 With the help of :code:`bigfile` it took 10 minutess 
-to dump a snapshot from 81000 MPI ranks, and 5mins to read one.
+to dump a snapshot from 81,000 MPI ranks, and 5mins to read one.
 
-:code:`bigfile` provides a hierarchical structure of data columns via :code:`BigBlock` and :code:`BigData`. 
+:code:`bigfile` provides a hierarchical structure of data columns via 
+:code:`BigFile`, :code:`BigBlock` and :code:`BigData`. 
 
 A :code:`BigBlock` block is striped into many physical files, represented by a directory tree on the Lustre files system. Because of this, the performance of bigfile is insulated from the configurations of the Lustre file system. 
 
