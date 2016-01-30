@@ -1,11 +1,13 @@
 bigfile
 =======
 
-A Scalable BigData file format for PetaScale Applications
+A reproducible massively parallel IO library for large, hierarchical datasets.
 
 bigfile is originally developed for the BlueTides simulation 
 on BlueWaters at NCSA. 
 
+Build status
+------------
 .. image:: https://api.travis-ci.org/rainwoodman/bigfile.svg
     :alt: Build Status
     :target: https://travis-ci.org/rainwoodman/bigfile/
@@ -15,23 +17,33 @@ A snapshot file of BlueTides can be 45TB in size;
 With the help of :code:`bigfile` it took 10 minutess 
 to dump a snapshot from 81000 MPI ranks, and 5mins to read one.
 
-:code:`bigfile` provides a hierarchical structure of data columns (:code:`BigBlock`) and a uniform, continuous view of data in a column.
+:code:`bigfile` provides a hierarchical structure of data columns via :code:`BigBlock` and :code:`BigData`. 
 
-A :code:`BigBlock` block striped into many physical files, represented by a directory tree on the Lustre files system. Because of this, there is no need to tweak the striping of Lustre files.
+A :code:`BigBlock` block is striped into many physical files, represented by a directory tree on the Lustre files system. Because of this, the performance of bigfile is insulated from the configurations of the Lustre file system. 
 
-A :code:`BigBlock` contains :code:`nmemb` columns and :code:`size` rows. 
-Simple, numerical attributes can be attached to a block; 
+A :code:`BigBlock` stores a two dimesional table of :code:`nmemb` columns and :code:`size` rows. Numerical type columns are supported.
 
-Type casting is performed on-the-fly if read/write operation requests a different data type than the file.
+Meta data (attributes) can be attached to a `BigBlock`. Numerical attributes and string attributes are supported.
 
-bigfile feels similar with HDF5, but because bigfile has 
-a much smaller set of functions, the source code is much simpler and the
-API is cleaner.
+Type casting is performed on-the-fly if read/write operation requests a different data type than the file has stored.
+
+Comparision with HDF5
+---------------------
+
+Good:
+- bigfile is simpler. The core library of bigfile consists of 2 source files, 2 header files, and 1 Makefile,  a total of less than 3000 lines of code, easily maintained by one person or dropped into a project. HDF5 is much more complicated.
+
+- bigfile is reproducible. If the same data is written to the disk twice, the binary representation is guarenteed identicial. HDF5 keeps a time stamp.
+
+- bigfile is comprehensible. The raw data on disk is stored as binary files that can be directly accessed by any application. The meta data (block descriptions and attributes) is stored in plain text, and can be modified with a text editor. HDF5 hides everything under the carpet. 
+
+Bad:
+- bigfile is limited. The most typical usecase of bigfile is to store large amount of precalculated data. The API favors a programming model where data in memory is directly dumped to disk. There is no API for streaming. bigfile Blocks only support very simple data types, and composite data type is simulated at the interface level. HDF5 is much richer. 
 
 API
 ---
 
-Python, C and C/MPI are supported. The MPI support for Python does not support writing.
+Python, C and C/MPI are supported. Python/MPI is less efficient than we would like to be.
 
 TODO
 ----
@@ -45,22 +57,21 @@ Document the API. At least the python API!
     f = bigfile.BigFile('PART_018')
 
     print (f.blocks)
-
-    block = f['0/Position']
+    data = bigfile.BigData(f[0], ['Position', 'Velocity'])
     
-    print (block.size)
+    print (data.size)
 
-    print block[10:30]
+    print data[10:30]
 
     
 Install
 -------
 
-To install the Python API
+To install the Python binding
 
 .. code:: bash
 
-    python setup.py install --user
+    pip install [--user] bigfile
 
 to install the C API
 
@@ -68,8 +79,7 @@ to install the C API
 
     make install
 
-Override CC MPICC, PREFIX as needed.
-
+Override CC MPICC, PREFIX as needed. Take a look at the Makefile is always recommended.
 
 Shell
 -----
@@ -77,8 +87,11 @@ Shell
 We provide the following shell commands for file inspection:
 
 - bigfile-cat
+- bigfile-create
 - bigfile-repartition
 - bigfile-ls
 - bigfile-get-attr
+- bigfile-set-attr
+
 
  Yu Feng
