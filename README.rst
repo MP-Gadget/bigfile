@@ -3,7 +3,7 @@ bigfile
 
 A reproducible massively parallel IO library for large, hierarchical datasets.
 
-bigfile is originally developed for the BlueTides simulation 
+:code:`bigfile` was originally developed for the BlueTides simulation 
 on BlueWaters at NCSA. 
 
 Build status
@@ -23,22 +23,35 @@ A :code:`BigBlock` block is striped into many physical files, represented by a d
 
 A :code:`BigBlock` stores a two dimesional table of :code:`nmemb` columns and :code:`size` rows. Numerical type columns are supported.
 
-Meta data (attributes) can be attached to a `BigBlock`. Numerical attributes and string attributes are supported.
+Meta data (attributes) can be attached to a :code:`BigBlock`. Numerical attributes and string attributes are supported.
 
 Type casting is performed on-the-fly if read/write operation requests a different data type than the file has stored.
 
 Comparision with HDF5
 ---------------------
 
-Good:
-- bigfile is simpler. The core library of bigfile consists of 2 source files, 2 header files, and 1 Makefile,  a total of less than 3000 lines of code, easily maintained by one person or dropped into a project. HDF5 is much more complicated.
+**Good**
 
-- bigfile is reproducible. If the same data is written to the disk twice, the binary representation is guarenteed identicial. HDF5 keeps a time stamp.
+- bigfile is simpler. The core library of bigfile consists of 2 source files, 2 header
+  files, and 1 Makefile,  a total of less than 3000 lines of code, 
+  easily maintained by one person or dropped into a project. 
+  HDF5 is much more complicated.
+- bigfile is reproducible. If the same data is written to the disk twice, the binary
+  representation is guarenteed identicial. HDF5 keeps a time stamp.
 
-- bigfile is comprehensible. The raw data on disk is stored as binary files that can be directly accessed by any application. The meta data (block descriptions and attributes) is stored in plain text, and can be modified with a text editor. HDF5 hides everything under the carpet. 
+- bigfile is comprehensible. The raw data on disk is stored as binary files
+  that can be directly accessed by any application. The meta data (block 
+  descriptions and attributes) is stored in plain text, and can be modified 
+  with a text editor. HDF5 hides everything under the carpet. 
 
-Bad:
-- bigfile is limited. The most typical usecase of bigfile is to store large amount of precalculated data. The API favors a programming model where data in memory is directly dumped to disk. There is no API for streaming. bigfile Blocks only support very simple data types, and composite data type is simulated at the interface level. HDF5 is much richer. 
+**Bad**
+
+- bigfile is limited. The most typical usecase of bigfile is to store 
+  large amount of precalculated data. The API favors a programming model 
+  where data in memory is directly dumped to disk. There is no API for streaming.
+  bigfile only support very simple data types, and composite data type 
+  is simulated at the interface level. 
+  HDF5 is much richer. 
 
 API
 ---
