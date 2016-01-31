@@ -3,6 +3,8 @@ bigfile
 
 A reproducible massively parallel IO library for large, hierarchical datasets.
 
+Python 2 and 3 binding is available via pip.
+
 :code:`bigfile` was originally developed for the BlueTides simulation 
 on BlueWaters at NCSA. 
 
@@ -15,20 +17,63 @@ Build status
 Description
 -----------
 
-A snapshot file of BlueTides can be 45TB in size; 
-With the help of :code:`bigfile` it took 10 minutess 
-to dump a snapshot from 81,000 MPI ranks, and 5mins to read one.
-
 :code:`bigfile` provides a hierarchical structure of data columns via 
-:code:`BigFile`, :code:`BigBlock` and :code:`BigData`. 
+:code:`BigFile`, :code:`BigData` and :code:`BigBlock`. 
 
-A :code:`BigBlock` block is striped into many physical files, represented by a directory tree on the Lustre files system. Because of this, the performance of bigfile is insulated from the configurations of the Lustre file system. 
+A :code:`BigBlock` stores a two dimesional table of :code:`nmemb` columns 
+and :code:`size` rows. Numerical typed columns are supported.
 
-A :code:`BigBlock` stores a two dimesional table of :code:`nmemb` columns and :code:`size` rows. Numerical type columns are supported.
-
-Meta data (attributes) can be attached to a :code:`BigBlock`. Numerical attributes and string attributes are supported.
+Attributes can be attached to a :code:`BigBlock`. 
+Numerical attributes and string attributes are supported.
 
 Type casting is performed on-the-fly if read/write operation requests a different data type than the file has stored.
+
+The Anatomy of a BigFile
+++++++++++++++++++++++++
+
+A `BigFile` maps to a directory hierarchy on the file system.
+
+This is the directroy structure of an example file:
+
+.. code::
+
+    /scratch1/scratchdirs/sd/yfeng1/example-bigfile
+      block0
+        header
+        attrs-v2
+        000000
+      group1
+        block1.1
+          header
+          attrs-v2
+          000000
+          000001
+        block1.2
+          header
+          attrs-v2
+          000000
+          000001
+      group2
+        block2.1 
+          header
+          attrs-v2
+          000000
+          000001
+
+A `BigFile` consists of blocks (`BigBlock`) and groups of blocks. 
+Files, groups and blocks are mapped to directories of the hosting file system.
+
+A `BigBlock` consists of two special plain text files and a sequence of binary data files.
+
+- Text file :code:`header`, which stores the data type and size of the block,
+- Text file :code:`attrs-v2`, which stores the attributes attached to the block.
+- Binary files :code:`000000`, :code:`000001`, .... which store the binary data
+  of for the blocks. The format of the data (endianess, data type, vector length per row)
+  is described in `header`. The number of files used by a block, as well as the size
+  (number of rows) of a block is fixed at the creation of a block. 
+
+The performance of bigfile is insulated from the configurations of 
+the Lustre file system due to the explicit striping.
 
 Comparision with HDF5
 ---------------------
@@ -36,47 +81,53 @@ Comparision with HDF5
 **Good**
 
 - bigfile is simpler. The core library of bigfile consists of 2 source files, 2 header
-  files, and 1 Makefile,  a total of less than 3000 lines of code, 
+  files, and 1 Makefile, a total of less than 3000 lines of code, 
   easily maintained by one person or dropped into a project. 
   HDF5 is much more complicated.
-- bigfile is reproducible. If the same data is written to the disk twice, the binary
-  representation is guarenteed identicial. HDF5 keeps a time stamp.
 
-- bigfile is comprehensible. The raw data on disk is stored as binary files
+- bigfile is reproducible. The raw data on disk is stored as binary files
   that can be directly accessed by any application. The meta data (block 
-  descriptions and attributes) is stored in plain text, and can be modified 
-  with a text editor. HDF5 hides everything under the carpet. 
+  descriptions and attributes) is stored in plain text, easily understood by
+  human. The entire :code:`bigfile` library is no more than an optional helper 
+  for reading and writing these files. In contrast, once your data goes into
+  HDF5 it is trapped, the HDF5 library is required to make sense
+  of the data from that point on.
 
 **Bad**
 
-- bigfile is limited. The most typical usecase of bigfile is to store 
-  large amount of precalculated data. The API favors a programming model 
-  where data in memory is directly dumped to disk. There is no API for streaming.
-  bigfile only support very simple data types, and composite data type 
-  is simulated at the interface level. 
-  HDF5 is much richer. 
+- bigfile is limited -- for example, bigfile has no API for streaming.
+  HDF5 is much richer in functionality and more powerful in data description.  
+  The designated use-case of bigfile is to store 
+  a large amount of static / near-immutable column-wise table data. 
 
+- bigfile is incomplete. Many bugs have yet to be identified and fixed.  
+  In contrast HDF5 has been a funded research program developed for more than 20 years. 
+  
 API
 ---
 
 Python, C and C/MPI are supported. Python/MPI is less efficient than we would like to be.
 
-TODO
-----
+Refer to bigfile.h and bigfile-mpi.h 
 
-Document the API. At least the python API!
+Examples
+++++++++
 
 .. code:: python
+
+    # This example consumes the BlueTides Simulation data.
 
     import bigfile
 
     f = bigfile.BigFile('PART_018')
 
     print (f.blocks)
+    # Position and Velocity of GAS particles
     data = bigfile.BigData(f[0], ['Position', 'Velocity'])
     
     print (data.size)
-
+    print (data.dtype)
+    # just read a few particles
     print data[10:30]
 
     
@@ -110,4 +161,4 @@ We provide the following shell commands for file inspection:
 - bigfile-set-attr
 
 
- Yu Feng
+Yu Feng
