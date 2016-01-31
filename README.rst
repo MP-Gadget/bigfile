@@ -14,6 +14,28 @@ Build status
     :alt: Build Status
     :target: https://travis-ci.org/rainwoodman/bigfile/
 
+Install
+-------
+
+To install the Python binding
+
+.. code:: bash
+
+    pip install [--user] bigfile
+
+Usually there is no need to install the C API.
+bigfile can be embed into a project, by dropping in 
+four files : bigfile.c bigfile-mpi.c, bigfile.h bigfile-mpi.h.
+
+However, if installation is preferred, use
+
+.. code:: bash
+
+    make install
+
+Override CC MPICC, PREFIX as needed. Take a look at the Makefile is always recommended.
+
+
 Description
 -----------
 
@@ -102,13 +124,19 @@ Comparision with HDF5
 
 - bigfile is incomplete. Many bugs have yet to be identified and fixed.  
   In contrast HDF5 has been a funded research program developed for more than 20 years. 
-  
-API
----
 
-Python, C and C/MPI are supported. Python/MPI is less efficient than we would like to be.
+API Reference
+-------------
 
-Refer to bigfile.h and bigfile-mpi.h 
+The documentation needs to be written.
+
+The core library is C.  Refer to bigfile.h and bigfile-mpi.h for the API interface.
+
+There are Python bindings for Python 2 and 3.
+
+The Python binding under MPI invoked more meta-data queries to the file system
+than we would like to be, though for small scale applications (thousands of cores)
+it is usually adequate.
 
 Examples
 ++++++++
@@ -131,27 +159,10 @@ Examples
     print data[10:30]
 
     
-Install
--------
-
-To install the Python binding
-
-.. code:: bash
-
-    pip install [--user] bigfile
-
-to install the C API
-
-.. code:: bash
-
-    make install
-
-Override CC MPICC, PREFIX as needed. Take a look at the Makefile is always recommended.
-
 Shell
 -----
 
-We provide the following shell commands for file inspection:
+We provide the following shell commands for inspecting a bigfile:
 
 - bigfile-cat
 - bigfile-create
@@ -159,6 +170,5 @@ We provide the following shell commands for file inspection:
 - bigfile-ls
 - bigfile-get-attr
 - bigfile-set-attr
-
 
 Yu Feng
