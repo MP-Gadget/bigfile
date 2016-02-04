@@ -77,6 +77,12 @@ class BigFileMPI(BigFile):
         if self.comm.rank != 0:
             BigFile.__init__(self, filename, create=False)
 
+    def __getitem__(self, key):
+        if key.endswith('/'):
+            return BigFileMPI(comm, os.path.join(self.basename, key))
+
+        return self.open(key)
+
     def open(self, blockname):
         block = BigBlockMPI(self.comm)
         block.open(self, blockname)
