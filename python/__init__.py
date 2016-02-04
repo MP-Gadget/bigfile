@@ -53,7 +53,7 @@ class BigFile(BigFileBase):
 class BigBlockMPI(BigBlock):
     def __init__(self, comm):
         self.comm = comm
-        super(BigBlockMPI, self).__init__()
+        BigBlock.__init__(self)
 
     def create(self, f, blockname, dtype=None, size=None, Nfile=1):
         if self.comm.rank == 0:
@@ -62,10 +62,10 @@ class BigBlockMPI(BigBlock):
         self.open(f, blockname)
 
     def close(self):
-        self._MPI_close(self.comm)
+        self._MPI_close()
 
     def flush(self):
-        self._MPI_flush(self.comm)
+        self._MPI_flush()
 
 class BigFileMPI(BigFile):
 
@@ -96,7 +96,7 @@ class BigFileMPI(BigFile):
     def create_from_array(self, blockname, array, Nfile=1):
         size = self.comm.allreduce(len(array))
         offset = sum(self.comm.allgather(len(array))[:self.comm.rank])
-        with self.create(block, array.dtype, size, Nfile) as b:
+        with self.create(blockname, array.dtype, size, Nfile) as b:
             b.write(offset, array)
         return self.open(blockname) 
 

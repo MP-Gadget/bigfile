@@ -198,7 +198,8 @@ cdef class BigBlockAttrSet:
 
 cdef class BigBlock:
     cdef CBigBlock bb
-    cdef int closed
+    cdef readonly int closed
+    cdef public comm
 
     property size:
         def __get__(self):
@@ -216,6 +217,7 @@ cdef class BigBlock:
 
     def __cinit__(self):
         self.closed = True
+        self.comm = None
 
     def __init__(self):
         pass
@@ -332,7 +334,9 @@ cdef class BigBlock:
         if 0 != big_block_flush(&self.bb):
             raise BigFileError()
 
-    def _MPI_flush(self, comm):
+    def _MPI_flush(self):
+        if self.closed: return
+        comm = self.comm
         cdef unsigned int Nfile = self.bb.Nfile
         cdef unsigned int[:] fchecksum = <unsigned int[:Nfile]>self.bb.fchecksum
 
@@ -356,20 +360,23 @@ cdef class BigBlock:
             raise BigFileError()
         self.closed = True
 
-    def _MPI_close(self, comm):
-        self._MPI_flush(comm)
+    def _MPI_close(self):
+        if self.closed: return
+        self._MPI_flush()
         rt = big_block_close(&self.bb)
         self.closed = True
         if 0 != rt:
             raise BigFileError()
+        comm = self.comm
         comm.barrier()
-
 
     def __dealloc__(self):
         if self.closed: return
         self.close()
 
     def __repr__(self):
+        if self.closed:
+            return "<CBigBlock: Closed>"
+
         return "<CBigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
                 self.dtype, self.size)
-
