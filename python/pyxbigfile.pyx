@@ -20,12 +20,18 @@ cdef extern from "bigfile.c":
     struct CBigFile "BigFile":
         char * basename
 
+    struct CBigBlockAttrSet "BigBlockAttrSet":
+        int dirty
+
     struct CBigBlock "BigBlock":
         char * dtype
         int nmemb
         char * basename
         size_t size
         int Nfile
+        unsigned int * fchecksum; 
+        int dirty
+        CBigBlockAttrSet attrset;
 
     struct CBigBlockPtr "BigBlockPtr":
         pass
@@ -119,39 +125,6 @@ cdef class BigFile:
         if 0 != big_file_close(&self.bf):
             raise BigFileError()
         self.closed = True
-
-    def open(self, block):
-        block = block.encode()
-        cdef BigBlock rt = BigBlock()
-        if 0 != big_file_open_block(&self.bf, &rt.bb, block):
-            raise BigFileError()
-        rt.closed = False
-        return rt
-
-    def create(self, block, dtype=None, size=None, Nfile=1):
-        block = block.encode()
-        cdef BigBlock rt = BigBlock()
-        cdef numpy.ndarray fsize
-        if dtype is None:
-            if 0 != big_file_create_block(&self.bf, &rt.bb, block, 'i8',
-                    1, 0, NULL):
-                raise BigFileError()
-
-        else:
-            dtype = numpy.dtype(dtype)
-            assert len(dtype.shape) <= 1
-            if len(dtype.shape) == 0:
-                items = 1
-            else:
-                items = dtype.shape[0]
-            fsize = numpy.empty(dtype='intp', shape=Nfile)
-            fsize[:] = (numpy.arange(Nfile) + 1) * size / Nfile \
-                     - (numpy.arange(Nfile)) * size / Nfile
-            if 0 != big_file_create_block(&self.bf, &rt.bb, block, dtype.base.str.encode(),
-                    items, Nfile, <size_t*> fsize.data):
-                raise BigFileError()
-        rt.closed = False
-        return rt
 
 cdef class BigBlockAttrSet:
     cdef readonly BigBlock bb
@@ -253,24 +226,20 @@ cdef class BigBlock:
     def __exit__(self, type, value, tb):
         self.close()
 
-    @staticmethod
-    def open(filename):
-        filename = filename.encode()
-        cdef BigBlock self = BigBlock()
-        if 0 != big_block_open(&self.bb, filename):
+    def open(self, BigFile f, blockname):
+        blockname = blockname.encode()
+        if 0 != big_file_open_block(&f.bf, &self.bb, blockname):
             raise BigFileError()
         self.closed = False
-        return self
-    @staticmethod
-    def create(filename, dtype=None, size=None, Nfile=1):
-        filename = filename.encode()
-        cdef BigBlock self = BigBlock()
-        cdef numpy.ndarray fsize
 
+    def create(self, BigFile f, blockname, dtype=None, size=None, Nfile=1):
+        blockname = blockname.encode()
+        cdef numpy.ndarray fsize
         if dtype is None:
-            if 0 != big_block_create(&self.bb, filename, 'i8',
+            if 0 != big_file_create_block(&f.bf, &self.bb, blockname, 'i8',
                     1, 0, NULL):
                 raise BigFileError()
+
         else:
             dtype = numpy.dtype(dtype)
             assert len(dtype.shape) <= 1
@@ -281,11 +250,11 @@ cdef class BigBlock:
             fsize = numpy.empty(dtype='intp', shape=Nfile)
             fsize[:] = (numpy.arange(Nfile) + 1) * size / Nfile \
                      - (numpy.arange(Nfile)) * size / Nfile
-            if 0 != big_block_create(&self.bb, filename, dtype.base.str,
+            if 0 != big_file_create_block(&f.bf, &self.bb, blockname, 
+                    dtype.base.str.encode(),
                     items, Nfile, <size_t*> fsize.data):
                 raise BigFileError()
         self.closed = False
-        return self
 
     def clear_checksum(self):
         """ reset the checksum to zero for freshly overwriting the data set
@@ -358,23 +327,49 @@ cdef class BigBlock:
             raise BigFileError()
         return result
 
-    def flush(self):
-        if not self.closed:
-            if 0 != big_block_flush(&self.bb):
-                raise BigFileError()
+    def _flush(self):
+        if self.closed: return
+        if 0 != big_block_flush(&self.bb):
+            raise BigFileError()
 
-    def close(self):
-        if not self.closed:
-            if 0 != big_block_close(&self.bb):
-                raise BigFileError()
-            self.closed = True
+    def _MPI_flush(self, comm):
+        cdef unsigned int Nfile = self.bb.Nfile
+        cdef unsigned int[:] fchecksum = <unsigned int[:Nfile]>self.bb.fchecksum
+
+        fchecksum2 = fchecksum.copy()
+        comm.Allreduce(fchecksum, fchecksum2)
+        if comm.rank == 0: 
+            for i in range(Nfile):
+                fchecksum[i] = fchecksum2[i]
+            self.bb.dirty = 1
+        else:
+            self.bb.dirty = 0
+            self.bb.attrset.dirty = 0
+
+        if 0 != big_block_flush(&self.bb):
+            raise BigFileError()
+        comm.barrier()
+
+    def _close(self):
+        if self.closed: return
+        if 0 != big_block_close(&self.bb):
+            raise BigFileError()
+        self.closed = True
+
+    def _MPI_close(self, comm):
+        self._MPI_flush(comm)
+        rt = big_block_close(&self.bb)
+        self.closed = True
+        if 0 != rt:
+            raise BigFileError()
+        comm.barrier()
+
 
     def __dealloc__(self):
-        if not self.closed:
-            big_block_close(&self.bb)
+        if self.closed: return
+        self.close()
 
     def __repr__(self):
         return "<CBigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
                 self.dtype, self.size)
-
 

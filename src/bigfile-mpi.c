@@ -95,15 +95,16 @@ int big_block_mpi_close(BigBlock * block, MPI_Comm comm) {
     int rt;
     if(rank == 0) {
         int i;
-        block->dirty = dirty;
+        block->dirty = 1;
         for(i = 0; i < block->Nfile; i ++) {
             block->fchecksum[i] = checksum[i];
         }
-        rt = big_block_close(block);
+    } else {
+        block->dirty = 0;
+        block->attrs->dirty = 0;
     }
-    MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
+    rt = big_block_close(block);
     if(rt) {
-        big_file_mpi_broadcast_error(0, comm);
         return rt;
     }
     MPI_Barrier(comm);

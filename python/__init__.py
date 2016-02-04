@@ -1,5 +1,5 @@
-from .pyxbigfile import BigBlock
 from .pyxbigfile import BigFileError
+from .pyxbigfile import BigBlock as BigBlockBase
 from .pyxbigfile import BigFile as BigFileBase
 from .pyxbigfile import set_buffer_size
 from . import bigfilempi
@@ -14,14 +14,23 @@ try:
 except NameError:
     def isstr(s):
         return isinstance(s, str)
+class BigBlock(BigBlockBase):
+    def flush(self):
+        self._flush()
+    def close(self):
+        self._close()
 
 class BigFile(BigFileBase):
-    def mpi_create(self, comm, block, dtype=None, size=None,
-            Nfile=1):
-        return bigfilempi.create_block(comm, self, block, dtype, size, Nfile)
 
-    def mpi_create_from_data(self, comm, block, localdata, Nfile=1):
-        bigfilempi.write_block(comm, self, block, localdata, Nfile)
+    def open(self, blockname):
+        block = BigBlock()
+        block.open(self, blockname)
+        return block
+
+    def create(self, blockname, dtype=None, size=None, Nfile=1):
+        block = BigBlock()
+        block.create(self, blockname, dtype, size, Nfile)
+        return block
 
     def __enter__(self):
         return self
@@ -40,6 +49,50 @@ class BigFile(BigFileBase):
 
     def __iter__(self):
         return iter(self.blocks)
+
+class BigBlockMPI(BigBlock):
+    def __init__(self, comm):
+        self.comm = comm
+        super(BigBlockMPI, self).__init__()
+
+    def create(self, f, blockname, dtype=None, size=None, Nfile=1):
+        if self.comm.rank == 0:
+            super(BigBlockMPI, self).create(f, blockname, dtype, size, Nfile)
+        self.comm.barrier()
+        self.open(f, blockname)
+
+    def close(self):
+        self._MPI_close(self.comm)
+
+    def flush(self):
+        self._MPI_flush(self.comm)
+
+class BigFileMPI(BigFile):
+
+    def __init__(self, comm, filename, create=True):
+        self.comm = comm
+        if self.comm.rank == 0:
+            BigFile.__init__(self, filename, create)
+        self.comm.barrier()
+        if self.comm.rank != 0:
+            BigFile.__init__(self, filename, create=False)
+
+    def open(self, blockname):
+        block = BigBlockMPI(self.comm)
+        block.open(self, blockname)
+        return block
+
+    def create(self, blockname, dtype=None, size=None, Nfile=1):
+        block = BigBlockMPI(self.comm)
+        block.create(self, blockname, dtype, size, Nfile)
+        return block
+ 
+    def create_from_array(self, blockname, array, Nfile=1):
+        size = self.comm.allreduce(len(array))
+        offset = sum(self.comm.allgather(len(array))[:self.comm.rank])
+        with self.create(block, array.dtype, size, Nfile) as b:
+            b.write(offset, array)
+        return self.open(blockname) 
 
 class BigData:
     def __init__(self, file, blocks):
