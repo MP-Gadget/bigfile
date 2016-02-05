@@ -8,6 +8,6 @@ from numpy.testing import Tester
 from sys import argv
 
 tester = Tester()
-result = tester.test(extra_argv=['-w', 'tests'] + argv[1:])
-if not result:
+r = tester.test(extra_argv=['-w', 'tests'] + argv[1:])
+if r.failures or r.errors:
     raise Exception("Test Failed")
