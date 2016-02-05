@@ -107,6 +107,8 @@ def test_mpi_create():
                 caught = True
             assert caught
     assert_equal(set(x.blocks), set([numpy.dtype(d).str for d in dtypes]))
+
+    MPI.COMM_WORLD.barrier()
     if MPI.COMM_WORLD.rank == 0:
         shutil.rmtree(fname)
 
@@ -118,7 +120,6 @@ def test_mpi_attr():
     else:
         fname = MPI.COMM_WORLD.bcast(None)
     x = BigFileMPI(MPI.COMM_WORLD, fname, create=True)
-
     with x.create('header', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
@@ -136,5 +137,7 @@ def test_mpi_attr():
         assert_equal(b.attrs['int'], 30)
         assert_equal(b.attrs['float'], [3, 4])
         assert_equal(b.attrs['string'],  'defg')
+
+    MPI.COMM_WORLD.barrier()
     if MPI.COMM_WORLD.rank == 0:
         shutil.rmtree(fname)
