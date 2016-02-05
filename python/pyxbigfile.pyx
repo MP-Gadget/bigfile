@@ -238,11 +238,15 @@ cdef class BigBlock:
         blockname = blockname.encode()
         cdef numpy.ndarray fsize
         if dtype is None:
-            if 0 != big_file_create_block(&f.bf, &self.bb, blockname, 'i8',
-                    1, 0, NULL):
+            if 0 != big_file_create_block(&f.bf, &self.bb, blockname, NULL,
+                    0, 0, NULL):
                 raise BigFileError()
 
         else:
+            if Nfile < 0:
+                raise ValueError("Cannot create negative number of files.")
+            if Nfile == 0 and size != 0:
+                raise ValueError("Cannot create zero files for non-zero number of items.")
             dtype = numpy.dtype(dtype)
             assert len(dtype.shape) <= 1
             if len(dtype.shape) == 0:
@@ -338,14 +342,21 @@ cdef class BigBlock:
         if self.closed: return
         comm = self.comm
         cdef unsigned int Nfile = self.bb.Nfile
-        cdef unsigned int[:] fchecksum = <unsigned int[:Nfile]>self.bb.fchecksum
+        cdef unsigned int[:] fchecksum
+        cdef unsigned int[:] fchecksum2
 
-        fchecksum2 = fchecksum.copy()
-        comm.Allreduce(fchecksum, fchecksum2)
-        if comm.rank == 0: 
+        dirty = self.bb.dirty
+        dirty = any(comm.allgather(dirty))
+
+        if Nfile > 0:
+            fchecksum = <unsigned int[:Nfile]>self.bb.fchecksum
+            fchecksum2 = fchecksum.copy()
+            comm.Allreduce(fchecksum, fchecksum2)
             for i in range(Nfile):
                 fchecksum[i] = fchecksum2[i]
-            self.bb.dirty = 1
+
+        if comm.rank == 0: 
+            self.bb.dirty = dirty
         else:
             self.bb.dirty = 0
             self.bb.attrset.dirty = 0

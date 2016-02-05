@@ -52,7 +52,7 @@ def test_create():
 def test_attr():
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
-    with x.create('header', Nfile=1, dtype='i8', size=0) as b:
+    with x.create('header', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
         b.attrs['string'] = 'abcdefg'
@@ -118,7 +118,8 @@ def test_mpi_attr():
     else:
         fname = MPI.COMM_WORLD.bcast(None)
     x = BigFileMPI(MPI.COMM_WORLD, fname, create=True)
-    with x.create('header', Nfile=1, dtype='i8', size=0) as b:
+
+    with x.create('header', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
         b.attrs['string'] = 'abcdefg'
