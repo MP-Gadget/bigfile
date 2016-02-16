@@ -69,7 +69,7 @@ class BigBlockMPI(BigBlock):
 
 class BigFileMPI(BigFile):
 
-    def __init__(self, comm, filename, create=True):
+    def __init__(self, comm, filename, create=False):
         self.comm = comm
         if self.comm.rank == 0:
             BigFile.__init__(self, filename, create)
