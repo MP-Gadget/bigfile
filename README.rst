@@ -6,7 +6,8 @@ A reproducible massively parallel IO library for large, hierarchical datasets.
 Python 2 and 3 binding is available via pip.
 
 :code:`bigfile` was originally developed for the BlueTides simulation 
-on BlueWaters at NCSA. 
+on BlueWaters at NCSA. The library is currently under investigation under the
+BW-PAID program with NCSA.
 
 Build status
 ------------
@@ -17,14 +18,15 @@ Build status
 Install
 -------
 
+Usually one only needs the Python binding in order to read a BigFile.
+
 To install the Python binding
 
 .. code:: bash
 
     pip install [--user] bigfile
 
-Usually there is no need to install the C API.
-bigfile can be embed into a project, by dropping in 
+The C-API of bigfile can be embedded into a project, by dropping in 
 four files : bigfile.c bigfile-mpi.c, bigfile.h bigfile-mpi.h.
 
 However, if installation is preferred, use
@@ -107,22 +109,23 @@ Comparision with HDF5
   easily maintained by one person or dropped into a project. 
   HDF5 is much more complicated.
 
-- bigfile is reproducible. The raw data on disk is stored as binary files
+- bigfile is closer to the data. The raw data on disk is stored as binary files
   that can be directly accessed by any application. The meta data (block 
   descriptions and attributes) is stored in plain text, easily understood by
-  human. The entire :code:`bigfile` library is no more than an optional helper 
-  for reading and writing these files. In contrast, once your data goes into
-  HDF5 it is trapped, the HDF5 library is required to make sense
-  of the data from that point on.
+  human. In a sense, the :code:`bigfile` library is no more than a helper 
+  for reading and writing these files under the bigfile protocal. 
+  In contrast, once your data goes into  HDF5 it is trapped, 
+  the HDF5 library is required to make sense of the data from that point on.
 
 **Bad**
 
-- bigfile is limited -- for example, bigfile has no API for streaming.
+- bigfile is limited -- for example, bigfile has no API for output streaming,
+  and only 2-dimensional tables are supported.
   HDF5 is much richer in functionality and more powerful in data description.  
   The designated use-case of bigfile is to store 
   a large amount of static / near-immutable column-wise table data. 
 
-- bigfile is incomplete. Many bugs have yet to be identified and fixed.  
+- bigfile is incomplete. Bugs have yet to be identified and fixed.  
   In contrast HDF5 has been a funded research program developed for more than 20 years. 
 
 API Reference
@@ -155,7 +158,7 @@ Examples
     
     print (data.size)
     print (data.dtype)
-    # just read a few particles
+    # just read a few particles, because there are 700 billion of them.
     print data[10:30]
 
     
