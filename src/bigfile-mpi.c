@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "bigfile-mpi.h"
-int big_file_mpi_open(BigFile * bf, char * basename, MPI_Comm comm) {
+int big_file_mpi_open(BigFile * bf, const char * basename, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
@@ -12,7 +12,7 @@ int big_file_mpi_open(BigFile * bf, char * basename, MPI_Comm comm) {
     return rt;
 }
 
-int big_file_mpi_create(BigFile * bf, char * basename, MPI_Comm comm) {
+int big_file_mpi_create(BigFile * bf, const char * basename, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
@@ -20,14 +20,14 @@ int big_file_mpi_create(BigFile * bf, char * basename, MPI_Comm comm) {
     MPI_Barrier(comm);
     return rt;
 }
-int big_file_mpi_open_block(BigFile * bf, BigBlock * block, char * blockname, MPI_Comm comm) {
+int big_file_mpi_open_block(BigFile * bf, BigBlock * block, const char * blockname, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return big_block_mpi_open(block, basename, comm);
 }
 
-int big_file_mpi_create_block(BigFile * bf, BigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t size, MPI_Comm comm) {
+int big_file_mpi_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, size_t size, MPI_Comm comm) {
     size_t fsize[Nfile];
     int i;
     for(i = 0; i < Nfile; i ++) {
@@ -52,7 +52,7 @@ static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm);
 static void big_file_mpi_broadcast_error(int root, MPI_Comm comm);
 
 
-int big_block_mpi_open(BigBlock * bb, char * basename, MPI_Comm comm) {
+int big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
@@ -68,7 +68,7 @@ int big_block_mpi_open(BigBlock * bb, char * basename, MPI_Comm comm) {
     big_block_mpi_broadcast(bb, 0, comm);
     return 0;
 }
-int big_block_mpi_create(BigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[], MPI_Comm comm) {
+int big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, size_t fsize[], MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
