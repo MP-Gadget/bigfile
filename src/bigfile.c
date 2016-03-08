@@ -724,8 +724,8 @@ ex_notfound:
  * seek ptr to offset, on bb
  *  
  *      offset: 0 : Start
- *              -1 : End
- *              -2 : End - 1
+ *              -1 : End - 1
+ *              -2 : End - 2
  *
  * returns 0
  *
