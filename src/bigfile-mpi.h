@@ -1,8 +1,12 @@
 #ifndef _BIGFILE_MPI_H_
 #define _BIGFILE_MPI_H_
 #include <mpi.h>
+
 #include "bigfile.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 /** Open a Bigfile: this stats the directory tree that constitutes the BigFile format.
  * It initialises the BigFile structure.
  * Arguments:
@@ -58,4 +62,7 @@ int big_block_mpi_close(BigBlock * block, MPI_Comm comm);
 
 /** Helper function for big_file_mpi_open_block, above*/
 int big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm);
+#ifdef __cplusplus
+}
+#endif
 #endif

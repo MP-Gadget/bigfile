@@ -1,7 +1,9 @@
 #ifndef _BIGFILE_H_
 #define _BIGFILE_H_
 #include <stddef.h>
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 typedef struct BigFile {
     /* All members are readonly. Initialize with big_file_open / big_file_create */
     char * basename;
@@ -233,4 +235,7 @@ int dtype_itemsize(const char * dtype);
 int big_array_init(BigArray * array, void * buf, const char * dtype, int ndim, const size_t dims[], const ptrdiff_t strides[]);
 int big_array_iter_init(BigArrayIter * iter, BigArray * array);
 void big_array_iter_advance(BigArrayIter * iter);
+#ifdef __cplusplus
+}
+#endif
 #endif
