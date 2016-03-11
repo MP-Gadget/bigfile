@@ -115,7 +115,7 @@ cdef class BigFile:
             cdef int N
             big_file_list(&self.bf, &list, &N)
             try:
-                return [list[i].decode() for i in range(N)]
+                return [str(list[i].decode()) for i in range(N)]
             finally:
                 for i in range(N):
                     free(list[i])
