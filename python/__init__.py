@@ -49,7 +49,7 @@ class BigFile(BigFileBase):
 
     def __init__(self, filename, create=False):
         BigFileBase.__init__(self, filename, create)
-        self.blocks = self.list_blocks()
+        self.refresh()
 
     def open(self, blockname):
         block = BigBlock()
@@ -59,12 +59,15 @@ class BigFile(BigFileBase):
     def create(self, blockname, dtype=None, size=None, Nfile=1):
         block = BigBlock()
         block.create(self, blockname, dtype, size, Nfile)
-        self.blocks = self.list_blocks()
+        self.refresh()
         return block
 
     def subfile(self, key):
         return BigFile(os.path.join(self.basename, key))
 
+    def refresh(self):
+        """ Refresh the list of blocks to the disk."""
+        self.blocks = self.list_blocks()
 
 class BigBlockMPI(BigBlock):
     def __init__(self, comm):
@@ -93,9 +96,10 @@ class BigFileMPI(BigFileBase):
         if self.comm.rank != 0:
             self.comm.barrier()
             BigFileBase.__init__(self, filename, create=False)
-        self._update_blocks()
+        self.refresh()
 
-    def _update_blocks(self):
+    def refresh(self):
+        """ Refresh the list of blocks to the disk, collectively """
         if self.comm.rank == 0:
             self.blocks = self.list_blocks()
         else:
@@ -113,7 +117,7 @@ class BigFileMPI(BigFileBase):
     def create(self, blockname, dtype=None, size=None, Nfile=1):
         block = BigBlockMPI(self.comm)
         block.create(self, blockname, dtype, size, Nfile)
-        self._update_blocks()
+        self.refresh()
         return block
 
     def create_from_array(self, blockname, array, Nfile=1):
