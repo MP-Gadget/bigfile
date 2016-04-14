@@ -1,6 +1,6 @@
 from .pyxbigfile import BigFileError
 from .pyxbigfile import BigBlock as BigBlockBase
-from .pyxbigfile import BigFile as BigFileBase
+from .pyxbigfile import BigFile as BigFileLowLevel
 from .pyxbigfile import set_buffer_size
 from . import bigfilempi
 
@@ -14,13 +14,42 @@ try:
 except NameError:
     def isstr(s):
         return isinstance(s, str)
+
 class BigBlock(BigBlockBase):
     def flush(self):
         self._flush()
     def close(self):
         self._close()
 
+class BigFileBase(BigFileLowLevel):
+    def __init__(self, filename, create=False):
+        BigFileLowLevel.__init__(self, filename, create)
+        self.blocks = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, tb):
+        self.close()
+
+    def __contains__(self, key):
+        return key in self.blocks
+
+    def __iter__(self):
+        return iter(self.blocks)
+
+    def __getitem__(self, key):
+        if key.endswith('/'):
+            return self.subfile(key)
+
+        return self.open(key)
+
+
 class BigFile(BigFileBase):
+
+    def __init__(self, filename, create=False):
+        BigFileBase.__init__(self, filename, create)
+        self.blocks = self.list_blocks()
 
     def open(self, blockname):
         block = BigBlock()
@@ -30,25 +59,12 @@ class BigFile(BigFileBase):
     def create(self, blockname, dtype=None, size=None, Nfile=1):
         block = BigBlock()
         block.create(self, blockname, dtype, size, Nfile)
+        self.blocks = self.list_blocks()
         return block
 
-    def __enter__(self):
-        return self
+    def subfile(self, key):
+        return BigFile(os.path.join(self.basename, key))
 
-    def __exit__(self, type, value, tb):
-        self.close()
-
-    def __getitem__(self, key):
-        if key.endswith('/'):
-            return BigFile(os.path.join(self.basename, key))
-
-        return self.open(key)
-
-    def __contains__(self, key):
-        return key in self.blocks
-
-    def __iter__(self):
-        return iter(self.blocks)
 
 class BigBlockMPI(BigBlock):
     def __init__(self, comm):
@@ -67,40 +83,48 @@ class BigBlockMPI(BigBlock):
     def flush(self):
         self._MPI_flush()
 
-class BigFileMPI(BigFile):
+class BigFileMPI(BigFileBase):
 
     def __init__(self, comm, filename, create=False):
         self.comm = comm
         if self.comm.rank == 0:
-            BigFile.__init__(self, filename, create)
-        self.comm.barrier()
+            BigFileBase.__init__(self, filename, create)
+            self.comm.barrier()
         if self.comm.rank != 0:
-            BigFile.__init__(self, filename, create=False)
+            self.comm.barrier()
+            BigFileBase.__init__(self, filename, create=False)
+        self._update_blocks()
 
-    def __getitem__(self, key):
-        if key.endswith('/'):
-            return BigFileMPI(comm, os.path.join(self.basename, key))
-
-        return self.open(key)
+    def _update_blocks(self):
+        if self.comm.rank == 0:
+            self.blocks = self.list_blocks()
+        else:
+            self.blocks = None
+        self.blocks = self.comm.bcast(self.blocks)
 
     def open(self, blockname):
         block = BigBlockMPI(self.comm)
         block.open(self, blockname)
         return block
 
+    def subfile(self, key):
+        return BigFileMPI(self.comm, os.path.join(self.basename, key))
+
     def create(self, blockname, dtype=None, size=None, Nfile=1):
         block = BigBlockMPI(self.comm)
         block.create(self, blockname, dtype, size, Nfile)
+        self._update_blocks()
         return block
- 
+
     def create_from_array(self, blockname, array, Nfile=1):
         size = self.comm.allreduce(len(array))
         offset = sum(self.comm.allgather(len(array))[:self.comm.rank])
         with self.create(blockname, array.dtype, size, Nfile) as b:
             b.write(offset, array)
-        return self.open(blockname) 
+        return self.open(blockname)
 
 class BigData:
+    """ Accessing read-only subset of blocks from a bigfile """
     def __init__(self, file, blocks):
         self.blocknames = blocks
         self.blocks = dict([

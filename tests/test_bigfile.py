@@ -1,6 +1,7 @@
 
 from bigfile import BigFile
 from bigfile import BigFileMPI
+from bigfile import BigData
 
 import tempfile
 import numpy
@@ -47,6 +48,17 @@ def test_create():
                 caught = True
             assert caught
     assert_equal(set(x.blocks), set([numpy.dtype(d).str for d in dtypes]))
+
+    for b in x.blocks:
+        assert b in x
+
+    for b in x:
+        assert b in x
+
+    bd = BigData(x, x.blocks)
+    assert set(bd.dtype.names) == set(x.blocks)
+    d = bd[:]
+
     shutil.rmtree(fname)
 
 def test_attr():
@@ -107,6 +119,16 @@ def test_mpi_create():
                 caught = True
             assert caught
     assert_equal(set(x.blocks), set([numpy.dtype(d).str for d in dtypes]))
+
+    for b in x.blocks:
+        assert b in x
+
+    for b in x:
+        assert b in x
+
+    bd = BigData(x, x.blocks)
+    assert set(bd.dtype.names) == set(x.blocks)
+    d = bd[:]
 
     MPI.COMM_WORLD.barrier()
     if MPI.COMM_WORLD.rank == 0:

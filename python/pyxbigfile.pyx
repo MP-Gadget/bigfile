@@ -109,17 +109,17 @@ cdef class BigFile:
         def __get__(self):
             return '%s' % self.bf.basename
 
-    property blocks:
-        def __get__(self):
-            cdef char ** list
-            cdef int N
-            big_file_list(&self.bf, &list, &N)
-            try:
-                return [str(list[i].decode()) for i in range(N)]
-            finally:
-                for i in range(N):
-                    free(list[i])
-                free(list)
+    def list_blocks(self):
+        cdef char ** list
+        cdef int N
+        big_file_list(&self.bf, &list, &N)
+        try:
+            return [str(list[i].decode()) for i in range(N)]
+        finally:
+            for i in range(N):
+                free(list[i])
+            free(list)
+        return []
 
     def close(self):
         if 0 != big_file_close(&self.bf):
