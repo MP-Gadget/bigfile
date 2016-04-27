@@ -6,6 +6,8 @@ PREFIX=/usr
 endif
 .PHONY: all
 
+CFLAGS += -fPIC
+
 all: libbigfile.a libbigfile-mpi.a
 
 install: libbigfile.a libbigfile-mpi.a
