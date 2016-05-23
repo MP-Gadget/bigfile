@@ -55,7 +55,7 @@ def test_create():
     for b in x:
         assert b in x
 
-    bd = BigData(x, x.blocks)
+    bd = BigData(x)
     assert set(bd.dtype.names) == set(x.blocks)
     d = bd[:]
 
@@ -126,7 +126,7 @@ def test_mpi_create():
     for b in x:
         assert b in x
 
-    bd = BigData(x, x.blocks)
+    bd = BigData(x)
     assert set(bd.dtype.names) == set(x.blocks)
     d = bd[:]
 

@@ -128,8 +128,20 @@ class BigFileMPI(BigFileBase):
         return self.open(blockname)
 
 class BigData:
-    """ Accessing read-only subset of blocks from a bigfile """
-    def __init__(self, file, blocks):
+    """ Accessing read-only subset of blocks from a bigfile.
+    
+        Parameters
+        ----------
+        file : BigFile
+
+        blocks : list or None
+            a list of blocks to use. If None is given, all blocks are used.
+
+    """
+    def __init__(self, file, blocks=None):
+        if blocks is None:
+            blocks = file.blocks
+
         self.blocknames = blocks
         self.blocks = dict([
             (block, file[block]) for block in self.blocknames])
