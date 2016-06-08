@@ -1,9 +1,9 @@
-utils/bigfile-cat
-utils/bigfile-copy
-utils/bigfile-copy-mpi
-utils/bigfile-create
-utils/bigfile-get-attr
-utils/bigfile-ls
-utils/bigfile-sample-mpi
-utils/bigfile-set-attr
+bigfile-cat
+bigfile-copy
+bigfile-copy-mpi
+bigfile-create
+bigfile-get-attr
+bigfile-ls
+bigfile-sample-mpi
+bigfile-set-attr
 
