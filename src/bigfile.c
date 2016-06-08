@@ -536,6 +536,7 @@ static int big_block_read_attr_set_v2(BigBlock * bb) {
             ex_set_attr,
             NULL);
     } 
+    free(data);
     free(buffer);
     bb->attrset.dirty = 0;
     return 0;
