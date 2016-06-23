@@ -31,7 +31,7 @@ cdef extern from "bigfile.c":
         int Nfile
         unsigned int * fchecksum; 
         int dirty
-        CBigFileAttrSet attrset;
+        CBigFileAttrSet * attrset;
 
     struct CBigBlockPtr "BigBlockPtr":
         pass
@@ -57,6 +57,7 @@ cdef extern from "bigfile.c":
     int big_block_create(CBigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[])
     int big_block_close(CBigBlock * block)
     int big_block_flush(CBigBlock * block)
+    void big_block_set_dirty(CBigBlock * block, int value)
     int big_block_seek(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t offset)
     int big_block_seek_rel(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t rel)
     int big_block_read(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array)
@@ -356,10 +357,9 @@ cdef class BigBlock:
                 fchecksum[i] = fchecksum2[i]
 
         if comm.rank == 0: 
-            self.bb.dirty = dirty
+            big_block_set_dirty(&self.bb, dirty);
         else:
-            self.bb.dirty = 0
-            self.bb.attrset.dirty = 0
+            big_block_set_dirty(&self.bb, 0);
 
         if 0 != big_block_flush(&self.bb):
             raise BigFileError()
