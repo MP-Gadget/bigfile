@@ -62,6 +62,35 @@ int big_block_mpi_close(BigBlock * block, MPI_Comm comm);
 
 /** Helper function for big_file_mpi_open_block, above*/
 int big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm);
+
+/** Write data stored in a BigArray to a BigBlock.
+ * You cannot write beyond the end of the size of the block.
+ * The value may be a (small) array.
+ *
+ * This is a collective MPI operation. The write operation starts from ptr.
+ *
+ * Arguments:
+ * @param block - pointer to opened BigBlock
+ * @param ptr - Absolute position to write to in the file. Construct this with a call to big_block_seek.
+ * @param array - BigArray containing the data which should be written.
+ * @param concurrency - Max number of MPI ranks that issues write operation at the same time.
+ * @param comm - MPI Communicator
+ * @returns 0 if successful. */
+int big_block_mpi_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, int concurrency, MPI_Comm comm);
+
+/** Read from a block to a BigArray
+ *
+ * This is a collective MPI operation. The read operation will start from ptr.
+ *
+ * @param ptr - The offset to start reading
+ * @param array - An array specifying the number of items to read.
+ * @param concurrency - Max number of MPI ranks that issues write operation at the same time.
+ * @param comm - MPI Communicator
+ *
+ * @returns 0 if successful.
+ */
+int big_block_mpi_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, int concurrency, MPI_Comm comm);
+
 #ifdef __cplusplus
 }
 #endif
