@@ -20,9 +20,6 @@ cdef extern from "bigfile.c":
     struct CBigFile "BigFile":
         char * basename
 
-    struct CBigFileAttrSet "BigFileAttrSet":
-        int dirty
-
     struct CBigBlock "BigBlock":
         char * dtype
         int nmemb
@@ -31,7 +28,7 @@ cdef extern from "bigfile.c":
         int Nfile
         unsigned int * fchecksum; 
         int dirty
-        CBigFileAttrSet * attrset;
+        CBigAttrSet * attrset;
 
     struct CBigBlockPtr "BigBlockPtr":
         pass
@@ -50,6 +47,9 @@ cdef extern from "bigfile.c":
         char * name
         char * data
 
+    struct CBigAttrSet "BigAttrSet":
+        pass
+
     char * big_file_get_error_message()
     void big_file_set_buffer_size(size_t bytes)
     int big_block_open(CBigBlock * bb, char * basename)
@@ -58,6 +58,7 @@ cdef extern from "bigfile.c":
     int big_block_close(CBigBlock * block)
     int big_block_flush(CBigBlock * block)
     void big_block_set_dirty(CBigBlock * block, int value)
+    void big_attrset_set_dirty(CBigAttrSet * attrset, int value)
     int big_block_seek(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t offset)
     int big_block_seek_rel(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t rel)
     int big_block_read(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array)
@@ -346,8 +347,7 @@ cdef class BigBlock:
         cdef unsigned int[:] fchecksum
         cdef unsigned int[:] fchecksum2
 
-        dirty = self.bb.dirty
-        dirty = any(comm.allgather(dirty))
+        dirty = any(comm.allgather(self.bb.dirty))
 
         if Nfile > 0:
             fchecksum = <unsigned int[:Nfile]>self.bb.fchecksum
@@ -360,6 +360,7 @@ cdef class BigBlock:
             big_block_set_dirty(&self.bb, dirty);
         else:
             big_block_set_dirty(&self.bb, 0);
+            big_attrset_set_dirty(self.bb.attrset, 0);
 
         if 0 != big_block_flush(&self.bb):
             raise BigFileError()
