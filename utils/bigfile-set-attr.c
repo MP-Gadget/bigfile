@@ -52,7 +52,7 @@ int main(int argc, char * argv[]) {
         exit(1);
     }
     int i; 
-    BigBlockAttr * attr;
+    BigAttr * attr;
 
     if(force) 
         big_block_remove_attr(&bb, argv[3]);

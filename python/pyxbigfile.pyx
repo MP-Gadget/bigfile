@@ -44,7 +44,7 @@ cdef extern from "bigfile.c":
         size_t size
         void * data
 
-    struct CBigBlockAttr "BigBlockAttr":
+    struct CBigAttr "BigAttr":
         int nmemb
         char dtype[8]
         char * name
@@ -64,8 +64,8 @@ cdef extern from "bigfile.c":
     int big_block_set_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
     int big_block_remove_attr(CBigBlock * block, char * attrname)
     int big_block_get_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
-    CBigBlockAttr * big_block_lookup_attr(CBigBlock * block, char * attrname)
-    CBigBlockAttr * big_block_list_attrs(CBigBlock * block, size_t * count)
+    CBigAttr * big_block_lookup_attr(CBigBlock * block, char * attrname)
+    CBigAttr * big_block_list_attrs(CBigBlock * block, size_t * count)
     int big_array_init(CBigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[])
 
     int big_file_open_block(CBigFile * bf, CBigBlock * block, char * blockname)
@@ -134,7 +134,7 @@ cdef class BigFileAttrSet:
             if self.bb.closed:
                 raise BigFileError("block closed")
             cdef size_t count
-            cdef CBigBlockAttr * list
+            cdef CBigAttr * list
             list = big_block_list_attrs(&self.bb.bb, &count)
             return [list[i].name for i in range(count)]
 
@@ -150,7 +150,7 @@ cdef class BigFileAttrSet:
         name = name.encode()
         if self.bb.closed:
             raise BigFileError("block closed")
-        cdef CBigBlockAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
+        cdef CBigAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
             return False
         return True
@@ -159,7 +159,7 @@ cdef class BigFileAttrSet:
         name = name.encode()
         if self.bb.closed:
             raise BigFileError("block closed")
-        cdef CBigBlockAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
+        cdef CBigAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
             raise KeyError("attr not found")
         cdef numpy.ndarray result = numpy.empty(attr[0].nmemb, attr[0].dtype)
@@ -174,7 +174,7 @@ cdef class BigFileAttrSet:
         name = name.encode()
         if self.bb.closed:
             raise BigFileError("block closed")
-        cdef CBigBlockAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
+        cdef CBigAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
             raise KeyError("attr not found")
         big_block_remove_attr(&self.bb.bb, name)

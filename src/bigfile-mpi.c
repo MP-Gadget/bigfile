@@ -148,14 +148,14 @@ static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm) {
         bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
         bb->fchecksum = calloc(bb->Nfile, sizeof(int));
         bb->attrset.attrbuf = calloc(bb->attrset.bufsize, 1);
-        bb->attrset.attrlist = calloc(bb->attrset.listsize, sizeof(BigBlockAttr));
+        bb->attrset.attrlist = calloc(bb->attrset.listsize, sizeof(BigAttr));
     }
     MPI_Bcast(bb->basename, lname + 1, MPI_BYTE, root, comm);
     MPI_Bcast(bb->fsize, sizeof(ptrdiff_t) * bb->Nfile, MPI_BYTE, root, comm);
     MPI_Bcast(bb->fchecksum, sizeof(int) * bb->Nfile, MPI_BYTE, root, comm);
     MPI_Bcast(bb->foffset, sizeof(ptrdiff_t) * bb->Nfile + 1, MPI_BYTE, root, comm);
     MPI_Bcast(bb->attrset.attrbuf, bb->attrset.bufused, MPI_BYTE, root, comm);
-    MPI_Bcast(bb->attrset.attrlist, bb->attrset.listused * sizeof(BigBlockAttr), MPI_BYTE, root, comm);
+    MPI_Bcast(bb->attrset.attrlist, bb->attrset.listused * sizeof(BigAttr), MPI_BYTE, root, comm);
     for(i = 0; i < bb->attrset.listused; i ++) {
         bb->attrset.attrlist[i].data += (ptrdiff_t) (bb->attrset.attrbuf - oldbuf);
         bb->attrset.attrlist[i].name += (ptrdiff_t) (bb->attrset.attrbuf - oldbuf);

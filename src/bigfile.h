@@ -9,25 +9,25 @@ typedef struct BigFile {
     char * basename;
 } BigFile;
 
-typedef struct BigBlockAttr {
+typedef struct BigAttr {
     /* All members are readonly. */
     int nmemb;
     char dtype[8];
     char * name;
     char * data;
-} BigBlockAttr;
+} BigAttr;
 
-typedef struct BigFileAttrSet {
+typedef struct BigAttrSet {
     /* All members are readonly */
     int dirty;
     char * attrbuf;
     size_t bufused;
     size_t bufsize;
 
-    BigBlockAttr * attrlist;
+    BigAttr * attrlist;
     size_t listused;
     size_t listsize;
-} BigFileAttrSet;
+} BigAttrSet;
 
 typedef struct BigBlock {
     /* All members are readonly */
@@ -43,7 +43,7 @@ typedef struct BigBlock {
     size_t * foffset; /* Nfile + 1, in units of elements */
     unsigned int * fchecksum; /* sysv sums of each file (unreduced) */
     int Nfile;
-    BigFileAttrSet attrset;
+    BigAttrSet attrset;
     int dirty;
 } BigBlock;
 
@@ -172,8 +172,8 @@ int big_block_set_attr(BigBlock * block, const char * attrname, const void * dat
  * @param nmemb - Number of members to get. Must be equal to number of members
  * originally stored or an error is raised and -1 returned.*/
 int big_block_get_attr(BigBlock * block, const char * attrname, void * data, const char * dtype, int nmemb);
-BigBlockAttr * big_block_lookup_attr(BigBlock * block, const char * attrname);
-BigBlockAttr * big_block_list_attrs(BigBlock * block, size_t * count);
+BigAttr * big_block_lookup_attr(BigBlock * block, const char * attrname);
+BigAttr * big_block_list_attrs(BigBlock * block, size_t * count);
 
 /**
  *

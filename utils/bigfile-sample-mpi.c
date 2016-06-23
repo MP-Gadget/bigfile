@@ -103,10 +103,10 @@ int main(int argc, char * argv[]) {
 
     /* copy attrs */
     size_t nattr;
-    BigBlockAttr * attrs = big_block_list_attrs(&bb, &nattr);
+    BigAttr * attrs = big_block_list_attrs(&bb, &nattr);
     int i;
     for(i = 0; i < nattr; i ++) {
-        BigBlockAttr * attr = &attrs[i];
+        BigAttr * attr = &attrs[i];
         big_block_set_attr(&bbnew, attr->name, attr->data, attr->dtype, attr->nmemb);
     }
 

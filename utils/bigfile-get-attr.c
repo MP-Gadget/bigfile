@@ -14,7 +14,7 @@ static void usage() {
     exit(1);
 }
 
-static void print_attr(BigBlockAttr * attr, int brief) {
+static void print_attr(BigAttr * attr, int brief) {
     char buffer[128];
     char * data = attr->data;
     int i;
@@ -68,14 +68,14 @@ int main(int argc, char * argv[]) {
     int i; 
     if(argc - optind == 2) {
         size_t nattr;
-        BigBlockAttr * attrs = big_block_list_attrs(&bb, &nattr);
+        BigAttr * attrs = big_block_list_attrs(&bb, &nattr);
         for(i = 0; i < nattr; i ++) {
-            BigBlockAttr * attr = &attrs[i];
+            BigAttr * attr = &attrs[i];
             print_attr(attr, 0);
         }
     }
     for(i = 3; i < argc - optind + 1; i ++) {
-        BigBlockAttr * attr = big_block_lookup_attr(&bb, argv[i]);
+        BigAttr * attr = big_block_lookup_attr(&bb, argv[i]);
         if(attr) {
             print_attr(attr, argc - optind == 3);
         } else {
