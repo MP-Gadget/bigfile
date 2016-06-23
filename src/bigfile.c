@@ -19,21 +19,21 @@ static size_t CHUNK_BYTES = 64 * 1024 * 1024;
 
 /* Internal AttrSet API */
 static int
-attrset_read_attr_set_v1(BigBlockAttrSet * attrset, const char * basename);
+attrset_read_attr_set_v1(BigFileAttrSet * attrset, const char * basename);
 static int
-attrset_read_attr_set_v2(BigBlockAttrSet * attrset, const char * basename);
+attrset_read_attr_set_v2(BigFileAttrSet * attrset, const char * basename);
 static int
-attrset_write_attr_set_v2(BigBlockAttrSet * attrset, const char * basename);
+attrset_write_attr_set_v2(BigFileAttrSet * attrset, const char * basename);
 static BigBlockAttr *
-attrset_lookup_attr(BigBlockAttrSet * attrset, const char * attrname);
+attrset_lookup_attr(BigFileAttrSet * attrset, const char * attrname);
 static int
-attrset_remove_attr(BigBlockAttrSet * attrset, const char * attrname);
+attrset_remove_attr(BigFileAttrSet * attrset, const char * attrname);
 static BigBlockAttr *
-attrset_list_attrs(BigBlockAttrSet * attrset, size_t * count);
+attrset_list_attrs(BigFileAttrSet * attrset, size_t * count);
 static int
-attrset_set_attr(BigBlockAttrSet * attrset, const char * attrname, const void * data, const char * dtype, int nmemb);
+attrset_set_attr(BigFileAttrSet * attrset, const char * attrname, const void * data, const char * dtype, int nmemb);
 static int
-attrset_get_attr(BigBlockAttrSet * attrset, const char * attrname, void * data, const char * dtype, int nmemb);
+attrset_get_attr(BigFileAttrSet * attrset, const char * attrname, void * data, const char * dtype, int nmemb);
 
 
 int big_file_set_buffer_size(size_t bytes) {
@@ -1206,7 +1206,7 @@ int main(int argc, char * argv[]) {
  * */
 
 static int
-attrset_read_attr_set_v1(BigBlockAttrSet * attrset, const char * basename)
+attrset_read_attr_set_v1(BigFileAttrSet * attrset, const char * basename)
 {
     attrset->dirty = 0;
 
@@ -1257,7 +1257,7 @@ static int _isblank(int ch) {
 }
 
 static int
-attrset_read_attr_set_v2(BigBlockAttrSet * attrset, const char * basename)
+attrset_read_attr_set_v2(BigFileAttrSet * attrset, const char * basename)
 {
     attrset->dirty = 0;
 
@@ -1326,7 +1326,7 @@ ex_set_attr:
     return -1;
 }
 static int
-attrset_write_attr_set_v2(BigBlockAttrSet * attrset, const char * basename)
+attrset_write_attr_set_v2(BigFileAttrSet * attrset, const char * basename)
 {
     static char conv[] = "0123456789ABCDEF";
     attrset->dirty = 0;
@@ -1395,7 +1395,7 @@ static int attr_cmp(const void * p1, const void * p2) {
 }
 
 static BigBlockAttr *
-attrset_append_attr(BigBlockAttrSet * attrset)
+attrset_append_attr(BigFileAttrSet * attrset)
 {
     if(attrset->listsize == 0) {
         attrset->attrlist = malloc(sizeof(BigBlockAttr) * 16);
@@ -1411,7 +1411,7 @@ attrset_append_attr(BigBlockAttrSet * attrset)
 }
 
 static int
-attrset_add_attr(BigBlockAttrSet * attrset, const char * attrname, const char * dtype, int nmemb)
+attrset_add_attr(BigFileAttrSet * attrset, const char * attrname, const char * dtype, int nmemb)
 {
     size_t size = dtype_itemsize(dtype) * nmemb + strlen(attrname) + 1;
     if(attrset->bufsize == 0) {
@@ -1450,7 +1450,7 @@ attrset_add_attr(BigBlockAttrSet * attrset, const char * attrname, const char * 
 }
 
 static BigBlockAttr *
-attrset_lookup_attr(BigBlockAttrSet * attrset, const char * attrname)
+attrset_lookup_attr(BigFileAttrSet * attrset, const char * attrname)
 {
     BigBlockAttr lookup = {0};
     lookup.name = (char*) attrname;
@@ -1459,7 +1459,7 @@ attrset_lookup_attr(BigBlockAttrSet * attrset, const char * attrname)
 }
 
 static int
-attrset_remove_attr(BigBlockAttrSet * attrset, const char * attrname)
+attrset_remove_attr(BigFileAttrSet * attrset, const char * attrname)
 {
     BigBlockAttr *attr = attrset_lookup_attr(attrset, attrname);
     if(attr) {
@@ -1472,14 +1472,14 @@ attrset_remove_attr(BigBlockAttrSet * attrset, const char * attrname)
 }
 
 static BigBlockAttr *
-attrset_list_attrs(BigBlockAttrSet * attrset, size_t * count)
+attrset_list_attrs(BigFileAttrSet * attrset, size_t * count)
 {
     *count = attrset->listused;
     return attrset->attrlist;
 }
 
 static int
-attrset_set_attr(BigBlockAttrSet * attrset, const char * attrname, const void * data, const char * dtype, int nmemb)
+attrset_set_attr(BigFileAttrSet * attrset, const char * attrname, const void * data, const char * dtype, int nmemb)
 {
     BigBlockAttr * attr;
     attrset->dirty = 1;
@@ -1502,7 +1502,7 @@ ex_add:
 }
 
 static int
-attrset_get_attr(BigBlockAttrSet * attrset, const char * attrname, void * data, const char * dtype, int nmemb)
+attrset_get_attr(BigFileAttrSet * attrset, const char * attrname, void * data, const char * dtype, int nmemb)
 {
     BigBlockAttr * found = attrset_lookup_attr(attrset, attrname);
     RAISEIF(!found, ex_notfound, "attr not found");

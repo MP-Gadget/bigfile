@@ -17,7 +17,7 @@ typedef struct BigBlockAttr {
     char * data;
 } BigBlockAttr;
 
-typedef struct BigBlockAttrSet {
+typedef struct BigFileAttrSet {
     /* All members are readonly */
     int dirty;
     char * attrbuf;
@@ -27,7 +27,7 @@ typedef struct BigBlockAttrSet {
     BigBlockAttr * attrlist;
     size_t listused;
     size_t listsize;
-} BigBlockAttrSet;
+} BigFileAttrSet;
 
 typedef struct BigBlock {
     /* All members are readonly */
@@ -43,7 +43,7 @@ typedef struct BigBlock {
     size_t * foffset; /* Nfile + 1, in units of elements */
     unsigned int * fchecksum; /* sysv sums of each file (unreduced) */
     int Nfile;
-    BigBlockAttrSet attrset;
+    BigFileAttrSet attrset;
     int dirty;
 } BigBlock;
 

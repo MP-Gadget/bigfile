@@ -20,7 +20,7 @@ cdef extern from "bigfile.c":
     struct CBigFile "BigFile":
         char * basename
 
-    struct CBigBlockAttrSet "BigBlockAttrSet":
+    struct CBigFileAttrSet "BigFileAttrSet":
         int dirty
 
     struct CBigBlock "BigBlock":
@@ -31,7 +31,7 @@ cdef extern from "bigfile.c":
         int Nfile
         unsigned int * fchecksum; 
         int dirty
-        CBigBlockAttrSet attrset;
+        CBigFileAttrSet attrset;
 
     struct CBigBlockPtr "BigBlockPtr":
         pass
@@ -126,7 +126,7 @@ cdef class BigFile:
             raise BigFileError()
         self.closed = True
 
-cdef class BigBlockAttrSet:
+cdef class BigFileAttrSet:
     cdef readonly BigBlock bb
 
     property keys:
@@ -210,7 +210,7 @@ cdef class BigBlock:
             return numpy.dtype((self.bb.dtype, self.bb.nmemb))
     property attrs:
         def __get__(self):
-            return BigBlockAttrSet(self)
+            return BigFileAttrSet(self)
     property Nfile:
         def __get__(self):
             return self.bb.Nfile
