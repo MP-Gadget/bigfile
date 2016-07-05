@@ -181,6 +181,9 @@ static int _throttle_plan_create(ThrottlePlan * plan, MPI_Comm comm, int concurr
     MPI_Comm_size(comm, &NTask);
     MPI_Comm_rank(comm, &ThisTask);
 
+    if(concurrency <= 0) {
+        concurrency = NTask;
+    }
     int color = ThisTask * concurrency / NTask;
     MPI_Comm_split(MPI_COMM_WORLD, color, ThisTask, &plan->group);
     MPI_Comm_size(plan->group, &plan->GroupSize);
@@ -220,7 +223,7 @@ static int _throttle_plan_destroy(ThrottlePlan * plan)
 
 int big_block_mpi_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, int concurrency, MPI_Comm comm)
 {
-    /* FIXME: add exceptions */
+    /* FIXME: make the exception collective */
     ThrottlePlan plan;
     _throttle_plan_create(&plan, comm, concurrency, array->dims[0]);
 
@@ -228,37 +231,41 @@ int big_block_mpi_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, int 
 
     /* TODO: aggregrate if the array is sufficiently small */
     int i;
+    int e = 0;
     for(i = 0; i < plan.GroupSize; i ++) {
-        MPI_Barrier(plan.group);
+        MPI_Allreduce(MPI_IN_PLACE, &e, 1, MPI_INT, MPI_LOR, plan.group);
+        if (e) continue;
         if (i != plan.GroupRank) continue;
         big_block_seek_rel(bb, &ptr1, plan.offset);
-        big_block_write(bb, &ptr1, array);
+        e = big_block_write(bb, &ptr1, array);
     }
 
     big_block_seek_rel(bb, ptr, plan.totalsize);
 
     _throttle_plan_destroy(&plan);
-    return 0;
+    return e;
 }
 
 int big_block_mpi_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, int concurrency, MPI_Comm comm)
 {
-    /* FIXME: add exceptions */
+    /* FIXME: make the exception collective */
     ThrottlePlan plan;
     _throttle_plan_create(&plan, comm, concurrency, array->dims[0]);
 
     BigBlockPtr ptr1 = * ptr;
     /* TODO: aggregrate if the array is sufficiently small */
     int i;
+    int e = 0;
     for(i = 0; i < plan.GroupSize; i ++) {
-        MPI_Barrier(plan.group);
+        MPI_Allreduce(MPI_IN_PLACE, &e, 1, MPI_INT, MPI_LOR, plan.group);
+        if (e) continue;
         if (i != plan.GroupRank) continue;
         big_block_seek_rel(bb, &ptr1, plan.offset);
-        big_block_read(bb, &ptr1, array);
+        e = big_block_read(bb, &ptr1, array);
     }
 
     big_block_seek_rel(bb, ptr, plan.totalsize);
 
     _throttle_plan_destroy(&plan);
-    return 0;
+    return e;
 }
