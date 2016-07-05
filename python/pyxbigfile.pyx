@@ -109,7 +109,7 @@ cdef class BigFile:
 
     property basename:
         def __get__(self):
-            return '%s' % self.bf.basename
+            return '%s' % self.bf.basename.decode()
 
     def list_blocks(self):
         cdef char ** list
