@@ -131,14 +131,13 @@ cdef class BigFile:
 cdef class BigFileAttrSet:
     cdef readonly BigBlock bb
 
-    property keys:
-        def __get__(self):
-            if self.bb.closed:
-                raise BigFileError("block closed")
-            cdef size_t count
-            cdef CBigAttr * list
-            list = big_block_list_attrs(&self.bb.bb, &count)
-            return [list[i].name for i in range(count)]
+    def keys(self):
+        if self.bb.closed:
+            raise BigFileError("block closed")
+        cdef size_t count
+        cdef CBigAttr * list
+        list = big_block_list_attrs(&self.bb.bb, &count)
+        return sorted([str(list[i].name.decode()) for i in range(count)])
 
     def __init__(self, BigBlock bb):
         self.bb = bb
@@ -146,7 +145,7 @@ cdef class BigFileAttrSet:
     def __iter__(self):
         if self.bb.closed:
             raise BigFileError("block closed")
-        return iter(self.keys)
+        return iter(self.keys())
 
     def __contains__(self, name):
         name = name.encode()
@@ -197,6 +196,12 @@ cdef class BigFileAttrSet:
                 dtype,
                 array.shape[0])):
             raise BigFileError();
+    def __repr__(self):
+        t = ("<BigAttr (%s)>" %
+            ','.join([ "%s=%s" %
+                       (str(key), repr(self[key]))
+                for key in self]))
+        return t
 
 cdef class BigBlock:
     cdef CBigBlock bb
