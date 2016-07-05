@@ -8,6 +8,7 @@ all: \
 	bigfile-cat \
 	bigfile-create \
 	bigfile-ls \
+	bigfile-iosim \
 	$(NULL)
 
 bigfile-get-attr: bigfile-get-attr.c ../src/libbigfile.a
@@ -26,3 +27,5 @@ bigfile-create: bigfile-create.c ../src/libbigfile.a
 	$(CC) -o $@ $< ../src/libbigfile.a -I../src
 bigfile-ls: bigfile-ls.c ../src/libbigfile.a
 	$(CC) -o $@ $< ../src/libbigfile.a -I../src
+bigfile-iosim: bigfile-iosim.c ../src/libbigfile.a ../src/libbigfile-mpi.a
+	$(CC) -o $@ $< ../src/libbigfile.a ../src/libbigfile-mpi.a -I../src
