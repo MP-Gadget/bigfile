@@ -68,15 +68,19 @@ int big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm) {
     big_block_mpi_broadcast(bb, 0, comm);
     return 0;
 }
+
 int big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, size_t fsize[], MPI_Comm comm) {
     int rank;
+    int NTask;
     int rt;
 
     if(comm == MPI_COMM_NULL) return 0;
 
+    MPI_Comm_size(comm, &NTask);
     MPI_Comm_rank(comm, &rank);
-    if(rank == 0) { 
-        rt = big_block_create(bb, basename, dtype, nmemb, Nfile, fsize);
+
+    if(rank == 0) {
+        rt = _big_block_create_internal(bb, basename, dtype, nmemb, Nfile, fsize);
     }
     MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
     if(rt) {
@@ -84,6 +88,14 @@ int big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtyp
         return rt;
     }
     big_block_mpi_broadcast(bb, 0, comm);
+
+    int i;
+    for(i = bb->Nfile * rank / NTask; i < bb->Nfile * (rank + 1) / NTask; i ++) {
+        FILE * fp = _big_file_open_a_file(bb->basename, i, "w");
+        if(fp == NULL) return -1;
+        fclose(fp);
+    }
+
     return 0;
 }
 

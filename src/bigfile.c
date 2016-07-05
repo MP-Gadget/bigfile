@@ -57,10 +57,6 @@ dtype_convert(BigArrayIter * dst, BigArrayIter * src, size_t nmemb);
 static int
 dtype_convert_simple(void * dst, const char * dstdtype, const void * src, const char * srcdtype, size_t nmemb);
 
-/* Internal Path functions */
-static FILE *
-open_a_file(const char * basename, int fileid, char * mode);
-
 /* global settings */
 int
 big_file_set_buffer_size(size_t bytes)
@@ -268,7 +264,7 @@ big_block_open(BigBlock * bb, const char * basename)
     if(basename == NULL) basename = "";
     bb->basename = strdup(basename);
     bb->dirty = 0;
-    FILE * fheader = open_a_file(bb->basename, FILEID_HEADER, "r");
+    FILE * fheader = _big_file_open_a_file(bb->basename, FILEID_HEADER, "r");
     RAISEIF (!fheader,
             ex_open,
             NULL);
@@ -340,7 +336,7 @@ ex_open:
 }
 
 int
-big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
+_big_block_create_internal(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
 {
     memset(bb, 0, sizeof(bb[0]));
     if(basename == NULL) basename = "";
@@ -378,14 +374,6 @@ big_block_create(BigBlock * bb, const char * basename, const char * dtype, int n
     RAISEIF(0 != big_block_flush(bb), 
             ex_flush, NULL);
 
-    /* now truncate all files */
-    for(i = 0; i < bb->Nfile; i ++) {
-        FILE * fp = open_a_file(bb->basename, i, "w");
-        RAISEIF(fp == NULL, 
-                ex_fileio, 
-                NULL);
-        fclose(fp);
-    }
     bb->dirty = 0;
 
     return 0;
@@ -399,6 +387,28 @@ ex_fchecksum:
     free(bb->fsize);
 ex_fsize:
     return -1;
+}
+
+int
+big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
+{
+    int rt = _big_block_create_internal(bb, basename, dtype, nmemb, Nfile, fsize);
+    int i;
+    RAISEIF(rt != 0,
+                ex_internal,
+                NULL);
+
+    /* now truncate all files */
+    for(i = 0; i < bb->Nfile; i ++) {
+        FILE * fp = _big_file_open_a_file(bb->basename, i, "w");
+        RAISEIF(fp == NULL, 
+                ex_fileio, 
+                NULL);
+        fclose(fp);
+    }
+ex_fileio:
+ex_internal:
+    return rt;
 }
 
 int
@@ -420,7 +430,7 @@ big_block_flush(BigBlock * block)
     FILE * fheader = NULL;
     if(block->dirty) {
         int i;
-        fheader = open_a_file(block->basename, FILEID_HEADER, "w+");
+        fheader = _big_file_open_a_file(block->basename, FILEID_HEADER, "w+");
         RAISEIF(fheader == NULL, ex_fileio, NULL);
         RAISEIF(
             (0 > fprintf(fheader, "DTYPE: %s\n", block->dtype)) ||
@@ -669,7 +679,7 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         /* read to the beginning of chunk */
         big_array_iter_init(&chunk_iter, &chunk_array);
 
-        fp = open_a_file(bb->basename, ptr->fileid, "r");
+        fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r");
         RAISEIF(fp == NULL,
                 ex_open,
                 NULL);
@@ -759,7 +769,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 
         sysvsum(&bb->fchecksum[ptr->fileid], chunkbuf, chunk_size * felsize);
 
-        fp = open_a_file(bb->basename, ptr->fileid, "r+");
+        fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r+");
         RAISEIF(fp == NULL,
                 ex_open,
                 NULL);
@@ -1166,7 +1176,7 @@ attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
 {
     attrset->dirty = 0;
 
-    FILE * fattr = open_a_file(basename, FILEID_ATTR, "r");
+    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR, "r");
     if(fattr == NULL) {
         big_file_clear_error_message();
         return 0;
@@ -1217,7 +1227,7 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
 {
     attrset->dirty = 0;
 
-    FILE * fattr = open_a_file(basename, FILEID_ATTR_V2, "r");
+    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR_V2, "r");
     if(fattr == NULL) {
         big_file_clear_error_message();
         return 0;
@@ -1287,7 +1297,7 @@ attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
     static char conv[] = "0123456789ABCDEF";
     attrset->dirty = 0;
 
-    FILE * fattr = open_a_file(basename, FILEID_ATTR_V2, "w");
+    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR_V2, "w");
     RAISEIF(fattr == NULL,
             ex_open,
             NULL);
@@ -1533,8 +1543,8 @@ BigAttrSet * big_attrset_unpack(void * p)
 
 /* File Path */
 
-static FILE *
-open_a_file(const char * basename, int fileid, char * mode)
+FILE *
+_big_file_open_a_file(const char * basename, int fileid, char * mode)
 {
     char * filename = alloca(strlen(basename) + 128);
     if(fileid == FILEID_HEADER) {
