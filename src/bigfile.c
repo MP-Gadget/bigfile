@@ -283,7 +283,6 @@ big_file_checksum(unsigned int * sum, void * buf, size_t size)
 int
 big_block_open(BigBlock * bb, const char * basename)
 {
-    printf("open called on %p\n", bb);
     memset(bb, 0, sizeof(bb[0]));
     if(basename == NULL) basename = "";
     bb->basename = strdup(basename);
@@ -420,7 +419,6 @@ int
 big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
 {
     int rt = _big_block_create_internal(bb, basename, dtype, nmemb, Nfile, fsize);
-    printf("create called on %p\n", bb);
     int i;
     RAISEIF(rt != 0,
                 ex_internal,
@@ -509,7 +507,6 @@ int
 big_block_close(BigBlock * block)
 {
     int rt = 0;
-    printf("close called on %p\n", block);
     RAISEIF(0 != big_block_flush(block),
             ex_flush,
             NULL);
