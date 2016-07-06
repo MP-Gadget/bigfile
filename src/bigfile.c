@@ -11,6 +11,15 @@
 #include <dirent.h>
 
 #include "bigfile.h"
+
+#define EXT_HEADER "header"
+#define EXT_ATTR "attr"
+#define EXT_ATTR_V2 "attr-v2"
+#define EXT_DATA   "%06X"
+#define FILEID_ATTR -2
+#define FILEID_ATTR_V2 -3
+#define FILEID_HEADER -1
+
 #define RAISE(ex, errormsg, ...) { __raise__(errormsg, __FILE__, __LINE__, ##__VA_ARGS__); goto ex; } 
 #define RAISEIF(condition, ex, errormsg, ...) { if(condition) RAISE(ex, errormsg, ##__VA_ARGS__); }
 
@@ -75,6 +84,32 @@ void big_file_clear_error_message() {
         ERRORSTR = NULL;
     }
 }
+
+static char * _path_join(const char * part1, const char * part2)
+{
+    size_t l1 = strlen(part1);
+    size_t l2 = strlen(part2);
+    char * result = malloc(l1 + l2 + 10);
+    if(l1 == 0) {
+        sprintf(result, "%s", part2);
+    } else
+    if(part1[l1 - 1] == '/') {
+        sprintf(result, "%s%s", part1, part2);
+    } else {
+        sprintf(result, "%s/%s", part1, part2);
+    }
+    return result;
+}
+
+static int
+_big_file_path_is_block(const char * basename)
+{
+    FILE * fheader = _big_file_open_a_file(basename, FILEID_HEADER, "r");
+    if(fheader == NULL) return 0;
+    fclose(fheader);
+    return 1;
+}
+
 
 static void 
 __raise__(const char * msg, const char * file, const int line, ...)
@@ -143,55 +178,49 @@ struct bblist {
 };
 static int (filter)(const struct dirent * ent) {
     if(ent->d_name[0] == '.') return 0;
-//    printf("%s %d\n", ent->d_name, ent->d_type);
-// ent->d_type is unknown on COMA.
-//if(ent->d_type != DT_DIR) return 0;
     return 1;
 }
-static struct bblist * listbigfile_r(BigFile * bf, char * path, struct bblist * bblist) {
+static struct
+bblist * listbigfile_r(const char * basename, char * blockname, struct bblist * bblist) {
     struct dirent **namelist;
     struct stat st;
     int n;
-    char * buf = alloca(strlen(bf->basename) + strlen(path) + 10);
-    if(strlen(path) > 0) 
-        sprintf(buf, "%s/%s", bf->basename, path);
-    else
-        sprintf(buf, "%s", bf->basename);
-    stat(buf, &st);
-    if(!S_ISDIR(st.st_mode)) return bblist;
-    n = scandir(buf, &namelist, filter, alphasort);
-    if (n < 0) {
-        fprintf(stderr, "cannot open dir: %s\n", buf);
-    } else {
-        int i;
-        for(i = 0; i < n ; i ++) {
-            char * blockname = alloca(strlen(namelist[i]->d_name) + strlen(path) + 10);
-            if(strlen(path) > 0) 
-                sprintf(blockname, "%s/%s", path, namelist[i]->d_name);
-            else
-                sprintf(blockname, "%s", namelist[i]->d_name);
-            BigBlock bb = {0};
-            if(0 != big_file_open_block(bf, &bb, blockname)) {
-                bblist = listbigfile_r(bf, blockname, bblist);
-            } else {
-                struct bblist * n = malloc(sizeof(struct bblist) + strlen(blockname) + 1);
-                n->next = bblist;
-                n->blockname = (char*) &n[1];
-                strcpy(n->blockname, blockname);
-                bblist = n;
-                big_block_close(&bb);
-            }
-            free(namelist[i]);
+    int i;
+
+    char * current;
+    current = _path_join(basename, blockname);
+
+    n = scandir(current, &namelist, filter, alphasort);
+    free(current);
+    if (n < 0)
+        return bblist;
+
+    for(i = 0; i < n ; i ++) {
+        char * blockname1 = _path_join(blockname, namelist[i]->d_name);
+        char * fullpath1 = _path_join(basename, blockname1);
+        BigBlock bb = {0};
+        if(_big_file_path_is_block(fullpath1)) {
+            struct bblist * n = malloc(sizeof(struct bblist) + strlen(blockname1) + 1);
+            n->next = bblist;
+            n->blockname = (char*) &n[1];
+            strcpy(n->blockname, blockname1);
+            bblist = n;
+        } else {
+            big_file_clear_error_message();
+            bblist = listbigfile_r(basename, blockname1, bblist);
         }
-        free(namelist);
+        free(fullpath1);
+        free(blockname1);
+        free(namelist[i]);
     }
+    free(namelist);
     return bblist;
 }
 
 int
 big_file_list(BigFile * bf, char *** blocknames, int * Nblocks)
 {
-    struct bblist * bblist = listbigfile_r(bf, "", NULL);
+    struct bblist * bblist = listbigfile_r(bf->basename, "", NULL);
     struct bblist * p;
     int N = 0;
     int i;
@@ -212,20 +241,22 @@ big_file_list(BigFile * bf, char *** blocknames, int * Nblocks)
 int
 big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname)
 {
-    char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
-    sprintf(basename, "%s/%s/", bf->basename, blockname);
-    return big_block_open(block, basename);
+    char * basename = _path_join(bf->basename, blockname);
+    int rt = big_block_open(block, basename);
+    free(basename);
+    return rt;
 }
 
 int
 big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
 {
-    char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     RAISEIF(0 != _big_file_mksubdir_r(bf->basename, blockname),
             ex_subdir,
             NULL);
-    sprintf(basename, "%s/%s/", bf->basename, blockname);
-    return big_block_create(block, basename, dtype, nmemb, Nfile, fsize);
+    char * basename = _path_join(bf->basename, blockname);
+    int rt = big_block_create(block, basename, dtype, nmemb, Nfile, fsize);
+    free(basename);
+    return rt;
 ex_subdir:
     return -1;
 }
@@ -237,15 +268,6 @@ big_file_close(BigFile * bf)
     bf->basename = NULL;
     return 0;
 }
-
-#define EXT_HEADER "header"
-#define EXT_ATTR "attr"
-#define EXT_ATTR_V2 "attr-v2"
-#define EXT_DATA   "%06X"
-#define FILEID_ATTR -2
-#define FILEID_ATTR_V2 -3
-#define FILEID_HEADER -1
-
 static void
 sysvsum(unsigned int * sum, void * buf, size_t size);
 
@@ -257,9 +279,11 @@ big_file_checksum(unsigned int * sum, void * buf, size_t size)
 
 
 /* Bigblock */
+
 int
 big_block_open(BigBlock * bb, const char * basename)
 {
+    printf("open called on %p\n", bb);
     memset(bb, 0, sizeof(bb[0]));
     if(basename == NULL) basename = "";
     bb->basename = strdup(basename);
@@ -389,10 +413,14 @@ ex_fsize:
     return -1;
 }
 
+static void
+big_block_close_internal(BigBlock * block);
+
 int
 big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
 {
     int rt = _big_block_create_internal(bb, basename, dtype, nmemb, Nfile, fsize);
+    printf("create called on %p\n", bb);
     int i;
     RAISEIF(rt != 0,
                 ex_internal,
@@ -406,9 +434,11 @@ big_block_create(BigBlock * bb, const char * basename, const char * dtype, int n
                 NULL);
         fclose(fp);
     }
-ex_fileio:
 ex_internal:
     return rt;
+ex_fileio:
+    big_block_close_internal(bb);
+    return -1;
 }
 
 int
@@ -463,15 +493,9 @@ ex_fileio:
     return -1;
 }
 
-int
-big_block_close(BigBlock * block)
+static void
+big_block_close_internal(BigBlock * block)
 {
-    int rt = 0;
-    RAISEIF(0 != big_block_flush(block),
-            ex_flush,
-            NULL);
-finalize:
-
     attrset_free(block->attrset);
 
     free(block->basename);
@@ -479,6 +503,18 @@ finalize:
     free(block->fsize);
     free(block->foffset);
     memset(block, 0, sizeof(BigBlock));
+}
+
+int
+big_block_close(BigBlock * block)
+{
+    int rt = 0;
+    printf("close called on %p\n", block);
+    RAISEIF(0 != big_block_flush(block),
+            ex_flush,
+            NULL);
+finalize:
+    big_block_close_internal(block);
     return rt;
 
 ex_flush:
@@ -710,8 +746,8 @@ ex_seek:
     fclose(fp);
 ex_blockseek:
 ex_open:
-    free(chunkbuf);
 ex_eof:
+    free(chunkbuf);
 ex_malloc:
     return -1;
 }
@@ -794,8 +830,8 @@ ex_seek:
     fclose(fp);
 ex_open:
 ex_blockseek:
-    free(chunkbuf);
 ex_eof:
+    free(chunkbuf);
 ex_malloc:
     return -1;
 }
@@ -1546,17 +1582,19 @@ BigAttrSet * big_attrset_unpack(void * p)
 FILE *
 _big_file_open_a_file(const char * basename, int fileid, char * mode)
 {
-    char * filename = alloca(strlen(basename) + 128);
+    char * filename;
     if(fileid == FILEID_HEADER) {
-        sprintf(filename, "%s%s", basename, EXT_HEADER);
+        filename = _path_join(basename, EXT_HEADER);
     } else
     if(fileid == FILEID_ATTR) {
-        sprintf(filename, "%s%s", basename, EXT_ATTR);
+        filename = _path_join(basename, EXT_ATTR);
     } else
     if(fileid == FILEID_ATTR_V2) {
-        sprintf(filename, "%s%s", basename, EXT_ATTR_V2);
+        filename = _path_join(basename, EXT_ATTR_V2);
     } else {
-        sprintf(filename, "%s" EXT_DATA, basename, fileid);
+        char d[128];
+        sprintf(d, EXT_DATA, fileid);
+        filename = _path_join(basename, d);
     }
     FILE * fp = fopen(filename, mode);
     RAISEIF(fp == NULL,
@@ -1564,34 +1602,26 @@ _big_file_open_a_file(const char * basename, int fileid, char * mode)
         "Failed to open physical file `%s' with mode `%s' (%s)",
         filename, mode, strerror(errno));
 ex_fopen:
+    free(filename);
     return fp;
 }
-static void
-path_join(char * dst, const char * path1, const char * path2)
-{
-    if(strlen(path1) > 0) {
-        sprintf(dst, "%s/%s", path1, path2);
-    } else {
-        strcpy(dst, path2);
-    }
-}
-
 /* make subdir rel to pathname, recursively making parents */
 int
 _big_file_mksubdir_r(const char * pathname, const char * subdir)
 {
-    char * subdirname = alloca(strlen(subdir) + 10);
-    char * mydirname = alloca(strlen(subdir) + strlen(pathname) + 10);
-    strcpy(subdirname, subdir);
-    char * p = subdirname;
+    char * subdirname = strdup(subdir);
+    char * p;
+
+    char * mydirname;
     for(p = subdirname; *p; p ++) {
         if(*p != '/') continue;
         *p = 0;
-        path_join(mydirname, pathname, subdirname);
+        mydirname = _path_join(pathname, subdirname);
         mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        free(mydirname);
         *p = '/';
     }
-    path_join(mydirname, pathname, subdirname);
+    mydirname = _path_join(pathname, subdirname);
     mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     struct stat buf;
     RAISEIF(0 != stat(mydirname, &buf),
@@ -1600,8 +1630,11 @@ _big_file_mksubdir_r(const char * pathname, const char * subdir)
             mydirname,
             strerror(errno)
     );
+    free(subdirname);
+    free(mydirname);
     return 0;
 ex_mkdir:
+    free(mydirname);
     return -1;
 }
 
