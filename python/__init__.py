@@ -77,6 +77,7 @@ class BigBlockMPI(BigBlock):
     def create(self, f, blockname, dtype=None, size=None, Nfile=1):
         if self.comm.rank == 0:
             super(BigBlockMPI, self).create(f, blockname, dtype, size, Nfile)
+            super(BigBlockMPI, self).close()
         self.comm.barrier()
         self.open(f, blockname)
 
