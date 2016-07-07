@@ -21,6 +21,8 @@ dtypes = [
 def test_create():
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
+    x.create('.')
+
     for d in dtypes:
         d = numpy.dtype(d)
         numpy.random.seed(1234)
@@ -48,7 +50,9 @@ def test_create():
                 caught = True
             assert caught
     assert_equal(set(x.blocks), set([numpy.dtype(d).str for d in dtypes]))
-
+    print(x.blocks)
+    import os
+    os.system("ls -r %s" % fname)
     for b in x.blocks:
         assert b in x
 
@@ -64,12 +68,12 @@ def test_create():
 def test_attr():
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
-    with x.create('header', dtype=None) as b:
+    with x.create('.', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
         b.attrs['string'] = 'abcdefg'
 
-    with x.open('header') as b:
+    with x.open('.') as b:
         assert_equal(b.attrs['int'], 128)
         assert_equal(b.attrs['float'], [128.0, 3, 4])
         assert_equal(b.attrs['string'],  'abcdefg')
@@ -77,7 +81,7 @@ def test_attr():
         b.attrs['float'] = [3, 4]
         b.attrs['string'] = 'defg'
 
-    with x.open('header') as b:
+    with x.open('.') as b:
         assert_equal(b.attrs['int'], 30)
         assert_equal(b.attrs['float'], [3, 4])
         assert_equal(b.attrs['string'],  'defg')
@@ -142,12 +146,12 @@ def test_mpi_attr():
     else:
         fname = MPI.COMM_WORLD.bcast(None)
     x = BigFileMPI(MPI.COMM_WORLD, fname, create=True)
-    with x.create('header', dtype=None) as b:
+    with x.create('.', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
         b.attrs['string'] = 'abcdefg'
 
-    with x.open('header') as b:
+    with x.open('.') as b:
         assert_equal(b.attrs['int'], 128)
         assert_equal(b.attrs['float'], [128.0, 3, 4])
         assert_equal(b.attrs['string'],  'abcdefg')
@@ -155,7 +159,7 @@ def test_mpi_attr():
         b.attrs['float'] = [3, 4]
         b.attrs['string'] = 'defg'
 
-    with x.open('header') as b:
+    with x.open('.') as b:
         assert_equal(b.attrs['int'], 30)
         assert_equal(b.attrs['float'], [3, 4])
         assert_equal(b.attrs['string'],  'defg')
