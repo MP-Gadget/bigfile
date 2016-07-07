@@ -17,7 +17,7 @@ static void
 usage() 
 {
     if(ThisTask != 0) return;
-    printf("usage: iosim [-N nfiles] [-n numwriters] [-s items] [-w width] [-p path] [-m (create|update|read)] [-d (to delete fakedata afterwards)] filename\n");
+    printf("usage: iosim [-A (to use aggregated IO)] [-N nfiles] [-n numwriters] [-s items] [-w width] [-p path] [-m (create|update|read)] [-d (to delete fakedata afterwards)] filename\n");
     printf("Defaults: -N 1 -n NTask -s 1 -w 1 -p <dir> -m create \n");
 }
 
@@ -61,18 +61,25 @@ typedef struct log{
 } log;
 
 static void
-sim(int Nfile, int Nwriter, size_t Nitems, char * filename, double * tlog_ranks, ptrlog tlog, log * times, int mode)
+sim(int Nfile, int aggregated, int Nwriter, size_t Nitems, char * filename, double * tlog_ranks, ptrlog tlog, log * times, int mode)
 {
     info("Writing to `%s`\n", filename);
     info("Physical Files %d\n", Nfile);
     info("Ranks %d\n", NTask);
     info("Writers %d\n", Nwriter);
+    info("Aggregated %d\n", aggregated);
     info("Bytes Per Rank %td\n", Nitems * 4 / NTask);
     info("Items Per Rank %td\n", Nitems / NTask);
 
     size_t itemsperrank = 1024;
     itemsperrank = Nitems / NTask;
     
+    if(aggregated) {
+        /* Use a large enough number to disable aggregated IO */
+        big_file_mpi_set_aggregated_threshold(Nitems * 4);
+    } else {
+        big_file_mpi_set_aggregated_threshold(0);
+    }
     BigFile bf = {0};
     BigBlock bb = {0};
     BigArray array = {0};
@@ -224,6 +231,7 @@ int main(int argc, char * argv[]) {
     int width = 1;
     int Nfile = 1;
     int Nwriter = NTask;
+    int aggregated = 0;
     size_t Nitems = 1024;
     char * filename = alloca(1500);
     char * path = "";
@@ -243,8 +251,11 @@ int main(int argc, char * argv[]) {
     tlog.close = (double *) malloc(sizeof(double)*NTask);
     log * times = malloc(sizeof(log) * NTask);
     
-    while(-1 != (ch = getopt(argc, argv, "hN:n:s:w:p:m:d"))) {
+    while(-1 != (ch = getopt(argc, argv, "hN:n:s:w:p:m:dA"))) {
         switch(ch) {
+            case 'A':
+                aggregated = 1;
+                break;
             case 'd':
                 delfiles = 1;
                 break;
@@ -320,7 +331,7 @@ int main(int argc, char * argv[]) {
     }
 
 //+++++++++++++++++ Starting Simulation +++++++++++++++++
-    sim(Nfile, Nwriter, Nitems, filename, tlog_ranks, tlog, times, mode);
+    sim(Nfile, aggregated, Nwriter, Nitems, filename, tlog_ranks, tlog, times, mode);
 //+++++++++++++++++ Deleting files if flag -d set +++++++++++++++++
     if (delfiles) {
         if(ThisTask == 0) {
