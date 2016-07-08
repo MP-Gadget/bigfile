@@ -257,7 +257,7 @@ _throttle_plan_create(ThrottlePlan * plan, MPI_Comm comm, int concurrency, BigBl
         offsets[i + 1] = offsets[i] + sizes[i];
     }
     plan->offset = offsets[ThisTask];
-    plan->totalsize = sizes[NTask];
+    plan->totalsize = offsets[NTask];
     plan->localsize = localsize;
     plan->grouptotalsize = grouptotalsize;
     plan->elsize = dtype_itemsize(block->dtype) * block->nmemb;
@@ -344,7 +344,7 @@ _throttle_plan_execute_turns(ThrottlePlan * plan,
             BigBlockPtr * ptr, BigArray * array)
 {
     int i;
-    int e;
+    int e = 0;
     BigBlockPtr ptr1[1] = {*ptr};
     for(i = 0; i < plan->GroupSize; i ++) {
         MPI_Allreduce(MPI_IN_PLACE, &e, 1, MPI_INT, MPI_LOR, plan->group);
