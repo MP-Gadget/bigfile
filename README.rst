@@ -52,6 +52,8 @@ Numerical attributes and string attributes are supported.
 
 Type casting is performed on-the-fly if read/write operation requests a different data type than the file has stored.
 
+:code:`bigfile.BigData` works with `dask.from_array <http://dask.pydata.org>`_.
+
 The Anatomy of a BigFile
 ++++++++++++++++++++++++
 
