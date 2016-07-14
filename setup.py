@@ -8,7 +8,7 @@ extensions = [
             include_dirs = ["src/", numpy.get_include()])]
 
 setup(
-    name="bigfile", version="0.1.11.dev0",
+    name="bigfile", version="0.1.11.dev1",
     author="Yu Feng",
     author_email="rainwoodman@gmail.com",
     url="http://github.com/rainwoodman/bigfile",
