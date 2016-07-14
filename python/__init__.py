@@ -158,8 +158,13 @@ class BigData:
 
         self.size = size
         self.dtype = numpy.dtype(dtype)
+        self.ndim = 1
+        self.shape = (size, )
 
     def __getitem__(self, sl):
+        if isinstance(sl, tuple):
+            assert len(sl) == 1
+            return self[sl[0]]
         if isinstance(sl, slice):
             start, end, stop = sl.indices(self.size)
             assert stop == 1
