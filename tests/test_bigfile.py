@@ -35,6 +35,7 @@ def test_create():
 
         with x[d.str] as b:
             assert_equal(b[:], data.astype(d.base))
+            assert_equal(b[:],  b[...])
 
         # test writing with an offset
         with x[d.str] as b:

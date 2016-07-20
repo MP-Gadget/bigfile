@@ -172,6 +172,8 @@ class BigData:
             for block in self.blocknames:
                 result[block][:] = self.blocks[block][sl]
             return result
+        elif sl is Ellipsis:
+            return self[:]
         elif isstr(sl):
             return self.blocks[sl]
         elif numpy.isscalar(sl):

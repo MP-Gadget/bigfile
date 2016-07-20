@@ -298,6 +298,8 @@ cdef class BigBlock:
             if stop != 1:
                 raise ValueError('must request a continous chunk')
             return self.read(start, end-start)
+        elif sl is Ellipsis:
+            return self[:]
         elif numpy.isscalar(sl):
             sl = slice(sl, sl + 1)
             return self[sl][0]
