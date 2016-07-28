@@ -16,6 +16,9 @@ dtypes = [
     'f8', 
     ('f4', 1),
     ('f4', 2), 
+    ('complex64'), 
+    ('complex128'), 
+    ('complex128', 2), 
 ]
 
 def test_create():
@@ -29,8 +32,7 @@ def test_create():
 
         # test creating
         with x.create(d.str, Nfile=1, dtype=d, size=128) as b:
-            shape = [ b.size ] + list(d.shape)
-            data = numpy.random.uniform(99999, size=shape)
+            data = numpy.random.uniform(100000, size=128*128).view(dtype=b.dtype.base).reshape([-1] + list(d.shape))[:b.size]
             b.write(0, data)
 
         with x[d.str] as b:
@@ -51,7 +53,6 @@ def test_create():
                 caught = True
             assert caught
     assert_equal(set(x.blocks), set([numpy.dtype(d).str for d in dtypes]))
-    print(x.blocks)
     import os
     os.system("ls -r %s" % fname)
     for b in x.blocks:
@@ -73,19 +74,23 @@ def test_attr():
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
         b.attrs['string'] = 'abcdefg'
+        b.attrs['complex'] = 128 + 128J
 
     with x.open('.') as b:
         assert_equal(b.attrs['int'], 128)
         assert_equal(b.attrs['float'], [128.0, 3, 4])
         assert_equal(b.attrs['string'],  'abcdefg')
+        assert_equal(b.attrs['complex'],  128 + 128J)
         b.attrs['int'] = 30
         b.attrs['float'] = [3, 4]
         b.attrs['string'] = 'defg'
+        b.attrs['complex'] = 32 + 32J
 
     with x.open('.') as b:
         assert_equal(b.attrs['int'], 30)
         assert_equal(b.attrs['float'], [3, 4])
         assert_equal(b.attrs['string'],  'defg')
+        assert_equal(b.attrs['complex'],  32 + 32J)
 
     shutil.rmtree(fname)
 
@@ -103,8 +108,7 @@ def test_mpi_create():
 
         # test creating
         with x.create(d.str, Nfile=1, dtype=d, size=128) as b:
-            shape = [ b.size ] + list(d.shape)
-            data = numpy.random.uniform(99999, size=shape)
+            data = numpy.random.uniform(100000, size=128*128).view(dtype=b.dtype.base).reshape([-1] + list(d.shape))[:b.size]
             b.write(0, data)
 
         with x[d.str] as b:
