@@ -22,4 +22,4 @@ install:
 
 script: 
     - python ./runtests.py
-    - mpirun -n 4 python ./runtests.py
+    - python ./runtests.py --shell mpirun -n 4 python -c 'import sys;sys.path.remove(""); import bigfile; bigfile.test()'
