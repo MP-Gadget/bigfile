@@ -1,4 +1,4 @@
-from .pyxbigfile import BigFileError
+from .pyxbigfile import BigFileError, BigFileClosedError, BigBlockClosedError
 from .pyxbigfile import BigBlock as BigBlockBase
 from .pyxbigfile import BigFile as BigFileLowLevel
 from .pyxbigfile import set_buffer_size
@@ -184,3 +184,6 @@ class BigData:
                     str(type(sl)))
 
 
+from numpy.testing import Tester
+test = Tester().test
+bench = Tester().bench

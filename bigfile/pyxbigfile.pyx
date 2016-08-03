@@ -86,6 +86,14 @@ class BigFileError(Exception):
             msg = big_file_get_error_message()
         Exception.__init__(self, msg)
 
+class BigFileClosedError(Exception):
+    def __init__(self, bigfile):
+        Exception.__init__(self, "File is closed")
+
+class BigBlockClosedError(Exception):
+    def __init__(self, bigblock):
+        Exception.__init__(self, "Block is closed")
+
 cdef class BigFile:
     cdef CBigFile bf
     cdef int closed
@@ -107,13 +115,19 @@ cdef class BigFile:
         if not self.closed:
             big_file_close(&self.bf)
 
+    def _check_closed(self):
+        if self.closed:
+            raise BigFileClosedError(self)
+
     property basename:
         def __get__(self):
+            self._check_closed();
             return '%s' % self.bf.basename.decode()
 
     def list_blocks(self):
         cdef char ** list
         cdef int N
+        self._check_closed();
         big_file_list(&self.bf, &list, &N)
         try:
             return sorted([str(list[i].decode()) for i in range(N)])
@@ -132,8 +146,7 @@ cdef class BigFileAttrSet:
     cdef readonly BigBlock bb
 
     def keys(self):
-        if self.bb.closed:
-            raise BigFileError("block closed")
+        self.bb._check_closed()
         cdef size_t count
         cdef CBigAttr * list
         list = big_block_list_attrs(&self.bb.bb, &count)
@@ -143,14 +156,11 @@ cdef class BigFileAttrSet:
         self.bb = bb
 
     def __iter__(self):
-        if self.bb.closed:
-            raise BigFileError("block closed")
         return iter(self.keys())
 
     def __contains__(self, name):
         name = name.encode()
-        if self.bb.closed:
-            raise BigFileError("block closed")
+        self.bb._check_closed()
         cdef CBigAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
             return False
@@ -158,8 +168,8 @@ cdef class BigFileAttrSet:
 
     def __getitem__(self, name):
         name = name.encode()
-        if self.bb.closed:
-            raise BigFileError("block closed")
+        self.bb._check_closed()
+
         cdef CBigAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
             raise KeyError("attr not found")
@@ -173,8 +183,8 @@ cdef class BigFileAttrSet:
 
     def __delitem__(self, name):
         name = name.encode()
-        if self.bb.closed:
-            raise BigFileError("block closed")
+        self.bb._check_closed()
+
         cdef CBigAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
             raise KeyError("attr not found")
@@ -182,8 +192,8 @@ cdef class BigFileAttrSet:
 
     def __setitem__(self, name, value):
         name = name.encode()
-        if self.bb.closed:
-            raise BigFileError("block closed")
+        self.bb._check_closed()
+
         if isstr(value): 
             value = value.encode()
         cdef numpy.ndarray array = numpy.atleast_1d(value).ravel()
@@ -210,17 +220,25 @@ cdef class BigBlock:
 
     property size:
         def __get__(self):
+            self._check_closed()
             return self.bb.size
     
     property dtype:
         def __get__(self):
+            self._check_closed()
             return numpy.dtype((self.bb.dtype, self.bb.nmemb))
     property attrs:
         def __get__(self):
+            self._check_closed()
             return BigFileAttrSet(self)
     property Nfile:
         def __get__(self):
+            self._check_closed()
             return self.bb.Nfile
+
+    def _check_closed(self):
+        if self.closed:
+            raise BigBlockClosedError(self)
 
     def __cinit__(self):
         self.closed = True
@@ -230,18 +248,21 @@ cdef class BigBlock:
         pass
 
     def __enter__(self):
+        self._check_closed()
         return self
 
     def __exit__(self, type, value, tb):
         self.close()
 
     def open(self, BigFile f, blockname):
+        f._check_closed()
         blockname = blockname.encode()
         if 0 != big_file_open_block(&f.bf, &self.bb, blockname):
             raise BigFileError()
         self.closed = False
 
     def create(self, BigFile f, blockname, dtype=None, size=None, Nfile=1):
+        f._check_closed()
         blockname = blockname.encode()
         cdef numpy.ndarray fsize
         if dtype is None:
@@ -272,6 +293,7 @@ cdef class BigBlock:
     def clear_checksum(self):
         """ reset the checksum to zero for freshly overwriting the data set
         """
+        self._check_closed()
         big_block_clear_checksum(&self.bb)
 
     def write(self, start, numpy.ndarray buf):
@@ -279,6 +301,7 @@ cdef class BigBlock:
            
             no checking is performed. assuming buf is of the correct dtype.
         """
+        self._check_closed()
         cdef CBigArray array
         cdef CBigBlockPtr ptr
         big_array_init(&array, buf.data, buf.dtype.str.encode(), 
@@ -293,6 +316,7 @@ cdef class BigBlock:
     def __getitem__(self, sl):
         """ returns a copy of data, sl can be a slice or a scalar
         """
+        self._check_closed()
         if isinstance(sl, slice):
             start, end, stop = sl.indices(self.size)
             if stop != 1:
@@ -315,6 +339,7 @@ cdef class BigBlock:
 
             returns out, or a newly allocated array of out is None.
         """
+        self._check_closed()
         cdef numpy.ndarray result 
         cdef CBigArray array
         cdef CBigBlockPtr ptr

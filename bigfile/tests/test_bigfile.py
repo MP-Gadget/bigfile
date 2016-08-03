@@ -2,6 +2,7 @@
 from bigfile import BigFile
 from bigfile import BigFileMPI
 from bigfile import BigData
+from bigfile import BigFileClosedError
 
 import tempfile
 import numpy
@@ -66,6 +67,21 @@ def test_create():
     d = bd[:]
 
     shutil.rmtree(fname)
+
+def test_closed():
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    x.create('.')
+    x.close()
+    assert x.blocks == []
+    try:
+        h = x['.']
+    except BigFileClosedError:
+        pass
+    try:
+        x.refresh()
+    except BigFileClosedError:
+        pass
 
 def test_attr():
     fname = tempfile.mkdtemp()
