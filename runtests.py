@@ -170,7 +170,10 @@ def main(argv):
     if args.shell:
         shell = os.environ.get('SHELL', 'sh')
         print("Spawning a Unix shell...")
-        os.execv(shell, [shell] + extra_argv)
+        if len(extra_argv) == 0:
+            os.execv(shell, [shell])
+        else:
+            os.execvp(extra_argv[0], extra_argv)
         sys.exit(1)
 
     if args.coverage:
