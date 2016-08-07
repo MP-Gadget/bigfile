@@ -1,4 +1,5 @@
 include src/*.c
 include src/*.h
-include python/*.pyx
+include bigfile/*.pyx
+include bigfile/*.c
 README.rst
