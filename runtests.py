@@ -31,7 +31,7 @@ Generate C code coverage listing under build/lcov/:
 #
 
 PROJECT_MODULE = "bigfile"
-PROJECT_ROOT_FILES = ['bigfile', 'src', 'LICENSE', 'setup.py']
+PROJECT_ROOT_FILES = ['bigfile', 'LICENSE', 'setup.py']
 SAMPLE_TEST = "scipy/special/tests/test_basic.py:test_xlogy"
 SAMPLE_SUBMODULE = "optimize"
 
@@ -49,6 +49,10 @@ else:
 
 import sys
 import os
+try:
+    from cStringIO import StringIO
+except:
+    from io import StringIO
 
 # In case we are run from the source directory, we don't want to import the
 # project from there:
@@ -62,12 +66,37 @@ from argparse import ArgumentParser, REMAINDER
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__)))
 
+def addmpirun(parser):
+    parser.add_argument("--mpirun", default=None, nargs='?', const="mpirun -n 4",
+                        help="launcher for MPI, e.g. mpirun -n 4")
+def barrier(args):
+    if args.mpisub:
+        from mpi4py import MPI
+        MPI.COMM_WORLD.barrier()
+def isroot(args):
+    if args.mpisub:
+        from mpi4py import MPI
+        return MPI.COMM_WORLD.rank == 0
+    else:
+        return True
+def abort(args, e=None):
+    if args.mpisub:
+        from mpi4py import MPI
+        if e is not None:
+            import traceback
+            traceback.print_exc()
+        MPI.COMM_WORLD.Abort(-1)
+
 def main(argv):
     parser = ArgumentParser(usage=__doc__.lstrip())
     parser.add_argument("--verbose", "-v", action="count", default=1,
                         help="more verbosity")
     parser.add_argument("--no-build", "-n", action="store_true", default=False,
                         help="do not build the project (use system installed version)")
+    parser.add_argument("--mpisub", action="store_true", default=False,
+                        help="run as a mpisub.")
+    parser.add_argument("--mpi-unmute", action="store_true", default=False,
+                        help="unmute other ranks")
     parser.add_argument("--build-only", "-b", action="store_true", default=False,
                         help="just build, do not run any tests")
     parser.add_argument("--doctests", action="store_true", default=False,
@@ -115,7 +144,12 @@ def main(argv):
                              ))
     parser.add_argument("args", metavar="ARGS", default=[], nargs=REMAINDER,
                         help="Arguments to pass to Nose, Python or shell")
+    addmpirun(parser)
+
     args = parser.parse_args(argv)
+
+    if args.mpisub:
+        args.no_build = True # master does the building
 
     if args.bench_compare:
         args.bench = True
@@ -192,55 +226,15 @@ def main(argv):
         os.execv(sys.executable, [sys.executable] + cmd)
         sys.exit(0)
 
-    if args.bench:
-        # Run ASV
-        items = extra_argv
-        if args.tests:
-            items += args.tests
-        if args.submodule:
-            items += [args.submodule]
+    if args.mpirun:
+        parser = ArgumentParser()
+        addmpirun(parser)
+        args, additional = parser.parse_known_args()
+        mpirun = args.mpirun.split()
 
-        bench_args = []
-        for a in items:
-            bench_args.extend(['--bench', a])
+        os.execvp(mpirun[0], mpirun + [sys.executable, sys.argv[0], '--mpisub'] + additional)
 
-        if not args.bench_compare:
-            cmd = [os.path.join(ROOT_DIR, 'benchmarks', 'run.py'),
-                   'run', '-n', '-e', '--python=same'] + bench_args
-            os.execv(sys.executable, [sys.executable] + cmd)
-            sys.exit(1)
-        else:
-            if len(args.bench_compare) == 1:
-                commit_a = args.bench_compare[0]
-                commit_b = 'HEAD'
-            elif len(args.bench_compare) == 2:
-                commit_a, commit_b = args.bench_compare
-            else:
-                p.error("Too many commits to compare benchmarks for")
-
-            # Check for uncommitted files
-            if commit_b == 'HEAD':
-                r1 = subprocess.call(['git', 'diff-index', '--quiet', '--cached', 'HEAD'])
-                r2 = subprocess.call(['git', 'diff-files', '--quiet'])
-                if r1 != 0 or r2 != 0:
-                    print("*"*80)
-                    print("WARNING: you have uncommitted changes --- these will NOT be benchmarked!")
-                    print("*"*80)
-
-            # Fix commit ids (HEAD is local to current repo)
-            p = subprocess.Popen(['git', 'rev-parse', commit_b], stdout=subprocess.PIPE)
-            out, err = p.communicate()
-            commit_b = out.strip()
-
-            p = subprocess.Popen(['git', 'rev-parse', commit_a], stdout=subprocess.PIPE)
-            out, err = p.communicate()
-            commit_a = out.strip()
-
-            cmd = [os.path.join(ROOT_DIR, 'benchmarks', 'run.py'),
-                   '--current-repo', 'continuous', '-e', '-f', '1.05',
-                   commit_a, commit_b] + bench_args
-            os.execv(sys.executable, [sys.executable] + cmd)
-            sys.exit(1)
+        sys.exit(1)
 
     test_dir = os.path.join(ROOT_DIR, 'build', 'test')
 
@@ -273,38 +267,57 @@ def main(argv):
     else:
         __import__(PROJECT_MODULE)
         test = sys.modules[PROJECT_MODULE].test
-    # Run the tests under build/test
-    try:
-        shutil.rmtree(test_dir)
-    except OSError:
-        pass
-    try:
-        os.makedirs(test_dir)
-    except OSError:
-        pass
 
-#    shutil.copyfile(os.path.join(ROOT_DIR, '.coveragerc'),
-#                    os.path.join(test_dir, '.coveragerc'))
+    barrier(args)
+
+    if isroot(args):
+        # Run the tests under build/test
+        try:
+            shutil.rmtree(test_dir)
+        except OSError:
+            pass
+        try:
+            os.makedirs(test_dir)
+        except OSError:
+            pass
+    else:
+        # mute the rest.
+        if not args.mpi_unmute:
+            sys.stdout = StringIO()
+            sys.stderr = StringIO()
+
+    barrier(args)
 
     cwd = os.getcwd()
     try:
         os.chdir(test_dir)
         result = test(args.mode,
-                      verbose=args.verbose,
-                      extra_argv=extra_argv,
+                      verbose=args.verbose if isroot(args) else 0,
+                      extra_argv=extra_argv + ['--quiet'] if not isroot(args) else []
+                                            + ['--stop'] if args.mpisub else [] ,
                       doctests=args.doctests,
                       coverage=args.coverage)
+    except Exception as e:
+        #abort(args, e)
+        pass
     finally:
         os.chdir(cwd)
 
+    code = 0
     if isinstance(result, bool):
-        sys.exit(0 if result else 1)
+        code = 0 if result else 1
     elif result.wasSuccessful():
-        sys.exit(0)
+        code = 0
     else:
-        sys.exit(1)
-
-
+        code = 1
+    if args.mpisub:
+        if code == 0:
+            sys.exit(0)
+        else:
+            abort(args)
+            pass
+    else:
+        sys.exit(code)
 def build_project(args):
     """
     Build a dev version of the project.

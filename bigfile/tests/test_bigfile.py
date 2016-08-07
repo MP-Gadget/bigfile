@@ -4,6 +4,52 @@ from bigfile import BigFileMPI
 from bigfile import BigData
 from bigfile import BigFileClosedError
 
+from mpi4py import MPI
+
+def MPIWorld(NTask, required=[]):
+    if not isinstance(NTask, (tuple, list)):
+        NTask = (NTask,)
+
+    if not isinstance(required, (tuple, list)):
+        required = (required,)
+
+    maxsize = max(required)
+    if MPI.COMM_WORLD.size < maxsize:
+        raise ValueError("Test Failed because the world is too small. Increase to mpirun -n %d" % maxsize)
+
+    sizes = sorted(set(list(required) + list(NTask)))
+    def dec(func):
+        def wrapped(*args, **kwargs):
+            for size in sizes:
+                if MPI.COMM_WORLD.size < size: continue
+
+                color = 0 if MPI.COMM_WORLD.rank < size else 1
+                MPI.COMM_WORLD.barrier()
+                comm = MPI.COMM_WORLD.Split(color)
+
+                kwargs['comm'] = comm
+                failed = 0
+                msg = ""
+                if color == 0:
+                    assert comm.size == size
+                    try:
+                        func(*args, **kwargs)
+                    except:
+                        failed = 1
+                        import traceback
+                        msg = traceback.format_exc()
+                gfailed = MPI.COMM_WORLD.allreduce(failed)
+                if gfailed > 0:
+                    msg = MPI.COMM_WORLD.allgather(msg)
+                if failed: raise
+                if gfailed > 0:
+                    raise ValueError("Some ranks failed with %s" % "\n".join(msg))
+
+        wrapped.__name__ = func.__name__
+        return wrapped
+    return dec
+
+
 import tempfile
 import numpy
 import shutil
@@ -22,7 +68,8 @@ dtypes = [
     ('complex128', 2), 
 ]
 
-def test_create():
+@MPIWorld(NTask=1, required=1)
+def test_create(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
     x.create('.')
@@ -68,7 +115,8 @@ def test_create():
 
     shutil.rmtree(fname)
 
-def test_closed():
+@MPIWorld(NTask=1, required=1)
+def test_closed(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
     x.create('.')
@@ -83,7 +131,8 @@ def test_closed():
     except BigFileClosedError:
         pass
 
-def test_attr():
+@MPIWorld(NTask=1, required=1)
+def test_attr(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
     with x.create('.', dtype=None) as b:
@@ -110,14 +159,14 @@ def test_attr():
 
     shutil.rmtree(fname)
 
-def test_mpi_create():
-    from mpi4py import MPI
-    if MPI.COMM_WORLD.rank == 0:
+@MPIWorld(NTask=[1, 2, 3, 4], required=1)
+def test_mpi_create(comm):
+    if comm.rank == 0:
         fname = tempfile.mkdtemp()
-        fname = MPI.COMM_WORLD.bcast(fname)
+        fname = comm.bcast(fname)
     else:
-        fname = MPI.COMM_WORLD.bcast(None)
-    x = BigFileMPI(MPI.COMM_WORLD, fname, create=True)
+        fname = comm.bcast(None)
+    x = BigFileMPI(comm, fname, create=True)
     for d in dtypes:
         d = numpy.dtype(d)
         numpy.random.seed(1234)
@@ -155,18 +204,18 @@ def test_mpi_create():
     assert set(bd.dtype.names) == set(x.blocks)
     d = bd[:]
 
-    MPI.COMM_WORLD.barrier()
-    if MPI.COMM_WORLD.rank == 0:
+    comm.barrier()
+    if comm.rank == 0:
         shutil.rmtree(fname)
 
-def test_mpi_attr():
-    from mpi4py import MPI
-    if MPI.COMM_WORLD.rank == 0:
+@MPIWorld(NTask=[1, 2, 3, 4], required=1)
+def test_mpi_attr(comm):
+    if comm.rank == 0:
         fname = tempfile.mkdtemp()
-        fname = MPI.COMM_WORLD.bcast(fname)
+        fname = comm.bcast(fname)
     else:
-        fname = MPI.COMM_WORLD.bcast(None)
-    x = BigFileMPI(MPI.COMM_WORLD, fname, create=True)
+        fname = comm.bcast(None)
+    x = BigFileMPI(comm, fname, create=True)
     with x.create('.', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
@@ -185,6 +234,6 @@ def test_mpi_attr():
         assert_equal(b.attrs['float'], [3, 4])
         assert_equal(b.attrs['string'],  'defg')
 
-    MPI.COMM_WORLD.barrier()
-    if MPI.COMM_WORLD.rank == 0:
+    comm.barrier()
+    if comm.rank == 0:
         shutil.rmtree(fname)
