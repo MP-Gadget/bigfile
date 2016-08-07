@@ -19,7 +19,7 @@ def find_version(path):
 
 setup(
     name="bigfile",
-    version=find_version("bigfile/__init__.py"),
+    version=find_version("bigfile/version.py"),
     author="Yu Feng",
     author_email="rainwoodman@gmail.com",
     url="http://github.com/rainwoodman/bigfile",

@@ -23,7 +23,7 @@ install:
 script: 
     - python ./runtests.py
     - python ./runtests.py --mpirun --mpi-unmute
-    - bash check_tag.sh bigfile/__init__.py
+    - bash check_tag.sh bigfile/version.py
 
 deploy:
     - provider: pypi
