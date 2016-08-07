@@ -22,7 +22,7 @@ install:
 
 script: 
     - python ./runtests.py
-    - python ./runtests.py --mpirun -n 4
+    - python ./runtests.py --mpirun --mpi-unmute
     - bash check_tag.sh
 
 deploy:
