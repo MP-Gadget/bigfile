@@ -237,3 +237,8 @@ def test_mpi_attr(comm):
     comm.barrier()
     if comm.rank == 0:
         shutil.rmtree(fname)
+
+def test_version():
+    import bigfile
+    assert hasattr(bigfile, '__version__')
+

@@ -1,3 +1,5 @@
+__version__ = "0.1.13"
+
 from .pyxbigfile import BigFileError, BigFileClosedError, BigBlockClosedError
 from .pyxbigfile import BigBlock as BigBlockBase
 from .pyxbigfile import BigFile as BigFileLowLevel
