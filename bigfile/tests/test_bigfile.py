@@ -1,54 +1,7 @@
-
 from bigfile import BigFile
 from bigfile import BigFileMPI
 from bigfile import BigData
 from bigfile import BigFileClosedError
-
-from mpi4py import MPI
-
-def MPIWorld(NTask, required=[]):
-    if not isinstance(NTask, (tuple, list)):
-        NTask = (NTask,)
-
-    if not isinstance(required, (tuple, list)):
-        required = (required,)
-
-    maxsize = max(required)
-    if MPI.COMM_WORLD.size < maxsize:
-        raise ValueError("Test Failed because the world is too small. Increase to mpirun -n %d" % maxsize)
-
-    sizes = sorted(set(list(required) + list(NTask)))
-    def dec(func):
-        def wrapped(*args, **kwargs):
-            for size in sizes:
-                if MPI.COMM_WORLD.size < size: continue
-
-                color = 0 if MPI.COMM_WORLD.rank < size else 1
-                MPI.COMM_WORLD.barrier()
-                comm = MPI.COMM_WORLD.Split(color)
-
-                kwargs['comm'] = comm
-                failed = 0
-                msg = ""
-                if color == 0:
-                    assert comm.size == size
-                    try:
-                        func(*args, **kwargs)
-                    except:
-                        failed = 1
-                        import traceback
-                        msg = traceback.format_exc()
-                gfailed = MPI.COMM_WORLD.allreduce(failed)
-                if gfailed > 0:
-                    msg = MPI.COMM_WORLD.allgather(msg)
-                if failed: raise
-                if gfailed > 0:
-                    raise ValueError("Some ranks failed with %s" % "\n".join(msg))
-
-        wrapped.__name__ = func.__name__
-        return wrapped
-    return dec
-
 
 import tempfile
 import numpy
@@ -67,6 +20,8 @@ dtypes = [
     ('complex128'), 
     ('complex128', 2), 
 ]
+
+from mpi4py_test import MPIWorld
 
 @MPIWorld(NTask=1, required=1)
 def test_create(comm):
