@@ -4,4 +4,4 @@ import os.path
 
 tester = MPITester(os.path.abspath(__file__), "bigfile")
 
-tester.main(sys.argv)
+tester.main(sys.argv[1:])
