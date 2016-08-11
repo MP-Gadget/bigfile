@@ -23,7 +23,7 @@ install:
 script:
     - pip install mpi4py_test
     - python ./runtests.py
-    - python ./runtests.py --mpirun --mpi-unmute
+    - python ./runtests.py --mpirun
     - bash check_tag.sh bigfile/version.py
 
 deploy:
