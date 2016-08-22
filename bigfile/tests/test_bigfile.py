@@ -1,4 +1,5 @@
 from bigfile import BigFile
+from bigfile import BigBlock
 from bigfile import BigFileMPI
 from bigfile import BigData
 from bigfile import BigFileClosedError
@@ -67,6 +68,45 @@ def test_create(comm):
     bd = BigData(x)
     assert set(bd.dtype.names) == set(x.blocks)
     d = bd[:]
+
+    shutil.rmtree(fname)
+
+@MPIWorld(NTask=1, required=1)
+def test_bigdata(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    x.create('.')
+
+    for d in dtypes:
+        dt = numpy.dtype(d)
+        numpy.random.seed(1234)
+
+        # test creating
+        with x.create(str(d), Nfile=1, dtype=dt, size=128) as b:
+            data = numpy.random.uniform(100000, size=128*128).view(dtype=b.dtype.base).reshape([-1] + list(dt.shape))[:b.size]
+            b.write(0, data)
+
+    bd = BigData(x)
+    assert set(bd.dtype.names) == set(x.blocks)
+    assert isinstance(bd[:], numpy.ndarray)
+    assert isinstance(bd['f8'], BigBlock)
+    assert_equal(len(bd['f8'].dtype), 0)
+    # tuple of one item is the same as non-tuple
+    assert isinstance(bd[('f8',)], BigBlock)
+    assert_equal(len(bd[('f8',)].dtype), 0)
+
+    assert isinstance(bd['f8', :10], numpy.ndarray)
+    assert_equal(len(bd['f8', :10]), 10)
+    assert_equal(len(bd['f8', :10].dtype), 0)
+    assert_equal(len(bd[['f8',], :10].dtype), 1)
+
+    # tuple of one item is the same as non-tuple
+    assert_equal(len(bd[('f8',), :10].dtype), 0)
+    assert isinstance(bd[:10, 'f8'], numpy.ndarray)
+    assert isinstance(bd['f8'], BigBlock)
+    assert isinstance(bd[['f8', 'f4'],], BigData)
+    assert_equal(len(bd[['f8', 'f4'],].dtype), 2)
+    assert isinstance(bd[['f8', 'f4'],:10], numpy.ndarray)
 
     shutil.rmtree(fname)
 

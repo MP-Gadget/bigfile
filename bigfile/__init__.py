@@ -17,6 +17,11 @@ except NameError:
     def isstr(s):
         return isinstance(s, str)
 
+def isstrlist(s):
+    if not isinstance(s, list):
+        return False
+    return all([ isstr(ss) for ss in s])
+
 class BigBlock(BigBlockBase):
     def flush(self):
         self._flush()
@@ -149,6 +154,7 @@ class BigData:
         self.blocks = dict([
             (block, file[block]) for block in self.blocknames])
 
+        self.file = file
         dtype = []
         size = None
         for block in self.blocknames:
@@ -165,8 +171,16 @@ class BigData:
 
     def __getitem__(self, sl):
         if isinstance(sl, tuple):
-            assert len(sl) == 1
-            return self[sl[0]]
+            if len(sl) == 2:
+                if isstr(sl[1]) or isstrlist(sl[1]):
+                    # sl[0] shall be column name
+                    sl = (sl[1], sl[0])
+                col, sl = sl
+                return self[col][sl]
+            if len(sl) == 1:
+                # Python 3? (a,) is sent in.
+                return self[sl[0]]
+
         if isinstance(sl, slice):
             start, end, stop = sl.indices(self.size)
             assert stop == 1
@@ -178,6 +192,9 @@ class BigData:
             return self[:]
         elif isstr(sl):
             return self.blocks[sl]
+        elif isstrlist(sl):
+            assert all([(col in self.blocks) for col in sl])
+            return BigData(self.file, sl)
         elif numpy.isscalar(sl):
             sl = slice(sl, sl + 1)
             return self[sl][0]
