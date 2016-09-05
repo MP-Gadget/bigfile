@@ -125,7 +125,8 @@ sim(int Nfile, int aggregated, int Nwriter, size_t size, int nmemb, char * filen
         if(bb.size != size) {
             info("Size mismatched, overriding size = %td\n", bb.size);
             size = bb.size;
-            localsize = size / NTask;
+            localoffset = size * ThisTask / NTask;
+            localsize = size * (ThisTask + 1) / NTask - localoffset;
         }
         if(bb.nmemb != nmemb) {
             info("Size mismatched, overriding nmemb = %d\n", bb.nmemb);
@@ -171,16 +172,18 @@ sim(int Nfile, int aggregated, int Nwriter, size_t size, int nmemb, char * filen
         for(i = 0; i < localsize; i ++) {
             int j;
             for(j = 0; j < nmemb; j ++) {
-                if (fakedata[i * nmemb + j] != localoffset * ThisTask + i) {
+                //printf("%lX ", fakedata[i * nmemb + j]);
+                if (fakedata[i * nmemb + j] != localoffset + i) {
                     info("data is corrupted either due to reading or writing\n");
                     abort();
 
                 }
             }
         }
+        //printf("\n");
         info("Initialized FakeData\n");
     }
-    
+
     info("Closing BigBlock\n");
     t0 = MPI_Wtime();
     big_block_mpi_close(&bb, MPI_COMM_WORLD);
