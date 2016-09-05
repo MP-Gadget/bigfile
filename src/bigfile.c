@@ -1601,6 +1601,7 @@ FILE *
 _big_file_open_a_file(const char * basename, int fileid, char * mode)
 {
     char * filename;
+    int unbuffered = 0;
     if(fileid == FILEID_HEADER) {
         filename = _path_join(basename, EXT_HEADER);
     } else
@@ -1613,12 +1614,16 @@ _big_file_open_a_file(const char * basename, int fileid, char * mode)
         char d[128];
         sprintf(d, EXT_DATA, fileid);
         filename = _path_join(basename, d);
+        unbuffered = 1;
     }
     FILE * fp = fopen(filename, mode);
     RAISEIF(fp == NULL,
         ex_fopen,
         "Failed to open physical file `%s' with mode `%s' (%s)",
         filename, mode, strerror(errno));
+    if(unbuffered) {
+        setbuf(fp, NULL);
+    }
 ex_fopen:
     free(filename);
     return fp;
