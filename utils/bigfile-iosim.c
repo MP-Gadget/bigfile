@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <alloca.h>
 #include <string.h>
 
@@ -17,7 +18,7 @@ static void
 usage() 
 {
     if(ThisTask != 0) return;
-    printf("usage: iosim [-A (to use aggregated IO)] [-N nfiles] [-n numwriters] [-s items] [-w width] [-p path] [-m (create|update|read)] [-d (to delete fakedata afterwards)] filename\n");
+    printf("usage: iosim [-A (to use aggregated IO)] [-N nfiles] [-n numwriters] [-s items] [-w nmemb] [-p path] [-m (create|update|read)] [-d (to delete fakedata afterwards)] filename\n");
     printf("Defaults: -N 1 -n NTask -s 1 -w 1 -p <dir> -m create \n");
 }
 
@@ -45,13 +46,6 @@ info(char * fmt, ...) {
 #define MODE_READ   1
 #define MODE_UPDATE 2
 
-typedef struct ptrlog{
-    double * create;
-    double * open;
-    double * write;
-    double * read;
-    double * close;
-} ptrlog;
 typedef struct log{
     double create;
     double open;
@@ -61,22 +55,25 @@ typedef struct log{
 } log;
 
 static void
-sim(int Nfile, int aggregated, int Nwriter, size_t Nitems, char * filename, double * tlog_ranks, ptrlog tlog, log * times, int mode)
+sim(int Nfile, int aggregated, int Nwriter, size_t size, int nmemb, char * filename, log * times, int mode)
 {
+    size_t localoffset = size * ThisTask / NTask;
+    size_t localsize = size * (ThisTask + 1) / NTask - localoffset;
+
     info("Writing to `%s`\n", filename);
     info("Physical Files %d\n", Nfile);
     info("Ranks %d\n", NTask);
     info("Writers %d\n", Nwriter);
     info("Aggregated %d\n", aggregated);
-    info("Bytes Per Rank %td\n", Nitems * 4 / NTask);
-    info("Items Per Rank %td\n", Nitems / NTask);
+    info("LocalBytes %td\n", localsize * 8);
+    info("LocalSize %td\n", localsize);
+    info("Nmemb %d\n", nmemb);
+    info("Size %td\n", size);
 
-    size_t itemsperrank = 1024;
-    itemsperrank = Nitems / NTask;
     
     if(aggregated) {
         /* Use a large enough number to disable aggregated IO */
-        big_file_mpi_set_aggregated_threshold(Nitems * 4);
+        big_file_mpi_set_aggregated_threshold(size * nmemb * 8);
     } else {
         big_file_mpi_set_aggregated_threshold(0);
     }
@@ -85,24 +82,17 @@ sim(int Nfile, int aggregated, int Nwriter, size_t Nitems, char * filename, doub
     BigArray array = {0};
     BigBlockPtr ptr = {0};
 
-    int * fakedata;
+    uint64_t * fakedata;
     ptrdiff_t i;
-    
+    //
     //+++++++++++++++++ Timelog variables +++++++++++++++++
     double t0, t1;
     log trank;
     trank.create = trank.open = trank.write = trank.read = trank.close = 0;
     int nel_trank = sizeof(trank) / sizeof(trank.create);
-/*    MPI_Datatype MPI_TIMELOG;
-    MPI_Aint displacement[nel_trank], dblex;
-    MPI_Type_extent(MPI_DOUBLE, &dblex);
-    displacement[0] = (MPI_Aint)0;
-    for (i=1; i < nel_trank; i ++) displacement[i] = i*dblex;
-    MPI_Type_struct( 1, nel_trank, displacement, MPI_DOUBLE, &MPI_TIMELOG);
-    MPI_Type_commit( &MPI_TIMELOG);
-*/
+    //
     //+++++++++++++++++ END +++++++++++++++++
-    
+
 
     if(mode == MODE_CREATE) {
         info("Creating BigFile\n");
@@ -114,7 +104,7 @@ sim(int Nfile, int aggregated, int Nwriter, size_t Nitems, char * filename, doub
 
         info("Creating BigBlock\n");
         t0 = MPI_Wtime();
-        big_file_mpi_create_block(&bf, &bb, "TestBlock", "i4", 1, Nfile, Nitems, MPI_COMM_WORLD);
+        big_file_mpi_create_block(&bf, &bb, "TestBlock", "i8", nmemb, Nfile, size, MPI_COMM_WORLD);
         t1 = MPI_Wtime();
         trank.create += t1 - t0;
         info("Created BigBlock\n");
@@ -132,10 +122,14 @@ sim(int Nfile, int aggregated, int Nwriter, size_t Nitems, char * filename, doub
         t1 = MPI_Wtime();
         trank.open += t1 - t0;
         info("Opened BigBlock\n");
-        if(bb.size != Nitems) {
-            info("Size mismatched, overriding Nitems = %td\n", bb.size);
-            Nitems = bb.size;
-            itemsperrank = Nitems / NTask;
+        if(bb.size != size) {
+            info("Size mismatched, overriding size = %td\n", bb.size);
+            size = bb.size;
+            localsize = size / NTask;
+        }
+        if(bb.nmemb != nmemb) {
+            info("Size mismatched, overriding nmemb = %d\n", bb.nmemb);
+            nmemb = bb.nmemb;
         }
         if(bb.Nfile != Nfile) {
             info("Nfile mismatched, overriding Nfile = %d\n", bb.Nfile );
@@ -143,13 +137,16 @@ sim(int Nfile, int aggregated, int Nwriter, size_t Nitems, char * filename, doub
         }
     }
 
-    fakedata = malloc(4 * itemsperrank);
-    big_array_init(&array, fakedata, "i4", 1, &itemsperrank, NULL);
+    fakedata = malloc(8 * localsize * nmemb);
+    big_array_init(&array, fakedata, "i8", 2, (size_t[]){localsize, nmemb}, NULL);
 
     if(mode == MODE_CREATE || mode == MODE_UPDATE) {
         info("Initializing FakeData\n");
-        for(i = 0; i < itemsperrank; i ++) {
-            fakedata[i] = itemsperrank * ThisTask + i;
+        for(i = 0; i < localsize; i ++) {
+            int j;
+            for(j = 0; j < nmemb; j ++) {
+                fakedata[i * nmemb + j] = localoffset + i;
+            }
         }
         info("Initialized FakeData\n");
         info("Writing BigBlock\n");
@@ -171,10 +168,14 @@ sim(int Nfile, int aggregated, int Nwriter, size_t Nitems, char * filename, doub
         trank.read += t1 - t0;
         info("Reading took %f seconds\n", trank.read);
         info("Initializing FakeData\n");
-        for(i = 0; i < itemsperrank; i ++) {
-            if(fakedata[i] != itemsperrank * ThisTask + i) {
-                info("data is corrupted either due to reading or writing\n");
-                abort();
+        for(i = 0; i < localsize; i ++) {
+            int j;
+            for(j = 0; j < nmemb; j ++) {
+                if (fakedata[i * nmemb + j] != localoffset * ThisTask + i) {
+                    info("data is corrupted either due to reading or writing\n");
+                    abort();
+
+                }
             }
         }
         info("Initialized FakeData\n");
@@ -194,29 +195,8 @@ sim(int Nfile, int aggregated, int Nwriter, size_t Nitems, char * filename, doub
     trank.close += t1 - t0;
     info("Closed BigFile\n");
 
-    //+++++++++++++++++ Preparing Time Log using MPI_Send & MPI_Recv +++++++++++++++++
-    /*        if(ThisTask != 0) {
-     MPI_Send(&trank.write, 1, MPI_DOUBLE, 0, ThisTask, MPI_COMM_WORLD);
-     } else if (ThisTask == 0) {
-     tlog_ranks[ThisTask] = trank.write;
-     for (i=1; i<NTask; i++) {
-     MPI_Status status;
-     MPI_Recv(&trank.write, 1, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-     tlog_ranks[status.MPI_SOURCE] = trank.write;
-     }
-     }
-     */
-    //+++++++++++++++++ Now using MPI_Gather +++++++++++++++++
-/*    MPI_Gather(&trank.create, 1, MPI_DOUBLE, tlog.create, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Gather(&trank.open, 1, MPI_DOUBLE, tlog.open, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Gather(&trank.write, 1, MPI_DOUBLE, tlog.write, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Gather(&trank.read, 1, MPI_DOUBLE, tlog.read, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Gather(&trank.close, 1, MPI_DOUBLE, tlog.close, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-*/
     MPI_Gather(&trank, nel_trank, MPI_DOUBLE, times, nel_trank, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    //MPI_Gather(&trank, 1, MPI_TIMELOG, times, 1, MPI_TIMELOG, 0, MPI_COMM_WORLD);
-    //+++++++++++++++++ END +++++++++++++++++
     free(fakedata);
 }
 
@@ -228,11 +208,11 @@ int main(int argc, char * argv[]) {
     
     int i;
     int ch;
-    int width = 1;
+    int nmemb = 1;
     int Nfile = 1;
     int Nwriter = NTask;
     int aggregated = 0;
-    size_t Nitems = 1024;
+    size_t size = 1024;
     char * filename = alloca(1500);
     char * path = "";
     char * postfix = alloca(1500);
@@ -241,16 +221,10 @@ int main(int argc, char * argv[]) {
     char * buffer = alloca(1500);
     //+++++++++++++++++ Timelog +++++++++++++++++
     char * timelog = alloca(1000);
-    double * tlog_ranks = (double *) malloc(sizeof(double)*NTask);
     FILE *F;
-    ptrlog tlog;
-    tlog.create = (double *) malloc(sizeof(double)*NTask);
-    tlog.open = (double *) malloc(sizeof(double)*NTask);
-    tlog.write = (double *) malloc(sizeof(double)*NTask);
-    tlog.read = (double *) malloc(sizeof(double)*NTask);
-    tlog.close = (double *) malloc(sizeof(double)*NTask);
+
     log * times = malloc(sizeof(log) * NTask);
-    
+
     while(-1 != (ch = getopt(argc, argv, "hN:n:s:w:p:m:dA"))) {
         switch(ch) {
             case 'A':
@@ -281,7 +255,7 @@ int main(int argc, char * argv[]) {
                 }
                 break;
             case 'w':
-                if(1 != sscanf(optarg, "%d", &width)) {
+                if(1 != sscanf(optarg, "%d", &nmemb)) {
                     usage();
                     goto byebye;
                 }
@@ -299,7 +273,7 @@ int main(int argc, char * argv[]) {
                 }
                 break;
             case 's':
-                if(1 != sscanf(optarg, "%td", &Nitems)) {
+                if(1 != sscanf(optarg, "%td", &size)) {
                     usage();
                     goto byebye;
                 }
@@ -317,11 +291,6 @@ int main(int argc, char * argv[]) {
 
 //+++++++++++++++++ Filename and checks of input parameters +++++++++++++++++
     sprintf(filename, "%s%s", path, argv[optind]);
-    Nitems *= width;
-    if (Nitems % NTask != 0) {
-        Nitems -= Nitems % NTask;
-        info("#items not divisible by ranks!\n Overriding total#items = %td\n", Nitems);
-    }
     if (Nwriter > NTask) {
         info("\n\n ############## CAUTION: you chose %d ranks and %d writers! ##############\n"
              " #  If you want %d writers, allocate at least %d ranks with <mpirun -n %d> #\n"
@@ -331,7 +300,7 @@ int main(int argc, char * argv[]) {
     }
 
 //+++++++++++++++++ Starting Simulation +++++++++++++++++
-    sim(Nfile, aggregated, Nwriter, Nitems, filename, tlog_ranks, tlog, times, mode);
+    sim(Nfile, aggregated, Nwriter, size, nmemb, filename, times, mode);
 //+++++++++++++++++ Deleting files if flag -d set +++++++++++++++++
     if (delfiles) {
         if(ThisTask == 0) {
@@ -347,22 +316,19 @@ int main(int argc, char * argv[]) {
             info("iosim.c: Couldn't open file %s for writting!\n", timelog);
         }
         else{
-            fprintf(F, "# files %d ranks %d writers %d items %td width %d\n",
-                         Nfile, NTask, Nwriter, Nitems, width);
-            //fprintf(F, "Task\tTwrite\t\tTlog.write\n");
+            fprintf(F, "# files %d ranks %d writers %d items %td nmemb %d\n",
+                         Nfile, NTask, Nwriter, size, nmemb);
+
             fprintf(F, "# Task\tTcreate\t\tTopen\t\tTwrite\t\tTread\t\tTclose\n");
             for (i=0; i<NTask; i++) {
-                //fprintf(F, "%d\t%f\t%f\n", i, tlog_ranks[i], tlog.write[i]);
-                //fprintf(F, "%d\t%f\t%f\t%f\t%f\t%f\n", i, tlog.create[i], tlog.open[i], tlog.write[i], tlog.read[i], tlog.close[i]);
-                fprintf(F, "%d\t%f\t%f\t%f\t%f\t%f\n", i, times[i].create, times[i].open, times[i].write, times[i].read, times[i].close);
+                fprintf(F, "%d\t%f\t%f\t%f\t%f\t%f\n",
+                    i, times[i].create, times[i].open, times[i].write, times[i].read, times[i].close);
             }
         }
         fclose(F);
     }
 
 byebye:
-    free(tlog_ranks);
-    free(tlog.create);free(tlog.open);free(tlog.write);free(tlog.read);free(tlog.close);
     free(times);
     MPI_Finalize();
     return 0;
