@@ -1103,8 +1103,9 @@ byte_swap(BigArrayIter * iter, size_t nmemb)
     int elsize = dtype_itemsize(iter->array->dtype);
     if(elsize == 1) return;
     /* need byte swap; do it now on buf2 */
+    /* XXX: this may still be wrong. */
     ptrdiff_t i;
-    int half = elsize << 1;
+    int half = elsize >> 1;
     for(i = 0; i < nmemb; i ++) {
         int j;
         char * ptr = iter->dataptr;

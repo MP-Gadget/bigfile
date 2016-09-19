@@ -131,7 +131,8 @@ class BigFileMPI(BigFileBase):
     def create_from_array(self, blockname, array, Nfile=1):
         size = self.comm.allreduce(len(array))
         offset = sum(self.comm.allgather(len(array))[:self.comm.rank])
-        with self.create(blockname, array.dtype, size, Nfile) as b:
+        dtype = numpy.dtype((array.dtype, array.shape[1:]))
+        with self.create(blockname, dtype, size, Nfile) as b:
             b.write(offset, array)
         return self.open(blockname)
 
