@@ -10,6 +10,7 @@ import shutil
 from numpy.testing import assert_equal
 
 dtypes = [
+    '?', 
     'i4', 
     'u4', 
     'u8', 

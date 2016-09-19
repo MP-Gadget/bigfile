@@ -855,6 +855,7 @@ dtype_normalize(char * dst, const char * src)
     switch(src[0]) {
         case '<':
         case '>':
+        case '|':
         case '=':
             strcpy(dst, src);
         break;
@@ -863,6 +864,9 @@ dtype_normalize(char * dst, const char * src)
             strcpy(dst + 1, src);
     }
     if(dst[0] == '=') {
+        dst[0] = MACHINE_ENDIANNESS;
+    }
+    if(dst[0] == '|') {
         dst[0] = MACHINE_ENDIANNESS;
     }
     return 0;
