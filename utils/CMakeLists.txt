@@ -43,10 +43,12 @@ install(TARGETS bigfile-get-attr bigfile-set-attr bigfile-copy # bigfile-checksu
 
 # MPI specific executables
 if(${MPI_C_FOUND})
+    include_directories(${MPI_C_INCLUDE_PATH})
+    
     # bigfile-copy-mpi
     add_executable(bigfile-copy-mpi bigfile-copy-mpi.c)
     target_link_libraries(bigfile-copy-mpi bigfile bigfile-mpi ${MPI_C_LIBRARIES})
-    
+
     # bigfile-iosim
     add_executable(bigfile-iosim bigfile-iosim.c)
     target_link_libraries(bigfile-iosim bigfile bigfile-mpi ${MPI_C_LIBRARIES})

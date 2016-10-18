@@ -11,6 +11,8 @@ install(TARGETS bigfile
         PUBLIC_HEADER DESTINATION include)
 
 if(${MPI_C_FOUND})
+    include_directories(${MPI_C_INCLUDE_PATH})
+
     add_library(bigfile-mpi bigfile-mpi.c)
     set_target_properties(bigfile-mpi PROPERTIES PUBLIC_HEADER bigfile-mpi.h)
     
