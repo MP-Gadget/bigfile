@@ -61,7 +61,7 @@ if(${MPI_C_FOUND})
         add_executable(bigfile-sample-mpi bigfile-sample-mpi.c)
         target_link_libraries(bigfile-sample-mpi bigfile bigfile-mpi ${GSL_LIBRARIES} ${MPI_C_LIBRARIES})
         
-        install(TARGET bigfile-sample-mpi
+        install(TARGETS bigfile-sample-mpi
                 RUNTIME DESTINATION bin)
     endif()
 endif()
