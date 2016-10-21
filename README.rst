@@ -29,13 +29,32 @@ To install the Python binding
 The C-API of bigfile can be embedded into a project, by dropping in 
 four files : bigfile.c bigfile-mpi.c, bigfile.h bigfile-mpi.h.
 
-However, if installation is preferred, use
+However, if installation is preferred, the library and executables can be compiled and installed
+using CMake:
+
+.. code:: bash
+    
+    mkdir build
+    cd build
+    cmake ..
+    make install
+    
+This will install the project in the default path (probalby /usr/local), to select an alternative
+installation destination, replace the cmake call by:
+
+.. code:: bash
+
+    cmake -DCMAKE_INSTALL_PREFIX:PATH=<PREFIX> ..
+    
+where <PREFIX> is the desired destination.
+
+Compilation is also possible using the legacy build system:
 
 .. code:: bash
 
     make install
 
-Override CC MPICC, PREFIX as needed. Take a look at the Makefile is always recommended.
+However, you need to manually override CC MPICC, PREFIX as needed. Take a look at the Makefile is always recommended.
 
 
 Description
