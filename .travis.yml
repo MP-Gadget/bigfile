@@ -21,6 +21,9 @@ install:
     - python setup.py install
 
 script:
+    - echo "Testing CMAKE build"
+    - mkdir build; (cd build; cmake -DCMAKE_INSTALL_PREFIX:PATH=install .. ; make install )
+    - echo "Testing Python binding"
     - pip install mpi4py_test
     - python ./runtests.py
     - python ./runtests.py --mpirun
