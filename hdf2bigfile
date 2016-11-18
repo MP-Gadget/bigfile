@@ -1,9 +1,30 @@
+#! python
+
 import h5py
 import bigfile
 import logging
 import argparse
 
-ap = argparse.ArgumentParser('h5tobigfile')
+ap = argparse.ArgumentParser('hdf2bigfile',
+    description="""
+Converting a HDF5 file to a bigfile.
+
+DataGroup is converted as sub-file,
+Composite Data Types are converted as sub-file,
+Simple Columns are converted as BigBlock.
+
+Shape are converted to ndarray.shape attribute.
+
+All converted arrays has nmemb = 1. (bigfile do not distinguish
+scalar / 1-vector).
+
+Strides are lost: arrays are always written as C-contiguous.
+
+Currently, attributes are not carried over.
+Currently, include and exclude filters do not work.
+
+""")
+
 ap.add_argument("hdf5")
 ap.add_argument("bigfile")
 ap.add_argument("--verify", action='store_true', default=False)

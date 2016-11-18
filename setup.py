@@ -27,6 +27,7 @@ setup(
     zip_safe = False,
     package_dir = {'bigfile': 'bigfile'},
     install_requires=['cython', 'numpy'],
+    scripts = ['hdf2bigfile'],
     packages= ['bigfile', 'bigfile.tests'],
     requires=['numpy'],
     ext_modules = cythonize(extensions)
