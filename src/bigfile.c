@@ -1210,6 +1210,9 @@ cast(BigArrayIter * dst, BigArrayIter * src, size_t nmemb)
     } else
     if(0 == strcmp(dst->array->dtype + 1, "S1")) {
         CAST("S1", char, "S1", char);
+    } else
+    if(0 == strcmp(dst->array->dtype + 1, "b1")) {
+        CAST("b1", char, "b1", char);
     }
     /* */
     fprintf(stderr, "Unsupported conversion from %s to %s\n", src->array->dtype, dst->array->dtype);
