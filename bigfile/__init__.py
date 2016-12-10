@@ -31,7 +31,7 @@ class BigBlock(BigBlockBase):
 class BigFileBase(BigFileLowLevel):
     def __init__(self, filename, create=False):
         BigFileLowLevel.__init__(self, filename, create)
-        self.blocks = []
+        self._blocks = []
 
     def __enter__(self):
         return self
@@ -56,7 +56,14 @@ class BigFile(BigFileBase):
 
     def __init__(self, filename, create=False):
         BigFileBase.__init__(self, filename, create)
-        self.refresh()
+
+    @property
+    def blocks(self):
+        try:
+            return self._blocks
+        except AttributeError:
+            self._blocks = self.list_blocks()
+            return self._blocks
 
     def open(self, blockname):
         block = BigBlock()
@@ -66,15 +73,11 @@ class BigFile(BigFileBase):
     def create(self, blockname, dtype=None, size=None, Nfile=1):
         block = BigBlock()
         block.create(self, blockname, dtype, size, Nfile)
-        self.refresh()
+        self._blocks = self.list_blocks()
         return block
 
     def subfile(self, key):
         return BigFile(os.path.join(self.basename, key))
-
-    def refresh(self):
-        """ Refresh the list of blocks to the disk."""
-        self.blocks = self.list_blocks()
 
 class BigBlockMPI(BigBlock):
     def __init__(self, comm):
@@ -106,13 +109,17 @@ class BigFileMPI(BigFileBase):
             BigFileBase.__init__(self, filename, create=False)
         self.refresh()
 
+    @property
+    def blocks(self):
+        return self._blocks
+
     def refresh(self):
         """ Refresh the list of blocks to the disk, collectively """
         if self.comm.rank == 0:
-            self.blocks = self.list_blocks()
+            self._blocks = self.list_blocks()
         else:
-            self.blocks = None
-        self.blocks = self.comm.bcast(self.blocks)
+            self._blocks = None
+        self._blocks = self.comm.bcast(self._blocks)
 
     def open(self, blockname):
         block = BigBlockMPI(self.comm)

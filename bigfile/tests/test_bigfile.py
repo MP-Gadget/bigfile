@@ -122,10 +122,6 @@ def test_closed(comm):
         h = x['.']
     except BigFileClosedError:
         pass
-    try:
-        x.refresh()
-    except BigFileClosedError:
-        pass
 
 @MPIWorld(NTask=1, required=1)
 def test_attr(comm):
