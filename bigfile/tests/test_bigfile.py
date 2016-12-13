@@ -132,22 +132,26 @@ def test_attr(comm):
         b.attrs['float'] = [128.0, 3, 4]
         b.attrs['string'] = 'abcdefg'
         b.attrs['complex'] = 128 + 128J
+        b.attrs['bool'] = True
 
     with x.open('.') as b:
         assert_equal(b.attrs['int'], 128)
         assert_equal(b.attrs['float'], [128.0, 3, 4])
         assert_equal(b.attrs['string'],  'abcdefg')
         assert_equal(b.attrs['complex'],  128 + 128J)
+        assert_equal(b.attrs['bool'],  True)
         b.attrs['int'] = 30
         b.attrs['float'] = [3, 4]
         b.attrs['string'] = 'defg'
         b.attrs['complex'] = 32 + 32J
+        b.attrs['bool'] = False
 
     with x.open('.') as b:
         assert_equal(b.attrs['int'], 30)
         assert_equal(b.attrs['float'], [3, 4])
         assert_equal(b.attrs['string'],  'defg')
         assert_equal(b.attrs['complex'],  32 + 32J)
+        assert_equal(b.attrs['bool'],  False)
 
     shutil.rmtree(fname)
 

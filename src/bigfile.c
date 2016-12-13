@@ -965,6 +965,7 @@ typedef struct {double r; double i;} cplx128_t;
 typedef struct {float r; float i;} cplx64_t;
 typedef union {
     char *S1;
+    char *b1;
     int64_t *i8;
     uint64_t *u8;
     double *f8;
@@ -1005,6 +1006,7 @@ dtype_format(char * buffer, const char * dtype, const void * data, const char * 
     } else
 
     FORMAT1(S1, "%c")
+    FORMAT1(b1, "%d")
     FORMAT1(i8, "%ld")
     FORMAT1(i4, "%d")
     FORMAT1(u8, "%lu")
