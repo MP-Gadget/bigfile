@@ -23,7 +23,7 @@ dtypes = [
     ('complex128', 2), 
 ]
 
-from mpi4py_test import MPIWorld
+from mpi4py_test import MPIWorld, MPITest
 
 @MPIWorld(NTask=1, required=1)
 def test_create(comm):
@@ -238,3 +238,30 @@ def test_version():
     import bigfile
     assert hasattr(bigfile, '__version__')
 
+@MPITest(commsize=[1, 4])
+def test_mpi_large(comm):
+    if comm.rank == 0:
+        fname = tempfile.mkdtemp()
+        fname = comm.bcast(fname)
+    else:
+        fname = comm.bcast(None)
+    x = BigFileMPI(comm, fname, create=True)
+
+    size= 1024 * 1024
+    for d in dtypes:
+        d = numpy.dtype(d)
+        numpy.random.seed(1234)
+
+        # test creating with create_array; large enough for all types
+        data = numpy.random.uniform(100000, size=4 * size).view(dtype=d.base).reshape([-1] + list(d.shape))[:size]
+        data1 = comm.scatter(numpy.array_split(data, comm.size))
+
+        with x.create_from_array(d.str, data1, memorylimit=1024 * 128) as b:
+            pass
+
+        with x[d.str] as b:
+            assert_equal(b[:], data.astype(d.base))
+
+    comm.barrier()
+    if comm.rank == 0:
+        shutil.rmtree(fname)
