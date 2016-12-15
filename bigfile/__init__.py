@@ -56,6 +56,7 @@ class BigFile(BigFileBase):
 
     def __init__(self, filename, create=False):
         BigFileBase.__init__(self, filename, create)
+        del self._blocks
 
     @property
     def blocks(self):
