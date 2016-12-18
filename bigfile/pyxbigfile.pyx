@@ -193,6 +193,9 @@ cdef class BigFileAttrSet:
     def __setitem__(self, name, value):
         name = name.encode()
         self.bb._check_closed()
+        if isinstance(value, numpy.ndarray):
+            if value.dtype.char == 'U':
+                value = str(value).encode()
 
         if isstr(value): 
             value = value.encode()

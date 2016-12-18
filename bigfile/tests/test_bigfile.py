@@ -133,6 +133,8 @@ def test_attr(comm):
         b.attrs['string'] = 'abcdefg'
         b.attrs['complex'] = 128 + 128J
         b.attrs['bool'] = True
+        b.attrs['arrayustring'] = numpy.array(u'unicode')
+        b.attrs['arraysstring'] = numpy.array('str')
 
     with x.open('.') as b:
         assert_equal(b.attrs['int'], 128)
