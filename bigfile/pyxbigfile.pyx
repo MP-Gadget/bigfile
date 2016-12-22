@@ -433,6 +433,8 @@ cdef class BigBlock:
     def __repr__(self):
         if self.closed:
             return "<CBigBlock: Closed>"
+        if self.bb.dtype == b'####':
+            return "<CBigBlock: %s>" % self.bb.basename
 
         return "<CBigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
                 self.dtype, self.size)

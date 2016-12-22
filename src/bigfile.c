@@ -64,6 +64,18 @@ attrset_get_attr(BigAttrSet * attrset, const char * attrname, void * data, const
 static int
 dtype_convert_simple(void * dst, const char * dstdtype, const void * src, const char * srcdtype, size_t nmemb);
 
+/* postfix detection, 1 if postfix is a postfix of str */
+static int
+endswith(const char * str, const char * postfix)
+{
+    const char * p = str + strlen(str) - 1;
+    const char * q = postfix + strlen(postfix) - 1;
+    for(; p >= str && q >= postfix; p --, q--) {
+        if(*p != *q) return 0;
+    }
+    return 1;
+}
+
 /* global settings */
 int
 big_file_set_buffer_size(size_t bytes)
@@ -282,51 +294,9 @@ int
 big_block_open(BigBlock * bb, const char * basename)
 {
     memset(bb, 0, sizeof(bb[0]));
-    if(basename == NULL) basename = "";
+    if(basename == NULL) basename = "/.";
     bb->basename = strdup(basename);
     bb->dirty = 0;
-    FILE * fheader = _big_file_open_a_file(bb->basename, FILEID_HEADER, "r");
-    RAISEIF (!fheader,
-            ex_open,
-            NULL);
-
-    RAISEIF(
-           (1 != fscanf(fheader, " DTYPE: %s", bb->dtype)) ||
-           (1 != fscanf(fheader, " NMEMB: %d", &(bb->nmemb))) ||
-           (1 != fscanf(fheader, " NFILE: %d", &(bb->Nfile))),
-           ex_fscanf,
-           "Failed to read header of block `%s' (%s)", bb->basename, strerror(errno));
-
-    bb->fsize = calloc(bb->Nfile, sizeof(size_t));
-    RAISEIF(!bb->fsize,
-            ex_fsize,
-            "Failed to alloc memory of block `%s'", bb->basename);
-    bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
-    RAISEIF(!bb->foffset,
-            ex_foffset,
-            "Failed to alloc memory of block `%s'", bb->basename);
-    bb->fchecksum = calloc(bb->Nfile, sizeof(int));
-    RAISEIF(!bb->fchecksum,
-            ex_fchecksum,
-            "Failed to alloc memory `%s'", bb->basename);
-    int i;
-    for(i = 0; i < bb->Nfile; i ++) {
-        int fid; 
-        size_t size;
-        unsigned int cksum;
-        unsigned int sysv;
-        RAISEIF(4 != fscanf(fheader, " " EXT_DATA ": %td : %u : %u", &fid, &size, &cksum, &sysv),
-                ex_fscanf1,
-                "Failed to readin physical file layout `%s' %d (%s)", bb->basename, fid,
-                strerror(errno));
-        bb->fsize[fid] = size;
-        bb->fchecksum[fid] = cksum;
-    }
-    bb->foffset[0] = 0;
-    for(i = 0; i < bb->Nfile; i ++) {
-        bb->foffset[i + 1] = bb->foffset[i] + bb->fsize[i];
-    }
-    bb->size = bb->foffset[bb->Nfile];
 
     bb->attrset = attrset_create();
 
@@ -339,75 +309,145 @@ big_block_open(BigBlock * bb, const char * basename)
             ex_readattr,
             NULL);
 
-    fclose(fheader);
-    return 0;
+    if (!endswith(bb->basename, "/.") && 0 != strcmp(bb->basename, ".")) {
+        FILE * fheader = _big_file_open_a_file(bb->basename, FILEID_HEADER, "r");
+        RAISEIF (!fheader,
+                ex_open,
+                NULL);
 
-ex_readattr:
+        RAISEIF(
+               (1 != fscanf(fheader, " DTYPE: %s", bb->dtype)) ||
+               (1 != fscanf(fheader, " NMEMB: %d", &(bb->nmemb))) ||
+               (1 != fscanf(fheader, " NFILE: %d", &(bb->Nfile))),
+               ex_fscanf,
+               "Failed to read header of block `%s' (%s)", bb->basename, strerror(errno));
+
+        bb->fsize = calloc(bb->Nfile, sizeof(size_t));
+        RAISEIF(!bb->fsize,
+                ex_fsize,
+                "Failed to alloc memory of block `%s'", bb->basename);
+        bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
+        RAISEIF(!bb->foffset,
+                ex_foffset,
+                "Failed to alloc memory of block `%s'", bb->basename);
+        bb->fchecksum = calloc(bb->Nfile, sizeof(int));
+        RAISEIF(!bb->fchecksum,
+                ex_fchecksum,
+                "Failed to alloc memory `%s'", bb->basename);
+        int i;
+        for(i = 0; i < bb->Nfile; i ++) {
+            int fid; 
+            size_t size;
+            unsigned int cksum;
+            unsigned int sysv;
+            RAISEIF(4 != fscanf(fheader, " " EXT_DATA ": %td : %u : %u", &fid, &size, &cksum, &sysv),
+                    ex_fscanf1,
+                    "Failed to readin physical file layout `%s' %d (%s)", bb->basename, fid,
+                    strerror(errno));
+            bb->fsize[fid] = size;
+            bb->fchecksum[fid] = cksum;
+        }
+        bb->foffset[0] = 0;
+        for(i = 0; i < bb->Nfile; i ++) {
+            bb->foffset[i + 1] = bb->foffset[i] + bb->fsize[i];
+        }
+        bb->size = bb->foffset[bb->Nfile];
+
+        fclose(fheader);
+
+        return 0;
+
 ex_fscanf1:
-    free(bb->fchecksum);
+        free(bb->fchecksum);
 ex_fchecksum:
-    free(bb->foffset);
+        free(bb->foffset);
 ex_foffset:
-    free(bb->fsize);
+        free(bb->fsize);
 ex_fsize:
 ex_fscanf:
-    fclose(fheader);
+        fclose(fheader);
 ex_open:
-    return -1;
+        return -1;
+    } else {
+        /* The meta block of a big file, has on extra files. */
+        bb->Nfile = 0;
+        strcpy(bb->dtype, "####");
+        return 0;
+    }
+
+ex_readattr:
+        return -1;
 }
 
 int
 _big_block_create_internal(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
 {
     memset(bb, 0, sizeof(bb[0]));
-    if(basename == NULL) basename = "";
+    if(basename == NULL) basename = "/.";
     bb->basename = strdup(basename);
-
-    if(dtype == NULL) {
-        dtype = "i8";
-        Nfile = 0;
-        fsize = NULL;
-    }
-    /* always use normalized dtype in files. */
-    dtype_normalize(bb->dtype, dtype);
-
-    bb->Nfile = Nfile;
-    bb->nmemb = nmemb;
-    bb->fsize = calloc(bb->Nfile, sizeof(size_t));
-    RAISEIF(!bb->fsize, ex_fsize, "No memory"); 
-    bb->fchecksum = calloc(bb->Nfile, sizeof(int));
-    RAISEIF(!bb->fchecksum, ex_fchecksum, "No memory"); 
-    bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
-    RAISEIF(!bb->foffset, ex_foffset, "No memory"); 
-    int i;
-    bb->foffset[0] = 0;
-    for(i = 0; i < bb->Nfile; i ++) {
-        bb->fsize[i] = fsize[i];
-        bb->foffset[i + 1] = bb->foffset[i] + bb->fsize[i];
-        bb->fchecksum[i] = 0;
-    }
-
-    bb->size = bb->foffset[bb->Nfile];
 
     bb->attrset = attrset_create();
     bb->attrset->dirty = 1;
-    bb->dirty = 1;
-    RAISEIF(0 != big_block_flush(bb), 
-            ex_flush, NULL);
 
-    bb->dirty = 0;
+    if (!endswith(bb->basename, "/.") && 0 != strcmp(bb->basename, ".")) {
+        if(dtype == NULL) {
+            dtype = "i8";
+            Nfile = 0;
+            fsize = NULL;
+        }
+        /* always use normalized dtype in files. */
+        dtype_normalize(bb->dtype, dtype);
 
-    return 0;
+        bb->Nfile = Nfile;
+        bb->nmemb = nmemb;
+        bb->fsize = calloc(bb->Nfile, sizeof(size_t));
+        RAISEIF(!bb->fsize, ex_fsize, "No memory"); 
+        bb->fchecksum = calloc(bb->Nfile, sizeof(int));
+        RAISEIF(!bb->fchecksum, ex_fchecksum, "No memory"); 
+        bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
+        RAISEIF(!bb->foffset, ex_foffset, "No memory"); 
+        int i;
+        bb->foffset[0] = 0;
+        for(i = 0; i < bb->Nfile; i ++) {
+            bb->fsize[i] = fsize[i];
+            bb->foffset[i + 1] = bb->foffset[i] + bb->fsize[i];
+            bb->fchecksum[i] = 0;
+        }
 
+        bb->size = bb->foffset[bb->Nfile];
+        bb->dirty = 1;
+
+        RAISEIF(0 != big_block_flush(bb), 
+                ex_flush, NULL);
+
+        bb->dirty = 0;
+        return 0;
 ex_flush:
+        attrset_free(bb->attrset);
 ex_fileio:
-    free(bb->foffset);
+        free(bb->foffset);
 ex_foffset:
-    free(bb->fchecksum);
+        free(bb->fchecksum);
 ex_fchecksum:
-    free(bb->fsize);
+        free(bb->fsize);
 ex_fsize:
-    return -1;
+        return -1;
+    } else {
+        /* special meta block of a file */
+        bb->Nfile = 0;
+        /* never flush the header */
+        bb->dirty = 0;
+
+        RAISEIF(0 != big_block_flush(bb), 
+                ex_flush2, NULL);
+
+        bb->dirty = 0;
+        return 0;
+
+ex_flush2:
+        attrset_free(bb->attrset);
+        return -1;
+    }
 }
 
 static void

@@ -73,6 +73,21 @@ def test_create(comm):
     shutil.rmtree(fname)
 
 @MPIWorld(NTask=1, required=1)
+def test_fileattr(comm):
+    import os.path
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    assert not os.path.exists(os.path.join(fname, 'attr-v2'))
+    assert not os.path.exists(os.path.join(fname, '000000'))
+    with x['.'] as bb:
+        bb.attrs['value'] = 1234
+        assert bb.attrs['value'] == 1234
+    assert not os.path.exists(os.path.join(fname, 'header'))
+    assert os.path.exists(os.path.join(fname, 'attr-v2'))
+
+    shutil.rmtree(fname)
+
+@MPIWorld(NTask=1, required=1)
 def test_bigdata(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
