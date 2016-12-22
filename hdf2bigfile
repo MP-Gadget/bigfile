@@ -52,10 +52,12 @@ def main(ns):
 
     def create(hobj, path):
         print("Copying %s as %s" % (str(hobj), path))
-        if hobj.dtype.shape and len(hobj.dtype.shape) > 1:
+        if len(hobj.shape) > 2:
             raise TypeError("bigfile cannot handle tensor dtype : %s" % str(hobj.dtype))
-
-        bb = bout.create(path, hobj.dtype, size=len(hobj))
+        if len(hobj.shape) == 1:
+            hobj = hobj[:, None]
+        size, Nmemb = hobj.shape
+        bb = bout.create(path, (hobj.dtype, Nmemb), size=size)
         bb.attrs['ndarray.shape'] = hobj.shape
         bb.write(0, hobj[:].ravel().copy())
 
