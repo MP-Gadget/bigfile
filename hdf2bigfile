@@ -40,7 +40,7 @@ def traverse(hobj, operation, prefix=""):
     if hasattr(hobj, 'dtype'):
         if hobj.dtype.names:
             for field in hobj.dtype.names:
-                path = prefix + field + '/'
+                path = prefix + '/' + field + '/'
                 traverse(hobj[field], operation, path)
         else:
             operation(hobj, prefix)
