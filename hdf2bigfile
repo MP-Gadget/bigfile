@@ -55,7 +55,7 @@ def main(ns):
         if hobj.dtype.shape and len(hobj.dtype.shape) > 1:
             raise TypeError("bigfile cannot handle tensor dtype : %s" % str(hobj.dtype))
 
-        bb = bout.create(path, hobj.dtype, size=hobj.size)
+        bb = bout.create(path, hobj.dtype, size=len(hobj))
         bb.attrs['ndarray.shape'] = hobj.shape
         bb.write(0, hobj[:].ravel().copy())
 
