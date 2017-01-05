@@ -1333,7 +1333,7 @@ attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
     }
     int nmemb;
     int lname;
-    char dtype[8];
+    char dtype[9]={};
     char * data;
     char * name;
     while(!feof(fattr)) {
