@@ -1438,6 +1438,7 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
     return 0;
 
 ex_read_file:
+    fclose(fattr);
 ex_parse_attr:
 ex_set_attr:
     attrset->dirty = 0;
