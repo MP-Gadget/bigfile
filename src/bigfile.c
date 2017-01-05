@@ -1759,6 +1759,7 @@ _big_file_mksubdir_r(const char * pathname, const char * subdir)
     free(mydirname);
     return 0;
 ex_mkdir:
+    free(subdirname);
     free(mydirname);
     return -1;
 }
