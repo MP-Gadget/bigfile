@@ -14,7 +14,7 @@ env:
 
 
 before_install:
-    - test $TRAVIS_BRANCH == coverity_scan -a ${TRAVIS_JOB_NUMBER##*.} == 1 && exit 0
+    - if [ $TRAVIS_BRANCH == coverity_scan -a ${TRAVIS_JOB_NUMBER##*.} == 1 ]; then exit 0; fi
     - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
     - chmod +x miniconda.sh
     - ./miniconda.sh -b -p $HOME/miniconda
@@ -28,7 +28,7 @@ install:
     - python setup.py install
 
 script:
-    - test $TRAVIS_BRANCH == coverity_scan && exit 0
+    - if [ $TRAVIS_BRANCH == coverity_scan ]; then exit 0; fi
     - echo "Testing CMAKE build"
     - mkdir build; (cd build; cmake -DCMAKE_INSTALL_PREFIX:PATH=install .. ; make install )
     - echo "Testing Python binding"
