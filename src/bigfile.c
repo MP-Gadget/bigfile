@@ -1340,7 +1340,8 @@ attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
         if(1 != fread(&nmemb, sizeof(int), 1, fattr)) break;
         RAISEIF(
             (1 != fread(&lname, sizeof(int), 1, fattr)) ||
-            (1 != fread(&dtype, 8, 1, fattr)),
+            (1 != fread(&dtype, 8, 1, fattr)) ||
+            (!dtype_isvalid(dtype)),
             ex_fread,
             "Failed to read from file"
                 )
@@ -1357,7 +1358,7 @@ attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
         RAISEIF(0 != attrset_set_attr(attrset, name, data, dtype, nmemb),
             ex_set_attr,
             NULL);
-    } 
+    }
     attrset->dirty = 0;
     fclose(fattr);
     return 0;
