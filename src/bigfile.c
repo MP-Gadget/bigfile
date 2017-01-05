@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -63,6 +64,9 @@ attrset_get_attr(BigAttrSet * attrset, const char * attrname, void * data, const
 /* Internal dtype API */
 static int
 dtype_convert_simple(void * dst, const char * dstdtype, const void * src, const char * srcdtype, size_t nmemb);
+
+/*Check dtype is valid*/
+int dtype_isvalid(const char * dtype);
 
 /* postfix detection, 1 if postfix is a postfix of str */
 static int
@@ -322,6 +326,12 @@ big_block_open(BigBlock * bb, const char * basename)
                ex_fscanf,
                "Failed to read header of block `%s' (%s)", bb->basename, strerror(errno));
 
+        RAISEIF(bb->Nfile < 0 || bb->Nfile >= INT_MAX-1, ex_fscanf, 
+                "Unreasonable value for Nfile in header of block `%s' (%d)",bb->basename,bb->Nfile);
+        RAISEIF(bb->nmemb < 0, ex_fscanf, 
+                "Unreasonable value for nmemb in header of block `%s' (%d)",bb->basename,bb->nmemb);
+        RAISEIF(!dtype_isvalid(bb->dtype), ex_fscanf, 
+                "Unreasonable value for dtype in header of block `%s' (%s)",bb->basename,bb->dtype);
         bb->fsize = calloc(bb->Nfile, sizeof(size_t));
         RAISEIF(!bb->fsize,
                 ex_fsize,
@@ -910,6 +920,39 @@ dtype_normalize(char * dst, const char * src)
         dst[0] = MACHINE_ENDIANNESS;
     }
     return 0;
+}
+
+/*Check that the passed dtype is valid.
+ * Returns 1 if valid, 0 if invalid*/
+int
+dtype_isvalid(const char * dtype)
+{
+    if(!dtype)
+        return 0;
+    switch(dtype[0]) {
+        case '<':
+        case '>':
+        case '|':
+        case '=':
+            break;
+        default:
+            return 0;
+    }
+    switch(dtype[1]) {
+        case 'S':
+        case 'b':
+        case 'i':
+        case 'f':
+        case 'u':
+        case 'c':
+            break;
+        default:
+            return 0;
+    }
+    int width = atoi(&dtype[2]);
+    if(width > 16 || width <= 0)
+        return 0;
+    return 1;
 }
 
 int
