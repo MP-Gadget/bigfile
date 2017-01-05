@@ -1395,7 +1395,6 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
     RAISEIF(size != fread(buffer, 1, size, fattr),
             ex_read_file,
             "Failed to read attribute file\n");
-    fclose(fattr);
     buffer[size] = 0;
 
     /* now parse the v2 attr file.*/
@@ -1433,13 +1432,13 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
             ex_set_attr,
             NULL);
     } 
+    fclose(fattr);
     free(data);
     free(buffer);
     attrset->dirty = 0;
     return 0;
 
 ex_read_file:
-    fclose(fattr);
 ex_parse_attr:
 ex_set_attr:
     attrset->dirty = 0;
@@ -1447,6 +1446,7 @@ ex_set_attr:
 ex_data:
     free(buffer);
 ex_init:
+    fclose(fattr);
     return -1;
 }
 static int
