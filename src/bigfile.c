@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -63,6 +64,9 @@ attrset_get_attr(BigAttrSet * attrset, const char * attrname, void * data, const
 /* Internal dtype API */
 static int
 dtype_convert_simple(void * dst, const char * dstdtype, const void * src, const char * srcdtype, size_t nmemb);
+
+/*Check dtype is valid*/
+int dtype_isvalid(const char * dtype);
 
 /* postfix detection, 1 if postfix is a postfix of str */
 static int
@@ -322,6 +326,12 @@ big_block_open(BigBlock * bb, const char * basename)
                ex_fscanf,
                "Failed to read header of block `%s' (%s)", bb->basename, strerror(errno));
 
+        RAISEIF(bb->Nfile < 0 || bb->Nfile >= INT_MAX-1, ex_fscanf, 
+                "Unreasonable value for Nfile in header of block `%s' (%d)",bb->basename,bb->Nfile);
+        RAISEIF(bb->nmemb < 0, ex_fscanf, 
+                "Unreasonable value for nmemb in header of block `%s' (%d)",bb->basename,bb->nmemb);
+        RAISEIF(!dtype_isvalid(bb->dtype), ex_fscanf, 
+                "Unreasonable value for dtype in header of block `%s' (%s)",bb->basename,bb->dtype);
         bb->fsize = calloc(bb->Nfile, sizeof(size_t));
         RAISEIF(!bb->fsize,
                 ex_fsize,
@@ -344,6 +354,8 @@ big_block_open(BigBlock * bb, const char * basename)
                     ex_fscanf1,
                     "Failed to readin physical file layout `%s' %d (%s)", bb->basename, fid,
                     strerror(errno));
+            RAISEIF(fid < 0 || fid >= bb->Nfile, ex_fscanf1,
+                    "Non-existent file referenced: `%s' (%d)", bb->basename, fid);
             bb->fsize[fid] = size;
             bb->fchecksum[fid] = cksum;
         }
@@ -763,6 +775,7 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
                 "Failed to read in block `%s' at (%d:%td) (%s)",
                 bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
         fclose(fp);
+        fp = NULL;
 
         /* now translate the data from chunkbuf to mptr */
         _dtype_convert(&array_iter, &chunk_iter, chunk_size * bb->nmemb);
@@ -775,10 +788,10 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 
     free(chunkbuf);
     return 0;
-ex_insuf:
 ex_read:
 ex_seek:
     fclose(fp);
+ex_insuf:
 ex_blockseek:
 ex_open:
 ex_eof:
@@ -910,6 +923,39 @@ dtype_normalize(char * dst, const char * src)
         dst[0] = MACHINE_ENDIANNESS;
     }
     return 0;
+}
+
+/*Check that the passed dtype is valid.
+ * Returns 1 if valid, 0 if invalid*/
+int
+dtype_isvalid(const char * dtype)
+{
+    if(!dtype)
+        return 0;
+    switch(dtype[0]) {
+        case '<':
+        case '>':
+        case '|':
+        case '=':
+            break;
+        default:
+            return 0;
+    }
+    switch(dtype[1]) {
+        case 'S':
+        case 'b':
+        case 'i':
+        case 'f':
+        case 'u':
+        case 'c':
+            break;
+        default:
+            return 0;
+    }
+    int width = atoi(&dtype[2]);
+    if(width > 16 || width <= 0)
+        return 0;
+    return 1;
 }
 
 int
@@ -1287,14 +1333,15 @@ attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
     }
     int nmemb;
     int lname;
-    char dtype[8];
+    char dtype[9]={0};
     char * data;
     char * name;
     while(!feof(fattr)) {
         if(1 != fread(&nmemb, sizeof(int), 1, fattr)) break;
         RAISEIF(
             (1 != fread(&lname, sizeof(int), 1, fattr)) ||
-            (1 != fread(&dtype, 8, 1, fattr)),
+            (1 != fread(&dtype, 8, 1, fattr)) ||
+            (!dtype_isvalid(dtype)),
             ex_fread,
             "Failed to read from file"
                 )
@@ -1311,7 +1358,7 @@ attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
         RAISEIF(0 != attrset_set_attr(attrset, name, data, dtype, nmemb),
             ex_set_attr,
             NULL);
-    } 
+    }
     attrset->dirty = 0;
     fclose(fattr);
     return 0;
@@ -1338,13 +1385,16 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
     }
     fseek(fattr, 0, SEEK_END);
     long size = ftell(fattr);
+    /*ftell may fail*/
+    RAISEIF(size < 0, ex_init, "ftell error: %s",strerror(errno));
     char * buffer = (char*) malloc(size + 1);
+    RAISEIF(!buffer, ex_init, "Could not allocate memory for buffer: %ld bytes",size+1);
     unsigned char * data = (unsigned char * ) malloc(size + 1);
+    RAISEIF(!data, ex_data, "Could not allocate memory for data: %ld bytes",size+1);
     fseek(fattr, 0, SEEK_SET);
     RAISEIF(size != fread(buffer, 1, size, fattr),
             ex_read_file,
             "Failed to read attribute file\n");
-    fclose(fattr);
     buffer[size] = 0;
 
     /* now parse the v2 attr file.*/
@@ -1382,6 +1432,7 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
             ex_set_attr,
             NULL);
     } 
+    fclose(fattr);
     free(data);
     free(buffer);
     attrset->dirty = 0;
@@ -1391,8 +1442,11 @@ ex_read_file:
 ex_parse_attr:
 ex_set_attr:
     attrset->dirty = 0;
-    free(buffer);
     free(data);
+ex_data:
+    free(buffer);
+ex_init:
+    fclose(fattr);
     return -1;
 }
 static int
@@ -1684,20 +1738,31 @@ _big_file_mksubdir_r(const char * pathname, const char * subdir)
 {
     char * subdirname = strdup(subdir);
     char * p;
+    int mkdirret;
 
     char * mydirname;
     for(p = subdirname; *p; p ++) {
         if(*p != '/') continue;
         *p = 0;
         mydirname = _path_join(pathname, subdirname);
-        mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        if(mydirname[0] == '\0'){
+            *p='/';
+            continue;
+        }
+        mkdirret = mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        RAISEIF(mkdirret !=0 && errno != EEXIST,
+            ex_mkdir,
+            "Failed to create directory structure at `%s' (%s)",
+            mydirname,
+            strerror(errno)
+        );
         free(mydirname);
         *p = '/';
     }
     mydirname = _path_join(pathname, subdirname);
-    mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    mkdirret = mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     struct stat buf;
-    RAISEIF(0 != stat(mydirname, &buf),
+    RAISEIF((mkdirret !=0 && errno != EEXIST) || stat(mydirname, &buf),
             ex_mkdir,
             "Failed to create directory structure at `%s' (%s)", 
             mydirname,
@@ -1707,6 +1772,7 @@ _big_file_mksubdir_r(const char * pathname, const char * subdir)
     free(mydirname);
     return 0;
 ex_mkdir:
+    free(subdirname);
     free(mydirname);
     return -1;
 }
