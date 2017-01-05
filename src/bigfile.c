@@ -775,6 +775,7 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
                 "Failed to read in block `%s' at (%d:%td) (%s)",
                 bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
         fclose(fp);
+        fp = NULL;
 
         /* now translate the data from chunkbuf to mptr */
         _dtype_convert(&array_iter, &chunk_iter, chunk_size * bb->nmemb);
@@ -787,10 +788,10 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 
     free(chunkbuf);
     return 0;
-ex_insuf:
 ex_read:
 ex_seek:
     fclose(fp);
+ex_insuf:
 ex_blockseek:
 ex_open:
 ex_eof:
