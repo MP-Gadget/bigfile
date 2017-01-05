@@ -1744,7 +1744,12 @@ _big_file_mksubdir_r(const char * pathname, const char * subdir)
         if(*p != '/') continue;
         *p = 0;
         mydirname = _path_join(pathname, subdirname);
-        mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        RAISEIF(mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH),
+            ex_mkdir,
+            "Failed to create directory structure at `%s' (%s)",
+            mydirname,
+            strerror(errno)
+        );
         free(mydirname);
         *p = '/';
     }
