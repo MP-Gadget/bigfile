@@ -1738,13 +1738,19 @@ _big_file_mksubdir_r(const char * pathname, const char * subdir)
 {
     char * subdirname = strdup(subdir);
     char * p;
+    int mkdirret;
 
     char * mydirname;
     for(p = subdirname; *p; p ++) {
         if(*p != '/') continue;
         *p = 0;
         mydirname = _path_join(pathname, subdirname);
-        RAISEIF(mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH),
+        if(mydirname[0] == '\0'){
+            *p='/';
+            continue;
+        }
+        mkdirret = mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        RAISEIF(mkdirret !=0 && errno != EEXIST,
             ex_mkdir,
             "Failed to create directory structure at `%s' (%s)",
             mydirname,
@@ -1754,8 +1760,9 @@ _big_file_mksubdir_r(const char * pathname, const char * subdir)
         *p = '/';
     }
     mydirname = _path_join(pathname, subdirname);
+    mkdirret = mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     struct stat buf;
-    RAISEIF(mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) || stat(mydirname, &buf),
+    RAISEIF((mkdirret !=0 && errno != EEXIST) || stat(mydirname, &buf),
             ex_mkdir,
             "Failed to create directory structure at `%s' (%s)", 
             mydirname,
