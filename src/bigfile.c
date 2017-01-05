@@ -1749,9 +1749,8 @@ _big_file_mksubdir_r(const char * pathname, const char * subdir)
         *p = '/';
     }
     mydirname = _path_join(pathname, subdirname);
-    mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     struct stat buf;
-    RAISEIF(0 != stat(mydirname, &buf),
+    RAISEIF(mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) || stat(mydirname, &buf),
             ex_mkdir,
             "Failed to create directory structure at `%s' (%s)", 
             mydirname,
