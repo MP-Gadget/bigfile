@@ -178,7 +178,7 @@ ex_stat:
 int big_file_create(BigFile * bf, const char * basename) {
     memset(bf, 0, sizeof(bf[0]));
     bf->basename = strdup(basename);
-    RAISEIF(0 != _big_file_mksubdir_r("", basename),
+    RAISEIF(0 != _big_file_mksubdir_r(basename, ""),
         ex_subdir,
         NULL);
     return 0;
@@ -1745,10 +1745,6 @@ _big_file_mksubdir_r(const char * pathname, const char * subdir)
         if(*p != '/') continue;
         *p = 0;
         mydirname = _path_join(pathname, subdirname);
-        if(mydirname[0] == '\0'){
-            *p='/';
-            continue;
-        }
         mkdirret = mkdir(mydirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
         RAISEIF(mkdirret !=0 && errno != EEXIST,
             ex_mkdir,
