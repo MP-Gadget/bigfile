@@ -1384,8 +1384,12 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
     }
     fseek(fattr, 0, SEEK_END);
     long size = ftell(fattr);
+    /*ftell may fail*/
+    RAISEIF(size < 0, ex_init, "ftell error: %s",strerror(errno));
     char * buffer = (char*) malloc(size + 1);
+    RAISEIF(!buffer, ex_init, "Could not allocate memory for buffer: %ld bytes",size+1);
     unsigned char * data = (unsigned char * ) malloc(size + 1);
+    RAISEIF(!data, ex_data, "Could not allocate memory for data: %ld bytes",size+1);
     fseek(fattr, 0, SEEK_SET);
     RAISEIF(size != fread(buffer, 1, size, fattr),
             ex_read_file,
@@ -1437,8 +1441,10 @@ ex_read_file:
 ex_parse_attr:
 ex_set_attr:
     attrset->dirty = 0;
-    free(buffer);
     free(data);
+ex_data:
+    free(buffer);
+ex_init:
     return -1;
 }
 static int
