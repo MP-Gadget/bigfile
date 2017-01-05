@@ -354,6 +354,8 @@ big_block_open(BigBlock * bb, const char * basename)
                     ex_fscanf1,
                     "Failed to readin physical file layout `%s' %d (%s)", bb->basename, fid,
                     strerror(errno));
+            RAISEIF(fid < 0 || fid >= bb->Nfile, ex_fscanf1,
+                    "Non-existent file referenced: `%s' (%d)", bb->basename, fid);
             bb->fsize[fid] = size;
             bb->fchecksum[fid] = cksum;
         }
