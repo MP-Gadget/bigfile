@@ -14,7 +14,7 @@ env:
 
 
 before_install:
-    - if [ $TRAVIS_BRANCH == coverity_scan -a ${TRAVIS_JOB_NUMBER##*.} == 1 ]; then exit 0; fi
+    - if [ $TRAVIS_BRANCH == coverity_scan -a ${TRAVIS_JOB_NUMBER##*.} != 1 ]; then exit 0; fi
     - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
     - chmod +x miniconda.sh
     - ./miniconda.sh -b -p $HOME/miniconda
