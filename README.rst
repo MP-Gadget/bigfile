@@ -15,9 +15,9 @@ Build status
     :alt: Build Status
     :target: https://travis-ci.org/rainwoodman/bigfile/
 
-.. image:: https://scan.coverity.com/projects/rainwoodman-bigfile
+.. image:: https://scan.coverity.com/projects/11368/badge.svg
     :alt: Coverity Scan Build Status
-    :target: https://scan.coverity.com/projects/11368/badge.svg
+    :target: https://scan.coverity.com/projects/rainwoodman-bigfile
 
 Install
 -------
