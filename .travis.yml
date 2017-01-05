@@ -14,7 +14,7 @@ env:
 
 
 before_install:
-    - test $TRAVIS_BRANCH != coverity_scan -o ${TRAVIS_JOB_NUMBER##*.} = 1 || exit 0
+    - test $TRAVIS_BRANCH == coverity_scan -a ${TRAVIS_JOB_NUMBER##*.} == 1 && exit 0
     - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
     - chmod +x miniconda.sh
     - ./miniconda.sh -b -p $HOME/miniconda
@@ -28,7 +28,7 @@ install:
     - python setup.py install
 
 script:
-    - test $TRAVIS_BRANCH != coverity_scan || exit 0
+    - test $TRAVIS_BRANCH == coverity_scan && exit 0
     - echo "Testing CMAKE build"
     - mkdir build; (cd build; cmake -DCMAKE_INSTALL_PREFIX:PATH=install .. ; make install )
     - echo "Testing Python binding"
@@ -46,12 +46,13 @@ deploy:
       on:
         tags   : true
         condition : ${TRAVIS_JOB_NUMBER##*.} == 1
+
 addons:
   coverity_scan:
     project:
       name: "rainwoodman/bigfile"
       description: "Build submitted via Travis CI"
     notification_email: rainwoodman@gmail.com
-#    build_command_prepend: "./configure; make clean"
-    build_command:   "cd src; make"
+    build_command_prepend: "cd src;"
+    build_command:   "make"
     branch_pattern: coverity_scan
