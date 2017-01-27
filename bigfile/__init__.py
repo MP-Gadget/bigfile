@@ -89,8 +89,19 @@ class BigBlockMPI(BigBlock):
         if self.comm.rank == 0:
             super(BigBlockMPI, self).create(f, blockname, dtype, size, Nfile)
             super(BigBlockMPI, self).close()
+        return self.open(f, blockname)
+
+    def open(self, f, blockname):
         self.comm.barrier()
-        self.open(f, blockname)
+        try:
+            error = True
+            r = super(BigBlockMPI, self).open(f, blockname)
+            error = False
+        finally:
+            error = self.comm.allgather(error)
+        if any(error):
+            raise RuntimeException("open failed on other rank(s)")
+        return r
 
     def close(self):
         self._MPI_close()
