@@ -26,7 +26,7 @@ setup(
     description="python binding of BigFile, a peta scale IO format",
     zip_safe = False,
     package_dir = {'bigfile': 'bigfile'},
-    install_requires=['cython', 'numpy', 'mpi4py'],
+    install_requires=['cython', 'numpy'],
     scripts = ['hdf2bigfile'],
     packages= ['bigfile', 'bigfile.tests'],
     license='BSD-2-Clause',
