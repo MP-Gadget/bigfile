@@ -778,7 +778,8 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         fp = NULL;
 
         /* now translate the data from chunkbuf to mptr */
-        _dtype_convert(&array_iter, &chunk_iter, chunk_size * bb->nmemb);
+        RAISEIF(0 != _dtype_convert(&array_iter, &chunk_iter, chunk_size * bb->nmemb),
+            ex_convert, NULL);
 
         toread -= chunk_size;
         RAISEIF(0 != big_block_seek_rel(bb, ptr, chunk_size),
@@ -792,6 +793,7 @@ ex_read:
 ex_seek:
     fclose(fp);
 ex_insuf:
+ex_convert:
 ex_blockseek:
 ex_open:
 ex_eof:
@@ -849,7 +851,8 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         big_array_iter_init(&chunk_iter, &chunk_array);
 
         /* now translate the data to format in the file*/
-        _dtype_convert(&chunk_iter, &array_iter, chunk_size * bb->nmemb);
+        RAISEIF(0 != _dtype_convert(&chunk_iter, &array_iter, chunk_size * bb->nmemb),
+            ex_convert, NULL);
 
         sysvsum(&bb->fchecksum[ptr->fileid], chunkbuf, chunk_size * felsize);
 
@@ -876,6 +879,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 ex_write:
 ex_seek:
     fclose(fp);
+ex_convert:
 ex_open:
 ex_blockseek:
 ex_eof:
@@ -1101,7 +1105,9 @@ dtype_format(char * buffer, const char * dtype, const void * data, const char * 
     FORMAT1(f4, "%g")
     FORMAT2(c8, "%g+%gI")
     FORMAT2(c16, "%g+%gI")
-    abort();
+    {
+        sprintf(buffer, "<%s>", ndtype);
+    }
 }
 
 /* parse data in dtype to a string in buffer */
@@ -1140,7 +1146,7 @@ dtype_parse(const char * buffer, const char * dtype, void * data, const char * f
     PARSE2(c8, "%f + %f I")
     PARSE2(c16, "%lf + %lf I")
     abort();
-
+    /* FIXME: shall not abort */
     dtype_convert_simple(data, dtype, converted, ndtype, 1);
 
 }
@@ -1157,7 +1163,7 @@ dtype_convert_simple(void * dst, const char * dstdtype, const void * src, const 
     return _dtype_convert(&dst_iter, &src_iter, nmemb);
 }
 
-static void cast(BigArrayIter * dst, BigArrayIter * src, size_t nmemb);
+static int cast(BigArrayIter * dst, BigArrayIter * src, size_t nmemb);
 static void byte_swap(BigArrayIter * array, size_t nmemb);
 int
 _dtype_convert(BigArrayIter * dst, BigArrayIter * src, size_t nmemb)
@@ -1171,7 +1177,11 @@ _dtype_convert(BigArrayIter * dst, BigArrayIter * src, size_t nmemb)
 
     BigArrayIter iter1 = *dst;
     BigArrayIter iter2 = *src;
-    cast(&iter1, &iter2, nmemb);
+
+    if(0 != cast(&iter1, &iter2, nmemb)) {
+        /* cast is not supported */
+        return -1;
+    }
 
     /* match dst to machine endianness */
     if(dst->array->dtype[0] != MACHINE_ENDIANNESS) {
@@ -1222,89 +1232,93 @@ if((0 == strcmp(d1, dst->array->dtype + 1)) && (0 == strcmp(d2, src->array->dtyp
         p1->r = p2->r; p1->i = p2->i; \
         big_array_iter_advance(dst); big_array_iter_advance(src); \
     } \
-    return; \
+    return 0; \
 }
-static void
+static int
 cast(BigArrayIter * dst, BigArrayIter * src, size_t nmemb)
 {
     /* doing cast assuming native byte order */
     /* convert buf2 to buf1, both are native;
      * dtype has no endian-ness prefix
      *   */
-    ptrdiff_t i; \
-    if((dst->contiguous && src->contiguous)
-    && (0 == strcmp(dst->array->dtype + 1, src->array->dtype + 1))) {
-        /* directly copy. This is no casting */
-        memcpy(dst->dataptr, src->dataptr, nmemb * dst->array->strides[dst->array->ndim-1]);
-        dst->dataptr = (char*) dst->dataptr + nmemb * dst->array->strides[dst->array->ndim - 1];
-        src->dataptr = (char*) src->dataptr + nmemb * src->array->strides[src->array->ndim - 1];
-        return;
+    ptrdiff_t i;
+    /* same type, no need for casting. */
+    if (0 == strcmp(dst->array->dtype + 1, src->array->dtype + 1)) {
+        if(dst->contiguous && src->contiguous) {
+            /* directly copy of memory chunks; FIXME: use memmove? */
+            memcpy(dst->dataptr, src->dataptr, nmemb * dst->array->strides[dst->array->ndim-1]);
+            dst->dataptr = (char*) dst->dataptr + nmemb * dst->array->strides[dst->array->ndim - 1];
+            src->dataptr = (char*) src->dataptr + nmemb * src->array->strides[src->array->ndim - 1];
+            return 0;
+        } else {
+            /* copy one by one, discontinuous */
+            size_t elsize = dtype_itemsize(dst->array->dtype);
+            for(i = 0; i < nmemb; i ++) {
+                void * p1 = dst->dataptr;
+                void * p2 = src->dataptr;
+                memcpy(p1, p2, elsize);
+                big_array_iter_advance(dst); big_array_iter_advance(src);
+            }
+            return 0;
+        }
     }
     if(0 == strcmp(dst->array->dtype + 1, "i8")) {
-        CAST("i8", int64_t, "i8", int64_t);
         CAST("i8", int64_t, "i4", int32_t);
         CAST("i8", int64_t, "u4", uint32_t);
         CAST("i8", int64_t, "u8", uint64_t);
         CAST("i8", int64_t, "f8", double);
         CAST("i8", int64_t, "f4", float);
+        CAST("i8", int64_t, "b1", char);
     } else
     if(0 == strcmp(dst->array->dtype + 1, "u8")) {
-        CAST("u8", uint64_t, "u8", uint64_t);
         CAST("u8", uint64_t, "u4", uint32_t);
         CAST("u8", uint64_t, "i4", int32_t);
         CAST("u8", uint64_t, "i8", int64_t);
         CAST("u8", uint64_t, "f8", double);
         CAST("u8", uint64_t, "f4", float);
+        CAST("u8", uint64_t, "b1", char);
     } else
     if(0 == strcmp(dst->array->dtype + 1, "f8")) {
-        CAST("f8", double, "f8", double);
         CAST("f8", double, "f4", float);
         CAST("f8", double, "i4", int32_t);
         CAST("f8", double, "i8", int64_t);
         CAST("f8", double, "u4", uint32_t);
         CAST("f8", double, "u8", uint64_t);
+        CAST("f8", double, "b1", char);
     } else
     if(0 == strcmp(dst->array->dtype + 1, "i4")) {
-        CAST("i4", int32_t, "i4", int32_t);
         CAST("i4", int32_t, "i8", int64_t);
         CAST("i4", int32_t, "u4", uint32_t);
         CAST("i4", int32_t, "u8", uint64_t);
         CAST("i4", int32_t, "f8", double);
         CAST("i4", int32_t, "f4", float);
+        CAST("i4", int32_t, "b1", char);
     } else
     if(0 == strcmp(dst->array->dtype + 1, "u4")) {
-        CAST("u4", uint32_t, "u4", uint32_t);
         CAST("u4", uint32_t, "u8", uint64_t);
         CAST("u4", uint32_t, "i4", int32_t);
         CAST("u4", uint32_t, "i8", int64_t);
         CAST("u4", uint32_t, "f8", double);
         CAST("u4", uint32_t, "f4", float);
+        CAST("u4", uint32_t, "b1", char);
     } else
     if(0 == strcmp(dst->array->dtype + 1, "f4")) {
-        CAST("f4", float, "f4", float);
         CAST("f4", float, "f8", double);
         CAST("f4", float, "i4", int32_t);
         CAST("f4", float, "i8", int64_t);
         CAST("f4", float, "u4", uint32_t);
         CAST("f4", float, "u8", uint64_t);
+        CAST("f4", float, "b1", char);
     } else
     if(0 == strcmp(dst->array->dtype + 1, "c8")) {
-        CAST2("c8", cplx64_t, "c8", cplx64_t);
         CAST2("c8", cplx64_t, "c16", cplx128_t);
     } else
     if(0 == strcmp(dst->array->dtype + 1, "c16")) {
         CAST2("c16", cplx128_t, "c8", cplx64_t);
-        CAST2("c16", cplx128_t, "c16", cplx128_t);
-    } else
-    if(0 == strcmp(dst->array->dtype + 1, "S1")) {
-        CAST("S1", char, "S1", char);
-    } else
-    if(0 == strcmp(dst->array->dtype + 1, "b1")) {
-        CAST("b1", char, "b1", char);
     }
-    /* */
-    fprintf(stderr, "Unsupported conversion from %s to %s\n", src->array->dtype, dst->array->dtype);
-    abort();
+    RAISE(ex, "Unsupported conversion from %s to %s. ", src->array->dtype, dst->array->dtype);
+ex:
+    return -1;
 }
 
 static void
@@ -1609,8 +1623,7 @@ attrset_set_attr(BigAttrSet * attrset, const char * attrname, const void * data,
     RAISEIF(attr->nmemb != nmemb,
             ex_mismatch,
             "attr nmemb mismatch");
-    dtype_convert_simple(attr->data, attr->dtype, data, dtype, attr->nmemb);
-    return 0;
+    return dtype_convert_simple(attr->data, attr->dtype, data, dtype, attr->nmemb);
 
 ex_mismatch:
 ex_add:
@@ -1623,8 +1636,7 @@ attrset_get_attr(BigAttrSet * attrset, const char * attrname, void * data, const
     BigAttr * found = attrset_lookup_attr(attrset, attrname);
     RAISEIF(!found, ex_notfound, "attr not found");
     RAISEIF(found->nmemb != nmemb, ex_mismatch, "attr nmemb mismatch");
-    dtype_convert_simple(data, dtype, found->data, found->dtype, found->nmemb);
-    return 0;
+    return dtype_convert_simple(data, dtype, found->data, found->dtype, found->nmemb);
 
 ex_mismatch:
 ex_notfound:

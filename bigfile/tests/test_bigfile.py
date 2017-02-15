@@ -3,11 +3,12 @@ from bigfile import BigBlock
 from bigfile import BigFileMPI
 from bigfile import BigData
 from bigfile import BigFileClosedError
+from bigfile import BigFileError
 
 import tempfile
 import numpy
 import shutil
-from numpy.testing import assert_equal
+from numpy.testing import assert_equal, assert_raises
 
 dtypes = [
     '?', 
@@ -23,9 +24,9 @@ dtypes = [
     ('complex128', 2), 
 ]
 
-from mpi4py_test import MPIWorld, MPITest
+from mpi4py_test import MPITest
 
-@MPIWorld(NTask=1, required=1)
+@MPITest([1])
 def test_create(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -72,7 +73,7 @@ def test_create(comm):
 
     shutil.rmtree(fname)
 
-@MPIWorld(NTask=1, required=1)
+@MPITest([1])
 def test_fileattr(comm):
     import os.path
     fname = tempfile.mkdtemp()
@@ -87,7 +88,16 @@ def test_fileattr(comm):
 
     shutil.rmtree(fname)
 
-@MPIWorld(NTask=1, required=1)
+@MPITest([1])
+def test_casts(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+
+    with x.create('block', Nfile=1, dtype='f8', size=128) as b:
+        assert_raises(BigFileError, b.write, 0, numpy.array('aaaaaa'))
+        b.write(0, numpy.array(True, dtype='?'))
+
+@MPITest([1])
 def test_bigdata(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -126,7 +136,7 @@ def test_bigdata(comm):
 
     shutil.rmtree(fname)
 
-@MPIWorld(NTask=1, required=1)
+@MPITest([1])
 def test_closed(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -138,7 +148,7 @@ def test_closed(comm):
     except BigFileClosedError:
         pass
 
-@MPIWorld(NTask=1, required=1)
+@MPITest([1])
 def test_attr(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -172,7 +182,7 @@ def test_attr(comm):
 
     shutil.rmtree(fname)
 
-@MPIWorld(NTask=[1, 2, 3, 4], required=1)
+@MPITest([1, 4])
 def test_mpi_create(comm):
     if comm.rank == 0:
         fname = tempfile.mkdtemp()
@@ -221,7 +231,7 @@ def test_mpi_create(comm):
     if comm.rank == 0:
         shutil.rmtree(fname)
 
-@MPIWorld(NTask=[1, 2, 3, 4], required=1)
+@MPITest([1, 4])
 def test_mpi_attr(comm):
     if comm.rank == 0:
         fname = tempfile.mkdtemp()

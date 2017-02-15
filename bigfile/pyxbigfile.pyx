@@ -199,19 +199,16 @@ cdef class BigFileAttrSet:
 
         if isstr(value): 
             value = value.encode()
-        cdef numpy.ndarray array = numpy.atleast_1d(value).ravel()
-        if array.dtype.char == 'S':
-            array = array.view(dtype='S1')
+        cdef numpy.ndarray buf = numpy.atleast_1d(value).ravel()
+        if buf.dtype.char == 'S':
+            buf = buf.view(dtype='S1')
             dtype = 'S1'.encode()
         else:
-            dtype = array.dtype.base.str.encode()
-
-        if not array.dtype.char in 'bdfSilILFD?':
-            raise TypeError("the dtype of attr (%s) is unsupported by bigfile" % array.dtype.char)
-
-        if(0 != big_block_set_attr(&self.bb.bb, name, array.data, 
+            dtype = buf.dtype.base.str.encode()
+        print(name, value, dtype)
+        if(0 != big_block_set_attr(&self.bb.bb, name, buf.data, 
                 dtype,
-                array.shape[0])):
+                buf.shape[0])):
             raise BigFileError();
 
     def __repr__(self):
@@ -312,9 +309,6 @@ cdef class BigBlock:
         self._check_closed()
         cdef CBigArray array
         cdef CBigBlockPtr ptr
-
-        if not buf.dtype.char in 'bdfSilILFD?':
-            raise TypeError("the dtype of buf (%s) is unsupported by bigfile" % buf.dtype.str)
 
         big_array_init(&array, buf.data, buf.dtype.str.encode(), 
                 buf.ndim, 
