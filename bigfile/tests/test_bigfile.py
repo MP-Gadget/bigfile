@@ -98,6 +98,18 @@ def test_casts(comm):
         b.write(0, numpy.array(True, dtype='?'))
 
 @MPITest([1])
+def test_passby(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+
+    # half floats are pass-through types, no casting is supported
+    data = numpy.array([3.0, 5.0], dtype='f2')
+    with x.create('block', Nfile=1, dtype='f2', size=128) as b:
+        b.write(0, data)
+        assert_equal(b[:2], data)
+        assert_raises(BigFileError, b.write, 0, numpy.array((30, 20.)))
+
+@MPITest([1])
 def test_bigdata(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
