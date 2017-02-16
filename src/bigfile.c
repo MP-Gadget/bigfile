@@ -1223,7 +1223,7 @@ if((0 == strcmp(d1, dst->array->dtype + 1)) && (0 == strcmp(d2, src->array->dtyp
         * p1 = * p2; \
         big_array_iter_advance(dst); big_array_iter_advance(src); \
     } \
-    return; \
+    return 0; \
 }
 #define CAST2(d1, t1, d2, t2) \
 if((0 == strcmp(d1, dst->array->dtype + 1)) && (0 == strcmp(d2, src->array->dtype + 1))) { \
