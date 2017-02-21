@@ -205,7 +205,7 @@ cdef class BigFileAttrSet:
             dtype = 'S1'.encode()
         else:
             dtype = buf.dtype.base.str.encode()
-        print(name, value, dtype)
+
         if(0 != big_block_set_attr(&self.bb.bb, name, buf.data, 
                 dtype,
                 buf.shape[0])):
