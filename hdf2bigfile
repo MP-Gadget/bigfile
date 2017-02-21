@@ -15,8 +15,9 @@ Simple Columns are converted as BigBlock.
 
 Shape are converted to ndarray.shape attribute.
 
-All converted arrays has nmemb = 1. (bigfile do not distinguish
-scalar / 1-vector).
+Vector columns in a DataSet is converted to 2d tables (nmemb >= 1)
+Multidimensional arrays are flattened, and the orginal shape is
+saved as ndarray.shape attribute.
 
 Strides are lost: arrays are always written as C-contiguous.
 
@@ -27,56 +28,70 @@ Currently, include and exclude filters do not work.
 
 ap.add_argument("hdf5")
 ap.add_argument("bigfile")
-ap.add_argument("--verify", action='store_true', default=False)
+ap.add_argument("--verify", action='store_true', default=True)
 ap.add_argument("--include", action="append")
 ap.add_argument("--exclude", action="append")
-
-def traverse(hobj, operation, prefix=""):
-    if hasattr(hobj, 'keys'):
-        for k in hobj.keys():
-            path = prefix + '/' + k
-            traverse(hobj[k], operation, path)
-
-    if hasattr(hobj, 'dtype'):
-        if hobj.dtype.names:
-            for field in hobj.dtype.names:
-                path = prefix + '/' + field + '/'
-                traverse(hobj[field], operation, path)
-        else:
-            operation(hobj, prefix)
 
 def main(ns):
 
     hin = h5py.File(ns.hdf5, mode='r')
     bout = bigfile.BigFile(ns.bigfile, create=True)
 
-    def create(hobj, path):
-        print("Copying %s as %s" % (str(hobj), path))
-        if len(hobj.shape) > 2:
-            raise TypeError("bigfile cannot handle tensor dtype : %s" % str(hobj.dtype))
-        if len(hobj.shape) == 1:
-            hobj = hobj[:, None]
-        size, Nmemb = hobj.shape
-        bb = bout.create(path, (hobj.dtype, Nmemb), size=size)
-        bb.attrs['ndarray.shape'] = hobj.shape
-        bb.write(0, hobj[:].ravel().copy())
+    convert(hin, bout, ns.verify)
+
+    bout.close()
+    hin.close()
+
+def convert(hin, bout, verify=False):
+    def traverse(hobj, operation, prefix="", dtype=None):
+        if hasattr(hobj, 'keys'):
+            # this is a datagroup
+            for k in hobj.keys():
+                path = prefix + '/' + k
+                traverse(hobj[k], operation, path)
+
+        if hasattr(hobj, 'dtype'):
+            # this is a dataset
+            if hobj.dtype.names:
+                for field in hobj.dtype.names:
+                    path = prefix + '/' + field + '/'
+                    traverse(hobj[field], operation, path, hobj.dtype[field])
+            else:
+                if dtype is None: dtype = hobj.dtype
+                operation(hobj, prefix, dtype)
+
+    def create(hobj, path, dtype):
+        print("Copying %s as %s %s" % (str(hobj), path, dtype))
+        if len(dtype.shape) > 1:
+            raise ValueError("vector types unsupported")
+        isvector = len(dtype.shape) != 0
+        if not isvector:
+            size = hobj.size
+        else:
+            size, Nmemb = hobj.shape
+
+        bb = bout.create(path, dtype, size=size)
+        bb.write(0, hobj[:].ravel())
+
+        if not isvector:
+            bb.attrs['ndarray.shape'] = hobj.shape
+        print(bb)
+        print(bb.attrs)
 
     traverse(hin, create)
 
-    bout.close()
-
-    if ns.verify:
-        bout = bigfile.BigFile(ns.bigfile, create=False)
-        def verify(hobj, path):
+    if verify:
+        bout2 = bigfile.BigFile(ns.bigfile, create=False)
+        def verify(hobj, path, dtype):
             print("Verifying %s against %s" % (str(hobj), path))
             bb = bout[path]
             assert (hobj.dtype == bb.dtype)
             assert (hobj.shape == bb.attrs['ndarray.shape']).all()
             assert (hobj[:].flat == bb[:]).all()
         traverse(hin, verify)
-        bout.close()
+        bout2.close()
 
-    hin.close()
+
 if __name__ == "__main__" :
     ns = ap.parse_args()
 
