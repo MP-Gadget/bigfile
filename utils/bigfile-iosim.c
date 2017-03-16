@@ -46,10 +46,16 @@ typedef struct log {
     double close;
 } log;
 
+int nmemb = 1;
+size_t BytesPerBlobFile = 1024 * 1024 * 1024;
+int Nwriter = 0;
+int aggregated = 0;
+size_t size = 1024;
+int mode = MODE_CREATE;
+int purge = 0;
+
 static void
-iosim(char * filename, int mode,
-int BytesPerBlobFile, int Nwriter, int nmemb, size_t size,
-int aggregated)
+iosim(char * filename)
 {
     size_t elsize = 8;
     size_t start;
@@ -195,7 +201,7 @@ int aggregated)
 
     log * times = malloc(sizeof(log) * NTask);
 
-    MPI_Gather(&trank, 1, MPI_DOUBLE, times, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gather(&trank, sizeof(trank), MPI_BYTE, times, sizeof(trank), MPI_BYTE, 0, MPI_COMM_WORLD);
 
     if (ThisTask == 0){
         char timelog[4096];
@@ -205,7 +211,8 @@ int aggregated)
             info("iosim.c: Couldn't open file %s for writting!\n", timelog);
         }
         else{
-            fprintf(fp, "# mode %d Nfile %d bytesperblob %td ranks %d writers %d items %td nmemb %d\n",
+            fprintf(fp, "# mode\tNfile\tbytesperblob\tranks\twriters\titems\tnmemb\n"
+                        "%d\t%d\t%td\t%d\t%d\t%td\t%d\n",
                          mode, Nfile, BytesPerBlobFile, NTask, Nwriter, size, nmemb);
 
             fprintf(fp, "# Task\tTcreate\t\tTopen\t\tTwrite\t\tTread\t\tTclose\n");
@@ -219,23 +226,24 @@ int aggregated)
     free(times);
 }
 
-char * getoptstr = "hb:n:s:w:p:m:dA";
+char * getoptstr = "hb:n:s:w:m:Ap";
 static void 
 usage() 
 {
     if(ThisTask != 0) return;
-    printf("usage: iosim %s command filename \n", getoptstr);
+    printf("usage: bigfile-iosim [-%s] command filename \n", getoptstr);
 
-    printf("command : create / update / read \n"
+    printf("  command : create / update / read \n"
            " -A : Force Aggreated Mode \n"
            " -b N : set number of bytes per blob file to N\n"
-           " -n N : set number of writer subcommunicators to N\n"
+           " -n N : set number of writer subcommunicators to N; 0 for number of MPI ranks\n"
            " -s N : set number of rows in the block to N (for create)\n"
            " -w N : set width / nmemb of a block to N (for create)\n"
            " -p : purge the block afterwards \n "
            );
 
-    printf("Defaults: -b %ld -n NTask -s 1024 -w 1 -p <dir> \n", 1024L * 1024 * 1024);
+    printf("Defaults: -b %ld -n %d -s %d -w %d\n", 
+            BytesPerBlobFile, Nwriter, size, nmemb);
 }
 
 
@@ -247,15 +255,7 @@ int main(int argc, char * argv[]) {
     
     int i;
     int ch;
-    int nmemb = 1;
-    size_t BytesPerBlobFile = 1024 * 1024 * 1024;
-    int Nwriter = NTask;
-    int aggregated = 0;
-    size_t size = 1024;
     char * filename = alloca(1500);
-    char * postfix = alloca(1500);
-    int mode = MODE_CREATE;
-    int purge = 0;
     
     while(-1 != (ch = getopt(argc, argv, getoptstr))) {
         switch(ch) {
@@ -264,20 +264,6 @@ int main(int argc, char * argv[]) {
                 break;
             case 'p':
                 purge = 1;
-                break;
-            case 'm':
-                if(0 == strcmp(optarg, "read")) {
-                    mode = MODE_READ;
-                } else
-                if(0 == strcmp(optarg, "create")) {
-                    mode = MODE_CREATE;
-                } else
-                if(0 == strcmp(optarg, "update")) {
-                    mode = MODE_UPDATE;
-                } else {
-                    usage();
-                    goto byebye;
-                }
                 break;
             case 'w':
                 if(1 != sscanf(optarg, "%d", &nmemb)) {
@@ -314,18 +300,24 @@ int main(int argc, char * argv[]) {
         goto byebye;
     }
 
-//+++++++++++++++++ Filename and checks of input parameters +++++++++++++++++
+    if(0 == strcmp(argv[optind], "read")) { mode = MODE_READ; } else
+    if(0 == strcmp(argv[optind], "create")) { mode = MODE_CREATE; } else
+    if(0 == strcmp(argv[optind], "update")) { mode = MODE_UPDATE; }
+    else { usage(); goto byebye; }
+
+    optind++;
+
     sprintf(filename, "%s", argv[optind]);
+
     if (Nwriter > NTask) {
-        info("\n\n ############## CAUTION: you chose %d ranks and %d writers! ##############\n"
+        info("############## CAUTION: you chose %d ranks and %d writers! ##############\n"
              " #  If you want %d writers, allocate at least %d ranks with <mpirun -n %d> #\n"
-             " ################### Can only use %d writers instead! ###################\n\n",
+             " ################### Can only use %d writers instead! ###################\n",
              NTask, Nwriter, Nwriter, Nwriter, Nwriter, NTask);
         Nwriter = NTask;
     }
 
-
-    iosim(filename, mode, BytesPerBlobFile, Nwriter, nmemb, size, aggregated);
+    iosim(filename);
 
     if (purge) {
         if(ThisTask == 0) {
