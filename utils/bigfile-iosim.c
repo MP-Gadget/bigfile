@@ -15,14 +15,6 @@ int ThisTask;
 int NTask;
 
 static void 
-usage() 
-{
-    if(ThisTask != 0) return;
-    printf("usage: iosim [-A (to use aggregated IO)] [-N nfiles] [-n numwriters] [-s items] [-w nmemb] [-p prefix] [-m (create|update|read)] [-d (to delete fakedata afterwards)] filename\n");
-    printf("Defaults: -N 1 -n NTask -s 1 -w 1 -p <dir> -m create \n");
-}
-
-static void 
 info(char * fmt, ...) {
 
     static double t0 = -1.0;
@@ -60,20 +52,9 @@ int BytesPerBlobFile, int Nwriter, int nmemb, size_t size,
 int aggregated)
 {
     size_t elsize = 8;
-    size_t localoffset = size * ThisTask / NTask;
-    size_t localsize = size * (ThisTask + 1) / NTask - localoffset;
-    size_t Nfile = (size * nmemb * elsize + BytesPerBlobFile - 1)/ BytesPerBlobFile;
-    info("Writing to `%s`\n", filename);
-    info("Physical Files %d\n", Nfile);
-    info("Ranks %d\n", NTask);
-    info("Writers %d\n", Nwriter);
-    info("Aggregated %d\n", aggregated);
-    info("LocalBytes %td\n", localsize * 8);
-    info("LocalSize %td\n", localsize);
-    info("mode %d\n", mode);
-    info("Nmemb %d\n", nmemb);
-    info("Size %td\n", size);
-
+    size_t start;
+    size_t localsize;
+    size_t Nfile;
     
     if(aggregated) {
         /* Use a large enough number to force aggregated IO */
@@ -100,6 +81,7 @@ int aggregated)
 
 
     if(mode == MODE_CREATE) {
+        Nfile = (size * nmemb * elsize + BytesPerBlobFile - 1)/ BytesPerBlobFile;
         info("Creating BigFile\n");
         t0 = MPI_Wtime();
         big_file_mpi_create(&bf, filename, MPI_COMM_WORLD);
@@ -127,31 +109,36 @@ int aggregated)
         t1 = MPI_Wtime();
         trank.open += t1 - t0;
         info("Opened BigBlock\n");
-        if(bb.size != size) {
-            info("Size mismatched, overriding size = %td\n", bb.size);
-            size = bb.size;
-            localoffset = size * ThisTask / NTask;
-            localsize = size * (ThisTask + 1) / NTask - localoffset;
-        }
-        if(bb.nmemb != nmemb) {
-            info("Size mismatched, overriding nmemb = %d\n", bb.nmemb);
-            nmemb = bb.nmemb;
-        }
-        if(bb.Nfile != Nfile) {
-            info("Nfile mismatched, overriding Nfile = %d\n", bb.Nfile );
-            Nfile = bb.Nfile;
-        }
+        size = bb.size;
+        nmemb = bb.nmemb;
+        Nfile = bb.Nfile;
     }
 
-    fakedata = malloc(8 * localsize * nmemb);
+    start = size * ThisTask / NTask;
+    localsize = size * (ThisTask + 1) / NTask - start;
+
+    info("Writing to `%s`\n", filename);
+    info("mode %d\n", mode);
+    info("nmemb %d\n", nmemb);
+    info("Size %td\n", size);
+    info("NBlobFiles %td\n", Nfile);
+    info("BytesPerBlob %td\n", Nfile);
+    info("Ranks %d\n", NTask);
+    info("Writers %d\n", Nwriter);
+    info("Aggregated %d\n", aggregated);
+    info("LocalBytes %td\n", localsize * elsize * nmemb);
+    info("LocalSize %td\n", localsize);
+
+    fakedata = malloc(elsize * localsize * nmemb);
     big_array_init(&array, fakedata, "i8", 2, (size_t[]){localsize, nmemb}, NULL);
+
 
     if(mode == MODE_CREATE || mode == MODE_UPDATE) {
         info("Initializing FakeData\n");
         for(i = 0; i < localsize; i ++) {
             int j;
             for(j = 0; j < nmemb; j ++) {
-                fakedata[i * nmemb + j] = localoffset + i;
+                fakedata[i * nmemb + j] = start + i;
             }
         }
         info("Initialized FakeData\n");
@@ -178,7 +165,7 @@ int aggregated)
             int j;
             for(j = 0; j < nmemb; j ++) {
                 //printf("%lX ", fakedata[i * nmemb + j]);
-                if (fakedata[i * nmemb + j] != localoffset + i) {
+                if (fakedata[i * nmemb + j] != start + i) {
                     info("data is corrupted either due to reading or writing\n");
                     abort();
 
@@ -218,8 +205,8 @@ int aggregated)
             info("iosim.c: Couldn't open file %s for writting!\n", timelog);
         }
         else{
-            fprintf(fp, "# mode %d bytesperblob %td ranks %d writers %d items %td nmemb %d\n",
-                         mode, BytesPerBlobFile, NTask, Nwriter, size, nmemb);
+            fprintf(fp, "# mode %d Nfile %d bytesperblob %td ranks %d writers %d items %td nmemb %d\n",
+                         mode, Nfile, BytesPerBlobFile, NTask, Nwriter, size, nmemb);
 
             fprintf(fp, "# Task\tTcreate\t\tTopen\t\tTwrite\t\tTread\t\tTclose\n");
             for (i=0; i<NTask; i++) {
@@ -231,6 +218,26 @@ int aggregated)
     }
     free(times);
 }
+
+char * getoptstr = "hb:n:s:w:p:m:dA";
+static void 
+usage() 
+{
+    if(ThisTask != 0) return;
+    printf("usage: iosim %s command filename \n", getoptstr);
+
+    printf("command : create / update / read \n"
+           " -A : Force Aggreated Mode \n"
+           " -b N : set number of bytes per blob file to N\n"
+           " -n N : set number of writer subcommunicators to N\n"
+           " -s N : set number of rows in the block to N (for create)\n"
+           " -w N : set width / nmemb of a block to N (for create)\n"
+           " -p : purge the block afterwards \n "
+           );
+
+    printf("Defaults: -b %ld -n NTask -s 1024 -w 1 -p <dir> \n", 1024L * 1024 * 1024);
+}
+
 
 int main(int argc, char * argv[]) {
     MPI_Init(&argc, &argv);
@@ -246,21 +253,16 @@ int main(int argc, char * argv[]) {
     int aggregated = 0;
     size_t size = 1024;
     char * filename = alloca(1500);
-    char * prefix = "";
     char * postfix = alloca(1500);
     int mode = MODE_CREATE;
     int purge = 0;
-    char * buffer = alloca(1500);
-    //+++++++++++++++++ Timelog +++++++++++++++++
-    char * timelog = alloca(1000);
-    FILE *F;
-
-    while(-1 != (ch = getopt(argc, argv, "hb:n:s:w:p:m:dA"))) {
+    
+    while(-1 != (ch = getopt(argc, argv, getoptstr))) {
         switch(ch) {
             case 'A':
                 aggregated = 1;
                 break;
-            case 'd':
+            case 'p':
                 purge = 1;
                 break;
             case 'm':
@@ -273,13 +275,6 @@ int main(int argc, char * argv[]) {
                 if(0 == strcmp(optarg, "update")) {
                     mode = MODE_UPDATE;
                 } else {
-                    usage();
-                    goto byebye;
-                }
-                break;
-            case 'p':
-                prefix = optarg;
-                if( prefix[0] == '-') {
                     usage();
                     goto byebye;
                 }
@@ -320,7 +315,7 @@ int main(int argc, char * argv[]) {
     }
 
 //+++++++++++++++++ Filename and checks of input parameters +++++++++++++++++
-    sprintf(filename, "%s%s", prefix, argv[optind]);
+    sprintf(filename, "%s", argv[optind]);
     if (Nwriter > NTask) {
         info("\n\n ############## CAUTION: you chose %d ranks and %d writers! ##############\n"
              " #  If you want %d writers, allocate at least %d ranks with <mpirun -n %d> #\n"
@@ -334,6 +329,7 @@ int main(int argc, char * argv[]) {
 
     if (purge) {
         if(ThisTask == 0) {
+            char buffer[1500];
             sprintf(buffer, "rm -rf %s/TestBlock", filename);
             system(buffer);
         }
