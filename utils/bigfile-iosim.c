@@ -18,7 +18,7 @@ static void
 usage() 
 {
     if(ThisTask != 0) return;
-    printf("usage: iosim [-A (to use aggregated IO)] [-N nfiles] [-n numwriters] [-s items] [-w nmemb] [-p path] [-m (create|update|read)] [-d (to delete fakedata afterwards)] filename\n");
+    printf("usage: iosim [-A (to use aggregated IO)] [-N nfiles] [-n numwriters] [-s items] [-w nmemb] [-p prefix] [-m (create|update|read)] [-d (to delete fakedata afterwards)] filename\n");
     printf("Defaults: -N 1 -n NTask -s 1 -w 1 -p <dir> -m create \n");
 }
 
@@ -46,7 +46,7 @@ info(char * fmt, ...) {
 #define MODE_READ   1
 #define MODE_UPDATE 2
 
-typedef struct log{
+typedef struct log {
     double create;
     double open;
     double write;
@@ -55,11 +55,14 @@ typedef struct log{
 } log;
 
 static void
-sim(int Nfile, int aggregated, int Nwriter, size_t size, int nmemb, char * filename, log * times, int mode)
+iosim(char * filename, int mode,
+int BytesPerBlobFile, int Nwriter, int nmemb, size_t size,
+int aggregated)
 {
+    size_t elsize = 8;
     size_t localoffset = size * ThisTask / NTask;
     size_t localsize = size * (ThisTask + 1) / NTask - localoffset;
-
+    size_t Nfile = (size * nmemb * elsize + BytesPerBlobFile - 1)/ BytesPerBlobFile;
     info("Writing to `%s`\n", filename);
     info("Physical Files %d\n", Nfile);
     info("Ranks %d\n", NTask);
@@ -67,14 +70,16 @@ sim(int Nfile, int aggregated, int Nwriter, size_t size, int nmemb, char * filen
     info("Aggregated %d\n", aggregated);
     info("LocalBytes %td\n", localsize * 8);
     info("LocalSize %td\n", localsize);
+    info("mode %d\n", mode);
     info("Nmemb %d\n", nmemb);
     info("Size %td\n", size);
 
     
     if(aggregated) {
-        /* Use a large enough number to disable aggregated IO */
+        /* Use a large enough number to force aggregated IO */
         big_file_mpi_set_aggregated_threshold(size * nmemb * 8);
     } else {
+        /* Use 0 to force no aggregated IO */
         big_file_mpi_set_aggregated_threshold(0);
     }
     BigFile bf = {0};
@@ -198,9 +203,33 @@ sim(int Nfile, int aggregated, int Nwriter, size_t size, int nmemb, char * filen
     trank.close += t1 - t0;
     info("Closed BigFile\n");
 
-    MPI_Gather(&trank, nel_trank, MPI_DOUBLE, times, nel_trank, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     free(fakedata);
+
+    log * times = malloc(sizeof(log) * NTask);
+
+    MPI_Gather(&trank, 1, MPI_DOUBLE, times, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    if (ThisTask == 0){
+        char timelog[4096];
+        sprintf(timelog, "%s/Timelog", filename);
+        FILE * fp = fopen(timelog, "a+");
+        if (!fp){
+            info("iosim.c: Couldn't open file %s for writting!\n", timelog);
+        }
+        else{
+            fprintf(fp, "# mode %d bytesperblob %td ranks %d writers %d items %td nmemb %d\n",
+                         mode, BytesPerBlobFile, NTask, Nwriter, size, nmemb);
+
+            fprintf(fp, "# Task\tTcreate\t\tTopen\t\tTwrite\t\tTread\t\tTclose\n");
+            for (i=0; i<NTask; i++) {
+                fprintf(fp, "%d\t%f\t%f\t%f\t%f\t%f\n",
+                    i, times[i].create, times[i].open, times[i].write, times[i].read, times[i].close);
+            }
+        }
+        fclose(fp);
+    }
+    free(times);
 }
 
 int main(int argc, char * argv[]) {
@@ -212,29 +241,27 @@ int main(int argc, char * argv[]) {
     int i;
     int ch;
     int nmemb = 1;
-    int Nfile = 1;
+    size_t BytesPerBlobFile = 1024 * 1024 * 1024;
     int Nwriter = NTask;
     int aggregated = 0;
     size_t size = 1024;
     char * filename = alloca(1500);
-    char * path = "";
+    char * prefix = "";
     char * postfix = alloca(1500);
     int mode = MODE_CREATE;
-    int delfiles = 0;
+    int purge = 0;
     char * buffer = alloca(1500);
     //+++++++++++++++++ Timelog +++++++++++++++++
     char * timelog = alloca(1000);
     FILE *F;
 
-    log * times = malloc(sizeof(log) * NTask);
-
-    while(-1 != (ch = getopt(argc, argv, "hN:n:s:w:p:m:dA"))) {
+    while(-1 != (ch = getopt(argc, argv, "hb:n:s:w:p:m:dA"))) {
         switch(ch) {
             case 'A':
                 aggregated = 1;
                 break;
             case 'd':
-                delfiles = 1;
+                purge = 1;
                 break;
             case 'm':
                 if(0 == strcmp(optarg, "read")) {
@@ -251,8 +278,8 @@ int main(int argc, char * argv[]) {
                 }
                 break;
             case 'p':
-                path = optarg;
-                if( path[0] == '-') {
+                prefix = optarg;
+                if( prefix[0] == '-') {
                     usage();
                     goto byebye;
                 }
@@ -263,8 +290,8 @@ int main(int argc, char * argv[]) {
                     goto byebye;
                 }
                 break;
-            case 'N':
-                if(1 != sscanf(optarg, "%d", &Nfile)) {
+            case 'b':
+                if(1 != sscanf(optarg, "%td", &BytesPerBlobFile)) {
                     usage();
                     goto byebye;
                 }
@@ -293,7 +320,7 @@ int main(int argc, char * argv[]) {
     }
 
 //+++++++++++++++++ Filename and checks of input parameters +++++++++++++++++
-    sprintf(filename, "%s%s", path, argv[optind]);
+    sprintf(filename, "%s%s", prefix, argv[optind]);
     if (Nwriter > NTask) {
         info("\n\n ############## CAUTION: you chose %d ranks and %d writers! ##############\n"
              " #  If you want %d writers, allocate at least %d ranks with <mpirun -n %d> #\n"
@@ -302,37 +329,17 @@ int main(int argc, char * argv[]) {
         Nwriter = NTask;
     }
 
-//+++++++++++++++++ Starting Simulation +++++++++++++++++
-    sim(Nfile, aggregated, Nwriter, size, nmemb, filename, times, mode);
-//+++++++++++++++++ Deleting files if flag -d set +++++++++++++++++
-    if (delfiles) {
+
+    iosim(filename, mode, BytesPerBlobFile, Nwriter, nmemb, size, aggregated);
+
+    if (purge) {
         if(ThisTask == 0) {
             sprintf(buffer, "rm -rf %s/TestBlock", filename);
             system(buffer);
         }
     }
 //+++++++++++++++++ Writing Time Log +++++++++++++++++
-    sprintf(timelog, "%s/Timelog", filename);
-    if (ThisTask == 0){
-        F = fopen(timelog, "a+");
-        if (!F){
-            info("iosim.c: Couldn't open file %s for writting!\n", timelog);
-        }
-        else{
-            fprintf(F, "# files %d ranks %d writers %d items %td nmemb %d\n",
-                         Nfile, NTask, Nwriter, size, nmemb);
-
-            fprintf(F, "# Task\tTcreate\t\tTopen\t\tTwrite\t\tTread\t\tTclose\n");
-            for (i=0; i<NTask; i++) {
-                fprintf(F, "%d\t%f\t%f\t%f\t%f\t%f\n",
-                    i, times[i].create, times[i].open, times[i].write, times[i].read, times[i].close);
-            }
-        }
-        fclose(F);
-    }
-
 byebye:
-    free(times);
     MPI_Finalize();
     return 0;
 }
