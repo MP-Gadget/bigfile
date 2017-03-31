@@ -32,7 +32,7 @@ script:
     - echo "Testing CMAKE build"
     - mkdir build; (cd build; cmake -DCMAKE_INSTALL_PREFIX:PATH=install .. ; make install )
     - echo "Testing Python binding"
-    - pip install mpi4py_test
+    - pip install runtests
     - python ./runtests.py --mpirun
     - bash check_tag.sh bigfile/version.py
 
