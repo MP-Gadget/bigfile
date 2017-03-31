@@ -24,7 +24,7 @@ dtypes = [
     ('complex128', 2), 
 ]
 
-from mpi4py_test import MPITest
+from runtests.mpi import MPITest
 
 @MPITest([1])
 def test_create(comm):

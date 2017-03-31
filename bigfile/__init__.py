@@ -254,8 +254,3 @@ class BigData:
         else:
             raise TypeError('Expecting a slice or a scalar, got a `%s`' %
                     str(type(sl)))
-
-
-from numpy.testing import Tester
-test = Tester().test
-bench = Tester().bench
