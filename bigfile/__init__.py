@@ -247,7 +247,7 @@ class Dataset:
             return self.blocks[sl]
         elif isstrlist(sl):
             assert all([(col in self.blocks) for col in sl])
-            return Dataset(self.file, sl)
+            return type(self)(self.file, sl)
         elif numpy.isscalar(sl):
             sl = slice(sl, sl + 1)
             return self[sl][0]
@@ -259,8 +259,21 @@ class Dataset:
 BigFileError = Error
 BigFileClosedError = FileClosedError
 BigBlockClosedError = ColumnClosedError
-BigFile = File
+import warnings
+
+def _make_alias(name, origin):
+    def __init__(self, *args, **kwargs):
+        warnings.warn('%s deprecated, use %s instead' % (name, origin), DeprecationWarning)
+        origin.__init__(self, *args, **kwargs)
+
+    newtype = type(name, (origin,), {
+        '__init__' : __init__})
+
+    return newtype
+
+BigFile = _make_alias("BigFile", File)
+BigFileMPI = _make_alias("BigFileMPI", FileMPI)
+BigData = _make_alias("BigData", Dataset)
+
 BigBlock = Column
-BigFileMPI = FileMPI
 BigBlockMPI = ColumnMPI
-BigData = Dataset
