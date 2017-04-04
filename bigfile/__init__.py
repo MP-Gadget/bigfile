@@ -1,8 +1,8 @@
 from .version import __version__
 
-from .pyxbigfile import BigFileError, BigFileClosedError, BigBlockClosedError
-from .pyxbigfile import BigBlock as BigBlockBase
-from .pyxbigfile import BigFile as BigFileLowLevel
+from .pyxbigfile import Error, FileClosedError, ColumnClosedError
+from .pyxbigfile import ColumnLowLevelAPI
+from .pyxbigfile import FileLowLevelAPI
 from .pyxbigfile import set_buffer_size
 
 import os
@@ -21,15 +21,15 @@ def isstrlist(s):
         return False
     return all([ isstr(ss) for ss in s])
 
-class BigBlock(BigBlockBase):
+class Column(ColumnLowLevelAPI):
     def flush(self):
         self._flush()
     def close(self):
         self._close()
 
-class BigFileBase(BigFileLowLevel):
+class FileBase(FileLowLevelAPI):
     def __init__(self, filename, create=False):
-        BigFileLowLevel.__init__(self, filename, create)
+        FileLowLevelAPI.__init__(self, filename, create)
         self._blocks = []
 
     def __enter__(self):
@@ -51,10 +51,10 @@ class BigFileBase(BigFileLowLevel):
         return self.open(key)
 
 
-class BigFile(BigFileBase):
+class File(FileBase):
 
     def __init__(self, filename, create=False):
-        BigFileBase.__init__(self, filename, create)
+        FileBase.__init__(self, filename, create)
         del self._blocks
 
     @property
@@ -66,35 +66,35 @@ class BigFile(BigFileBase):
             return self._blocks
 
     def open(self, blockname):
-        block = BigBlock()
+        block = Column()
         block.open(self, blockname)
         return block
 
     def create(self, blockname, dtype=None, size=None, Nfile=1):
-        block = BigBlock()
+        block = Column()
         block.create(self, blockname, dtype, size, Nfile)
         self._blocks = self.list_blocks()
         return block
 
     def subfile(self, key):
-        return BigFile(os.path.join(self.basename, key))
+        return File(os.path.join(self.basename, key))
 
-class BigBlockMPI(BigBlock):
+class ColumnMPI(Column):
     def __init__(self, comm):
         self.comm = comm
-        BigBlock.__init__(self)
+        Column.__init__(self)
 
     def create(self, f, blockname, dtype=None, size=None, Nfile=1):
         if self.comm.rank == 0:
-            super(BigBlockMPI, self).create(f, blockname, dtype, size, Nfile)
-            super(BigBlockMPI, self).close()
+            super(ColumnMPI, self).create(f, blockname, dtype, size, Nfile)
+            super(ColumnMPI, self).close()
         return self.open(f, blockname)
 
     def open(self, f, blockname):
         self.comm.barrier()
         try:
             error = True
-            r = super(BigBlockMPI, self).open(f, blockname)
+            r = super(ColumnMPI, self).open(f, blockname)
             error = False
         finally:
             error = self.comm.allgather(error)
@@ -108,16 +108,16 @@ class BigBlockMPI(BigBlock):
     def flush(self):
         self._MPI_flush()
 
-class BigFileMPI(BigFileBase):
+class FileMPI(FileBase):
 
     def __init__(self, comm, filename, create=False):
         self.comm = comm
         if self.comm.rank == 0:
-            BigFileBase.__init__(self, filename, create)
+            FileBase.__init__(self, filename, create)
             self.comm.barrier()
         if self.comm.rank != 0:
             self.comm.barrier()
-            BigFileBase.__init__(self, filename, create=False)
+            FileBase.__init__(self, filename, create=False)
         self.refresh()
 
     @property
@@ -133,15 +133,15 @@ class BigFileMPI(BigFileBase):
         self._blocks = self.comm.bcast(self._blocks)
 
     def open(self, blockname):
-        block = BigBlockMPI(self.comm)
+        block = ColumnMPI(self.comm)
         block.open(self, blockname)
         return block
 
     def subfile(self, key):
-        return BigFileMPI(self.comm, os.path.join(self.basename, key))
+        return FileMPI(self.comm, os.path.join(self.basename, key))
 
     def create(self, blockname, dtype=None, size=None, Nfile=1):
-        block = BigBlockMPI(self.comm)
+        block = ColumnMPI(self.comm)
         block.create(self, blockname, dtype, size, Nfile)
         self.refresh()
         return block
@@ -188,12 +188,12 @@ class BigFileMPI(BigFileBase):
 
         return self.open(blockname)
 
-class BigData:
+class Dataset:
     """ Accessing read-only subset of blocks from a bigfile.
     
         Parameters
         ----------
-        file : BigFile
+        file : File
 
         blocks : list or None
             a list of blocks to use. If None is given, all blocks are used.
@@ -247,10 +247,20 @@ class BigData:
             return self.blocks[sl]
         elif isstrlist(sl):
             assert all([(col in self.blocks) for col in sl])
-            return BigData(self.file, sl)
+            return Dataset(self.file, sl)
         elif numpy.isscalar(sl):
             sl = slice(sl, sl + 1)
             return self[sl][0]
         else:
             raise TypeError('Expecting a slice or a scalar, got a `%s`' %
                     str(type(sl)))
+
+# alias deprecated named
+BigFileError = Error
+BigFileClosedError = FileClosedError
+BigBlockClosedError = ColumnClosedError
+BigFile = File
+BigBlock = Column
+BigFileMPI = FileMPI
+BigBlockMPI = ColumnMPI
+BigData = Dataset

@@ -80,21 +80,21 @@ cdef extern from "bigfile.c":
 def set_buffer_size(bytes):
     big_file_set_buffer_size(bytes)
 
-class BigFileError(Exception):
+class Error(Exception):
     def __init__(self, msg=None):
         if msg is None:
             msg = big_file_get_error_message()
         Exception.__init__(self, msg)
 
-class BigFileClosedError(Exception):
+class FileClosedError(Exception):
     def __init__(self, bigfile):
         Exception.__init__(self, "File is closed")
 
-class BigBlockClosedError(Exception):
+class ColumnClosedError(Exception):
     def __init__(self, bigblock):
         Exception.__init__(self, "Block is closed")
 
-cdef class BigFile:
+cdef class FileLowLevelAPI:
     cdef CBigFile bf
     cdef int closed
 
@@ -105,10 +105,10 @@ cdef class BigFile:
         filename = filename.encode()
         if create:
             if 0 != big_file_create(&self.bf, filename):
-                raise BigFileError()
+                raise Error()
         else:
             if 0 != big_file_open(&self.bf, filename):
-                raise BigFileError()
+                raise Error()
         self.closed = False
 
     def __dealloc__(self):
@@ -117,7 +117,7 @@ cdef class BigFile:
 
     def _check_closed(self):
         if self.closed:
-            raise BigFileClosedError(self)
+            raise FileClosedError(self)
 
     property basename:
         def __get__(self):
@@ -139,11 +139,11 @@ cdef class BigFile:
 
     def close(self):
         if 0 != big_file_close(&self.bf):
-            raise BigFileError()
+            raise Error()
         self.closed = True
 
-cdef class BigFileAttrSet:
-    cdef readonly BigBlock bb
+cdef class AttrSet:
+    cdef readonly ColumnLowLevelAPI bb
 
     def keys(self):
         self.bb._check_closed()
@@ -152,7 +152,7 @@ cdef class BigFileAttrSet:
         list = big_block_list_attrs(&self.bb.bb, &count)
         return sorted([str(list[i].name.decode()) for i in range(count)])
 
-    def __init__(self, BigBlock bb):
+    def __init__(self, ColumnLowLevelAPI bb):
         self.bb = bb
 
     def __iter__(self):
@@ -176,7 +176,7 @@ cdef class BigFileAttrSet:
         cdef numpy.ndarray result = numpy.empty(attr[0].nmemb, attr[0].dtype)
         if(0 != big_block_get_attr(&self.bb.bb, name, result.data, attr[0].dtype,
             attr[0].nmemb)):
-            raise BigFileError()
+            raise Error()
         if attr[0].dtype[1] == 'S':
             return result.tostring().decode()
         return result
@@ -209,7 +209,7 @@ cdef class BigFileAttrSet:
         if(0 != big_block_set_attr(&self.bb.bb, name, buf.data, 
                 dtype,
                 buf.shape[0])):
-            raise BigFileError();
+            raise Error();
 
     def __repr__(self):
         t = ("<BigAttr (%s)>" %
@@ -218,7 +218,7 @@ cdef class BigFileAttrSet:
                 for key in self]))
         return t
 
-cdef class BigBlock:
+cdef class ColumnLowLevelAPI:
     cdef CBigBlock bb
     cdef readonly int closed
     cdef public comm
@@ -235,7 +235,7 @@ cdef class BigBlock:
     property attrs:
         def __get__(self):
             self._check_closed()
-            return BigFileAttrSet(self)
+            return AttrSet(self)
     property Nfile:
         def __get__(self):
             self._check_closed()
@@ -243,7 +243,7 @@ cdef class BigBlock:
 
     def _check_closed(self):
         if self.closed:
-            raise BigBlockClosedError(self)
+            raise ColumnClosedError(self)
 
     def __cinit__(self):
         self.closed = True
@@ -259,21 +259,21 @@ cdef class BigBlock:
     def __exit__(self, type, value, tb):
         self.close()
 
-    def open(self, BigFile f, blockname):
+    def open(self, FileLowLevelAPI f, blockname):
         f._check_closed()
         blockname = blockname.encode()
         if 0 != big_file_open_block(&f.bf, &self.bb, blockname):
-            raise BigFileError()
+            raise Error()
         self.closed = False
 
-    def create(self, BigFile f, blockname, dtype=None, size=None, Nfile=1):
+    def create(self, FileLowLevelAPI f, blockname, dtype=None, size=None, Nfile=1):
         f._check_closed()
         blockname = blockname.encode()
         cdef numpy.ndarray fsize
         if dtype is None:
             if 0 != big_file_create_block(&f.bf, &self.bb, blockname, NULL,
                     0, 0, NULL):
-                raise BigFileError()
+                raise Error()
 
         else:
             if Nfile < 0:
@@ -292,7 +292,7 @@ cdef class BigBlock:
             if 0 != big_file_create_block(&f.bf, &self.bb, blockname, 
                     dtype.base.str.encode(),
                     items, Nfile, <size_t*> fsize.data):
-                raise BigFileError()
+                raise Error()
         self.closed = False
 
     def clear_checksum(self):
@@ -315,9 +315,9 @@ cdef class BigBlock:
                 <size_t *> buf.shape,
                 <ptrdiff_t *> buf.strides)
         if 0 != big_block_seek(&self.bb, &ptr, start):
-            raise BigFileError()
+            raise Error()
         if 0 != big_block_write(&self.bb, &ptr, &array):
-            raise BigFileError()
+            raise Error()
 
     def __getitem__(self, sl):
         """ returns a copy of data, sl can be a slice or a scalar
@@ -368,15 +368,15 @@ cdef class BigBlock:
                 <size_t *> result.shape,
                 <ptrdiff_t *> result.strides)
         if 0 != big_block_seek(&self.bb, &ptr, start):
-            raise BigFileError()
+            raise Error()
         if 0 != big_block_read(&self.bb, &ptr, &array):
-            raise BigFileError()
+            raise Error()
         return result
 
     def _flush(self):
         if self.closed: return
         if 0 != big_block_flush(&self.bb):
-            raise BigFileError()
+            raise Error()
 
     def _MPI_flush(self):
         if self.closed: return
@@ -401,13 +401,13 @@ cdef class BigBlock:
             big_attrset_set_dirty(self.bb.attrset, 0);
 
         if 0 != big_block_flush(&self.bb):
-            raise BigFileError()
+            raise Error()
         comm.barrier()
 
     def _close(self):
         if self.closed: return
         if 0 != big_block_close(&self.bb):
-            raise BigFileError()
+            raise Error()
         self.closed = True
 
     def _MPI_close(self):
@@ -416,7 +416,7 @@ cdef class BigBlock:
         rt = big_block_close(&self.bb)
         self.closed = True
         if 0 != rt:
-            raise BigFileError()
+            raise Error()
         comm = self.comm
         comm.barrier()
 
