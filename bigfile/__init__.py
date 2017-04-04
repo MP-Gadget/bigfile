@@ -266,7 +266,7 @@ def _make_alias(name, origin):
         warnings.warn('%s deprecated, use %s instead' % (name, origin), DeprecationWarning)
         origin.__init__(self, *args, **kwargs)
 
-    newtype = type(name, (origin,), {
+    newtype = type(name, (origin,object), {
         '__init__' : __init__})
 
     return newtype
