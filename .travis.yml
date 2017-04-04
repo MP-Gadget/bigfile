@@ -33,7 +33,7 @@ script:
     - mkdir build; (cd build; cmake -DCMAKE_INSTALL_PREFIX:PATH=install .. ; make install )
     - echo "Testing Python binding"
     - pip install runtests
-    - python ./runtests.py --mpirun
+    - python ./runtests.py
     - bash check_tag.sh bigfile/version.py
 
 deploy:
