@@ -200,6 +200,8 @@ cdef class AttrSet:
         if isstr(value): 
             value = value.encode()
         cdef numpy.ndarray buf = numpy.atleast_1d(value).ravel()
+        if buf.dtype.hasobject:
+            raise ValueError("Attribute value of object type is not supported; serialize it first")
         if buf.dtype.char == 'S':
             buf = buf.view(dtype='S1')
             dtype = 'S1'.encode()

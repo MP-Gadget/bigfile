@@ -161,6 +161,19 @@ def test_closed(comm):
         pass
 
 @MPITest([1])
+def test_attr_objects(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    with x.create('block', dtype=None) as b:
+        def set_obj1():
+            b.attrs['objects'] = numpy.array([object()])
+        assert_raises(ValueError, set_obj1);
+        def set_obj_scalar():
+            b.attrs['objects'] = object()
+        assert_raises(ValueError, set_obj_scalar);
+    shutil.rmtree(fname)
+
+@MPITest([1])
 def test_attr(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
