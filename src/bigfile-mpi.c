@@ -228,7 +228,7 @@ _throttle_plan_create(ThrottlePlan * plan, MPI_Comm comm, int concurrency, BigBl
         concurrency = NTask;
     }
 
-    int color = ThisTask * concurrency / NTask;
+    int color = (ptrdiff_t) ThisTask * concurrency / NTask;
     MPI_Comm_split(MPI_COMM_WORLD, color, ThisTask, &plan->group);
     MPI_Comm_size(plan->group, &plan->GroupSize);
     MPI_Comm_rank(plan->group, &plan->GroupRank);
