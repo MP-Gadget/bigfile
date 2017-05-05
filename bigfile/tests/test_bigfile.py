@@ -317,3 +317,10 @@ def test_mpi_large(comm):
     comm.barrier()
     if comm.rank == 0:
         shutil.rmtree(fname)
+
+@MPITest(commsize=[4])
+def test_mpi_badfilenames(comm):
+    fname = tempfile.mkdtemp()
+    fname = fname + '%d' % comm.rank
+    assert_raises(BigFileError, BigFileMPI, comm, fname, create=True)
+

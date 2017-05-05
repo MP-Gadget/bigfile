@@ -85,12 +85,18 @@ class ColumnMPI(Column):
         Column.__init__(self)
 
     def create(self, f, blockname, dtype=None, size=None, Nfile=1):
+        if not check_unique(blockname, self.comm):
+            raise BigFileError("blockname is inconsistent between ranks")
+
         if self.comm.rank == 0:
             super(ColumnMPI, self).create(f, blockname, dtype, size, Nfile)
             super(ColumnMPI, self).close()
         return self.open(f, blockname)
 
     def open(self, f, blockname):
+        if not check_unique(blockname, self.comm):
+            raise BigFileError("blockname is inconsistent between ranks")
+
         self.comm.barrier()
         try:
             error = True
@@ -112,6 +118,8 @@ class FileMPI(FileBase):
 
     def __init__(self, comm, filename, create=False):
         self.comm = comm
+        if not check_unique(filename, self.comm):
+            raise BigFileError("filename is inconsistent between ranks")
         if self.comm.rank == 0:
             FileBase.__init__(self, filename, create)
             self.comm.barrier()
@@ -254,6 +262,12 @@ class Dataset:
         else:
             raise TypeError('Expecting a slice or a scalar, got a `%s`' %
                     str(type(sl)))
+
+def check_unique(variable, comm):
+    s = set(comm.allgather(variable))
+    if len(s) > 1:
+        return False
+    return True
 
 # alias deprecated named
 BigFileError = Error
