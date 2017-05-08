@@ -1749,14 +1749,14 @@ int _big_file_mkdir(const char * dirname)
 {
     struct stat buf;
     int mkdirret;
-    /* already exists */
-    if(0 == stat(dirname, &buf)) return 0;
 
     mkdirret = mkdir(dirname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     /* stat is to make sure the dir doesn't exist; it could be owned by others and stopped
-     * by a permission error, but we are still OK. */
+     * by a permission error, but we are still OK, as the dir is created*/
 
-    RAISEIF((mkdirret !=0 && errno != EEXIST),
+    /* already exists; only check stat after mkdir fails with EACCES, avoid meta data calls. */
+
+    RAISEIF((mkdirret !=0 && errno != EEXIST && stat(dirname, &buf)),
         ex_mkdir,
         "Failed to create directory structure at `%s' (%s)",
         dirname,
