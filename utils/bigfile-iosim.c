@@ -47,8 +47,8 @@ typedef struct log {
 } log;
 
 int nmemb = 1;
-size_t BytesPerBlobFile = 1024 * 1024 * 1024;
 int Nwriter = 0;
+int Nfile = 0;
 int aggregated = 0;
 size_t size = 1024;
 int mode = MODE_CREATE;
@@ -60,7 +60,6 @@ iosim(char * filename)
     size_t elsize = 8;
     size_t start;
     size_t localsize;
-    size_t Nfile;
     
     if(aggregated) {
         /* Use a large enough number to force aggregated IO */
@@ -81,13 +80,11 @@ iosim(char * filename)
     double t0, t1;
     log trank;
     trank.create = trank.open = trank.write = trank.read = trank.close = 0;
-    int nel_trank = sizeof(trank) / sizeof(trank.create);
     //
     //+++++++++++++++++ END +++++++++++++++++
 
 
     if(mode == MODE_CREATE) {
-        Nfile = (size * nmemb * elsize + BytesPerBlobFile - 1)/ BytesPerBlobFile;
         info("Creating BigFile\n");
         t0 = MPI_Wtime();
         big_file_mpi_create(&bf, filename, MPI_COMM_WORLD);
@@ -211,13 +208,13 @@ iosim(char * filename)
             info("iosim.c: Couldn't open file %s for writting!\n", timelog);
         }
         else{
-            fprintf(fp, "# mode\tNfile\tbytesperblob\tranks\twriters\titems\tnmemb\n"
-                        "%d\t%d\t%td\t%d\t%d\t%td\t%d\n",
-                         mode, Nfile, BytesPerBlobFile, NTask, Nwriter, size, nmemb);
+            fprintf(fp, "# mode\tNfile\tranks\twriters\titems\tnmemb\n"
+                        "%d\t%d\t%d\t%d\t%td\t%d\n",
+                         mode, Nfile, NTask, Nwriter, size, nmemb);
 
             fprintf(fp, "# Task\tTcreate\t\tTopen\t\tTwrite\t\tTread\t\tTclose\n");
             for (i=0; i<NTask; i++) {
-                fprintf(fp, "%d\t%f\t%f\t%f\t%f\t%f\n",
+                fprintf(fp, "%04d\t%012.8f\t%012.8f\t%012.8f\t%012.8f\t%012.8f\n",
                     i, times[i].create, times[i].open, times[i].write, times[i].read, times[i].close);
             }
         }
@@ -226,7 +223,7 @@ iosim(char * filename)
     free(times);
 }
 
-char * getoptstr = "hb:n:s:w:m:Ap";
+char * getoptstr = "hf:n:s:w:m:Ap";
 static void 
 usage() 
 {
@@ -235,15 +232,14 @@ usage()
 
     printf("  command : create / update / read \n"
            " -A : Force Aggreated Mode \n"
-           " -b N : set number of bytes per blob file to N\n"
            " -n N : set number of writer subcommunicators to N; 0 for number of MPI ranks\n"
            " -s N : set number of rows in the block to N (for create)\n"
            " -w N : set width / nmemb of a block to N (for create)\n"
            " -p : purge the block afterwards \n "
            );
 
-    printf("Defaults: -b %ld -n %d -s %d -w %d\n", 
-            BytesPerBlobFile, Nwriter, size, nmemb);
+    printf("Defaults: -n %d -s %d -w %d\n", 
+             Nwriter, size, nmemb);
 }
 
 
@@ -271,8 +267,8 @@ int main(int argc, char * argv[]) {
                     goto byebye;
                 }
                 break;
-            case 'b':
-                if(1 != sscanf(optarg, "%td", &BytesPerBlobFile)) {
+            case 'f':
+                if(1 != sscanf(optarg, "%d", &Nfile)) {
                     usage();
                     goto byebye;
                 }
@@ -309,12 +305,15 @@ int main(int argc, char * argv[]) {
 
     sprintf(filename, "%s", argv[optind]);
 
-    if (Nwriter > NTask) {
+    if (Nwriter > NTask || Nwriter == 0) {
         info("############## CAUTION: you chose %d ranks and %d writers! ##############\n"
              " #  If you want %d writers, allocate at least %d ranks with <mpirun -n %d> #\n"
              " ################### Can only use %d writers instead! ###################\n",
              NTask, Nwriter, Nwriter, Nwriter, Nwriter, NTask);
         Nwriter = NTask;
+    }
+    if (Nfile == 0) {
+        Nfile = Nwriter;
     }
 
     iosim(filename);
