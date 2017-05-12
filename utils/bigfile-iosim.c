@@ -34,9 +34,9 @@ info(char * fmt, ...) {
     }
 }
 
-#define MODE_CREATE 0
-#define MODE_READ   1
-#define MODE_UPDATE 2
+#define MODE_CREATE "create"
+#define MODE_READ   "read"
+#define MODE_UPDATE "update"
 
 typedef struct log {
     double create;
@@ -51,7 +51,7 @@ int Nwriter = 0;
 int Nfile = 0;
 int aggregated = 0;
 size_t size = 1024;
-int mode = MODE_CREATE;
+char * mode = MODE_CREATE;
 int purge = 0;
 
 static void
@@ -73,6 +73,8 @@ iosim(char * filename)
     BigArray array = {0};
     BigBlockPtr ptr = {0};
 
+    info("iosim.c: started.\n");
+
     uint64_t * fakedata;
     ptrdiff_t i;
     //
@@ -84,7 +86,7 @@ iosim(char * filename)
     //+++++++++++++++++ END +++++++++++++++++
 
 
-    if(mode == MODE_CREATE) {
+    if(0 == strcmp(mode, MODE_CREATE)) {
         info("Creating BigFile\n");
         t0 = MPI_Wtime();
         big_file_mpi_create(&bf, filename, MPI_COMM_WORLD);
@@ -121,7 +123,7 @@ iosim(char * filename)
     localsize = size * (ThisTask + 1) / NTask - start;
 
     info("Writing to `%s`\n", filename);
-    info("mode %d\n", mode);
+    info("mode %s\n", mode);
     info("nmemb %d\n", nmemb);
     info("Size %td\n", size);
     info("NBlobFiles %td\n", Nfile);
@@ -136,7 +138,7 @@ iosim(char * filename)
     big_array_init(&array, fakedata, "i8", 2, (size_t[]){localsize, nmemb}, NULL);
 
 
-    if(mode == MODE_CREATE || mode == MODE_UPDATE) {
+    if(0 == strcmp(mode, MODE_CREATE) || 0 == strcmp(mode, MODE_UPDATE)) {
         info("Initializing FakeData\n");
         for(i = 0; i < localsize; i ++) {
             int j;
@@ -168,6 +170,7 @@ iosim(char * filename)
             int j;
             for(j = 0; j < nmemb; j ++) {
                 //printf("%lX ", fakedata[i * nmemb + j]);
+
                 if (fakedata[i * nmemb + j] != start + i) {
                     info("data is corrupted either due to reading or writing\n");
                     abort();
@@ -202,14 +205,14 @@ iosim(char * filename)
 
     if (ThisTask == 0){
         char timelog[4096];
-        sprintf(timelog, "%s/Timelog", filename);
+        sprintf(timelog, "%s/%s-timelog", filename, mode);
         FILE * fp = fopen(timelog, "a+");
         if (!fp){
             info("iosim.c: Couldn't open file %s for writting!\n", timelog);
         }
         else{
             fprintf(fp, "# mode\tNfile\tranks\twriters\titems\tnmemb\n"
-                        "%d\t%d\t%d\t%d\t%td\t%d\n",
+                        "%s\t%d\t%d\t%d\t%td\t%d\n",
                          mode, Nfile, NTask, Nwriter, size, nmemb);
 
             fprintf(fp, "# Task\tTcreate\t\tTopen\t\tTwrite\t\tTread\t\tTclose\n");
@@ -296,11 +299,12 @@ int main(int argc, char * argv[]) {
         goto byebye;
     }
 
-    if(0 == strcmp(argv[optind], "read")) { mode = MODE_READ; } else
-    if(0 == strcmp(argv[optind], "create")) { mode = MODE_CREATE; } else
-    if(0 == strcmp(argv[optind], "update")) { mode = MODE_UPDATE; }
-    else { usage(); goto byebye; }
-
+    mode = strdup(argv[optind]);
+    if( (0 != strcmp(argv[optind], "read"))
+     && (0 != strcmp(argv[optind], "create")) 
+     && (0 != strcmp(argv[optind], "update"))) {
+        usage(); goto byebye;
+    }
     optind++;
 
     sprintf(filename, "%s", argv[optind]);
