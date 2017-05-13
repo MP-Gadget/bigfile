@@ -106,12 +106,13 @@ int big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtyp
     big_block_mpi_broadcast(bb, 0, comm);
 
     int i;
-    for(i = (size_t) bb->Nfile * rank / NTask; i < (size_t) bb->Nfile * (rank + 1) / NTask; i ++) {
-        FILE * fp = _big_file_open_a_file(bb->basename, i, "w");
-        if(fp == NULL) return -1;
-        fclose(fp);
+    if(rank == 0) {
+        for(i = 0; i < bb->Nfile; i ++) {
+            FILE * fp = _big_file_open_a_file(bb->basename, i, "w");
+            if(fp == NULL) return -1;
+            fclose(fp);
+        }
     }
-
     return 0;
 }
 
