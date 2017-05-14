@@ -27,8 +27,18 @@ int big_file_mpi_open(BigFile * bf, const char * basename, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
-    int rt = big_file_open(bf, basename);
-    MPI_Barrier(comm);
+    int rt = 0;
+    if (rank == 0) {
+        big_file_open(bf, basename);
+    } else {
+        /* FIXME : */
+        bf->basename = strdup(basename);
+    }
+
+    MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
+    if(rt != 0) {
+        big_file_mpi_broadcast_error(0, comm);
+    }
     return rt;
 }
 
@@ -39,6 +49,9 @@ int big_file_mpi_create(BigFile * bf, const char * basename, MPI_Comm comm) {
     int rt;
     if (rank == 0) {
         rt = big_file_create(bf, basename);
+    } else {
+        /* FIXME : */
+        bf->basename = strdup(basename);
     }
     MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
     if(rt != 0) {
