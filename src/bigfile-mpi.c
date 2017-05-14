@@ -7,6 +7,10 @@
 /* disable aggregation by default */
 static size_t _BigFileAggThreshold = 0;
 
+static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm);
+static void big_file_mpi_broadcast_error(int root, MPI_Comm comm);
+
+
 void
 big_file_mpi_set_aggregated_threshold(size_t bytes)
 {
@@ -32,8 +36,14 @@ int big_file_mpi_create(BigFile * bf, const char * basename, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
-    int rt = big_file_create(bf, basename);
-    MPI_Barrier(comm);
+    int rt;
+    if (rank == 0) {
+        rt = big_file_create(bf, basename);
+    }
+    MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
+    if(rt != 0) {
+        big_file_mpi_broadcast_error(0, comm);
+    }
     return rt;
 }
 int big_file_mpi_open_block(BigFile * bf, BigBlock * block, const char * blockname, MPI_Comm comm) {
@@ -44,15 +54,27 @@ int big_file_mpi_open_block(BigFile * bf, BigBlock * block, const char * blockna
 }
 
 int big_file_mpi_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, size_t size, MPI_Comm comm) {
+    if(comm == MPI_COMM_NULL) return 0;
+
     size_t fsize[Nfile];
     int i;
     for(i = 0; i < Nfile; i ++) {
         fsize[i] = size * (i + 1) / Nfile 
                  - size * (i) / Nfile;
     }
-    if(comm == MPI_COMM_NULL) return 0;
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+
+    int rt = 0;
+    if (rank == 0) {
+        rt = _big_file_mksubdir_r(bf->basename, blockname);
+    }
+    MPI_Bcast(&rt, 1, MPI_INT, 0, comm);
+    if(rt != 0) {
+        big_file_mpi_broadcast_error(0, comm);
+        return -1;
+    }
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
-    if(0 != _big_file_mksubdir_r(bf->basename, blockname)) return -1;
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return big_block_mpi_create(block, basename, dtype, nmemb, Nfile, fsize, comm);
 }
@@ -63,10 +85,6 @@ int big_file_mpi_close(BigFile * bf, MPI_Comm comm) {
     MPI_Barrier(comm);
     return rt;
 }
-
-static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm);
-static void big_file_mpi_broadcast_error(int root, MPI_Comm comm);
-
 
 int big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
