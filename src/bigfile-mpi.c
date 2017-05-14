@@ -108,10 +108,17 @@ int big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtyp
     int i;
     for(i = (size_t) bb->Nfile * rank / NTask; i < (size_t) bb->Nfile * (rank + 1) / NTask; i ++) {
         FILE * fp = _big_file_open_a_file(bb->basename, i, "w");
-        if(fp == NULL) return -1;
+        if(fp == NULL) {
+            rt = -1;
+            break;
+        }
         fclose(fp);
     }
-
+    MPI_Allreduce(MPI_IN_PLACE, &rt, 1, MPI_INT, MPI_LOR, comm);
+    if(rt != 0) {
+        big_file_mpi_broadcast_error(0, comm);
+        return -1;
+    }
     return 0;
 }
 
