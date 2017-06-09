@@ -9,6 +9,15 @@ Python 2 and 3 binding is available via pip.
 on BlueWaters at NCSA. The library is currently under investigation under the
 BW-PAID program with NCSA.
 
+The current implementation works on a true POSIX compliant file system, e.g. Lustre.
+BigFile makes two assumptions
+
+1) mkdir() is durable -- it shall propagate the directory to all clients.
+
+2) Allowing non-overlapping write from different clients. This less strict than POSIX.
+
+Be aware NFS is not a true POSIX compliant file system.
+
 Build status
 ------------
 .. image:: https://api.travis-ci.org/rainwoodman/bigfile.svg

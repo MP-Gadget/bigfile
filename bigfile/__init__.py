@@ -120,12 +120,18 @@ class FileMPI(FileBase):
         self.comm = comm
         if not check_unique(filename, self.comm):
             raise BigFileError("filename is inconsistent between ranks")
-        if self.comm.rank == 0:
-            FileBase.__init__(self, filename, create)
-            self.comm.barrier()
-        if self.comm.rank != 0:
-            self.comm.barrier()
-            FileBase.__init__(self, filename, create=False)
+
+        if create:
+            if comm.rank == 0:
+                try:
+                    with File(filename, create=True) as ff:
+                        pass
+                except:
+                    pass
+            # if create failed, the next open will fail, collectively
+
+        self.comm.barrier()
+        FileBase.__init__(self, filename, create=False)
         self.refresh()
 
     @property
