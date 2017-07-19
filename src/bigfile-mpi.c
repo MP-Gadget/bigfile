@@ -61,6 +61,7 @@ int big_file_mpi_create(BigFile * bf, const char * basename, MPI_Comm comm) {
 }
 int big_file_mpi_open_block(BigFile * bf, BigBlock * block, const char * blockname, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
+    if(!bf || !bf->basename || !blockname) return 1;
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return big_block_mpi_open(block, basename, comm);
