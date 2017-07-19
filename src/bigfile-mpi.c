@@ -29,7 +29,7 @@ int big_file_mpi_open(BigFile * bf, const char * basename, MPI_Comm comm) {
     MPI_Comm_rank(comm, &rank);
     int rt = 0;
     if (rank == 0) {
-        big_file_open(bf, basename);
+        rt = big_file_open(bf, basename);
     } else {
         /* FIXME : */
         bf->basename = strdup(basename);
