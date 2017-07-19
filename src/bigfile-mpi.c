@@ -29,7 +29,7 @@ int big_file_mpi_open(BigFile * bf, const char * basename, MPI_Comm comm) {
     MPI_Comm_rank(comm, &rank);
     int rt = 0;
     if (rank == 0) {
-        big_file_open(bf, basename);
+        rt = big_file_open(bf, basename);
     } else {
         /* FIXME : */
         bf->basename = strdup(basename);
@@ -61,6 +61,7 @@ int big_file_mpi_create(BigFile * bf, const char * basename, MPI_Comm comm) {
 }
 int big_file_mpi_open_block(BigFile * bf, BigBlock * block, const char * blockname, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
+    if(!bf || !bf->basename || !blockname) return 1;
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return big_block_mpi_open(block, basename, comm);
@@ -199,11 +200,10 @@ static void big_file_mpi_broadcast_error(int root, MPI_Comm comm) {
     }
 }
 static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm) {
-    ptrdiff_t i;
     int rank;
     MPI_Comm_rank(comm, &rank);
     int lname = 0;
-    void * attrpack;
+    void * attrpack=NULL;
     size_t attrpacksize = 0;
     if(rank == root) {
         lname = strlen(bb->basename);
@@ -314,7 +314,7 @@ _throttle_plan_create(ThrottlePlan * plan, MPI_Comm comm, int concurrency, BigBl
     return 0;
 }
 
-static int _throttle_plan_destroy(ThrottlePlan * plan)
+static void _throttle_plan_destroy(ThrottlePlan * plan)
 {
     MPI_Comm_free(&plan->group);
     MPI_Type_free(&plan->mpidtype);
