@@ -197,7 +197,6 @@ static int (filter)(const struct dirent * ent) {
 static struct
 bblist * listbigfile_r(const char * basename, char * blockname, struct bblist * bblist) {
     struct dirent **namelist;
-    struct stat st;
     int n;
     int i;
 
@@ -212,7 +211,6 @@ bblist * listbigfile_r(const char * basename, char * blockname, struct bblist * 
     for(i = 0; i < n ; i ++) {
         char * blockname1 = _path_join(blockname, namelist[i]->d_name);
         char * fullpath1 = _path_join(basename, blockname1);
-        BigBlock bb = {0};
         if(_big_file_path_is_block(fullpath1)) {
             struct bblist * n = malloc(sizeof(struct bblist) + strlen(blockname1) + 1);
             n->next = bblist;
@@ -436,7 +434,6 @@ _big_block_create_internal(BigBlock * bb, const char * basename, const char * dt
         return 0;
 ex_flush:
         attrset_free(bb->attrset);
-ex_fileio:
         free(bb->foffset);
 ex_foffset:
         free(bb->fchecksum);

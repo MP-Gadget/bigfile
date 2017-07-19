@@ -199,11 +199,10 @@ static void big_file_mpi_broadcast_error(int root, MPI_Comm comm) {
     }
 }
 static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm) {
-    ptrdiff_t i;
     int rank;
     MPI_Comm_rank(comm, &rank);
     int lname = 0;
-    void * attrpack;
+    void * attrpack=NULL;
     size_t attrpacksize = 0;
     if(rank == root) {
         lname = strlen(bb->basename);
@@ -314,7 +313,7 @@ _throttle_plan_create(ThrottlePlan * plan, MPI_Comm comm, int concurrency, BigBl
     return 0;
 }
 
-static int _throttle_plan_destroy(ThrottlePlan * plan)
+static void _throttle_plan_destroy(ThrottlePlan * plan)
 {
     MPI_Comm_free(&plan->group);
     MPI_Type_free(&plan->mpidtype);
