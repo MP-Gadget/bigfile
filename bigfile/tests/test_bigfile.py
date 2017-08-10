@@ -74,6 +74,30 @@ def test_create(comm):
     shutil.rmtree(fname)
 
 @MPITest([1])
+def test_create_odd(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    x.create('.')
+
+    
+    d = numpy.dtype('f4')
+    numpy.random.seed(1234)
+
+    # test creating
+    with x.create(d.str, Nfile=3, dtype=d, size=455**3) as b:
+        data = numpy.random.uniform(100000, size=455**3).astype(d)
+        b.write(0, data)
+
+    import os
+    os.system("ls -r %s" % fname)
+    for b in x.blocks:
+        assert b in x
+
+    for b in x:
+        assert b in x
+
+
+@MPITest([1])
 def test_fileattr(comm):
     import os.path
     fname = tempfile.mkdtemp()

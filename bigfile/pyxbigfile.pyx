@@ -289,8 +289,8 @@ cdef class ColumnLowLevelAPI:
             else:
                 items = dtype.shape[0]
             fsize = numpy.empty(dtype='intp', shape=Nfile)
-            fsize[:] = (numpy.arange(Nfile) + 1) * size / Nfile \
-                     - (numpy.arange(Nfile)) * size / Nfile
+            fsize[:] = (numpy.arange(Nfile) + 1) * size // Nfile \
+                     - (numpy.arange(Nfile)) * size // Nfile
             if 0 != big_file_create_block(&f.bf, &self.bb, blockname, 
                     dtype.base.str.encode(),
                     items, Nfile, <size_t*> fsize.data):
