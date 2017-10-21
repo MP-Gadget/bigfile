@@ -1759,6 +1759,10 @@ int _big_file_mkdir(const char * dirname)
         dirname,
         strerror(errno)
     );
+
+    /* Attempt to update the time stamp */
+    utimensat(0, dirname, NULL, 0);
+
     return 0;
 ex_mkdir:
     return -1;
