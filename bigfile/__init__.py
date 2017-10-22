@@ -76,6 +76,47 @@ class File(FileBase):
         self._blocks = self.list_blocks()
         return block
 
+    def create_from_array(self, blockname, array, Nfile=None, memorylimit=1024 * 1024 * 256):
+        """ create a block from array like objects
+            The operation is well defined only if array is at most 2d.
+
+            Parameters
+            ----------
+            array : array_like,
+                array shall have a scalar dtype. 
+            blockname : string
+                name of the block
+            Nfile : int or None
+                number of physical files. if None, 32M items per file
+                is used.
+            memorylimit : int
+                number of bytes to use for the buffering. relevant only if
+                indexing on array returns a copy (e.g. IO or dask array)
+
+        """
+        size = len(array)
+
+        # sane value -- 32 million items per physical file
+        sizeperfile = 32 * 1024 * 1024
+
+        if Nfile is None:
+            Nfile = (size + sizeperfile - 1) // sizeperfile
+
+        dtype = numpy.dtype((array.dtype, array.shape[1:]))
+
+        itemsize = dtype.itemsize
+        # we will do some chunking
+
+        # write memorylimit bytes at most (256M bytes)
+        # round to 1024 items
+        itemlimit = memorylimit // dtype.itemsize // 1024 * 1024
+
+        with self.create(blockname, dtype, size, Nfile) as b:
+            for i in range(0, len(array), itemlimit):
+                b.write(i, numpy.array(array[i:i+itemlimit]))
+
+        return self.open(blockname)
+
     def subfile(self, key):
         return File(os.path.join(self.basename, key))
 

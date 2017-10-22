@@ -45,6 +45,14 @@ def test_create(comm):
             assert_equal(b[:], data.astype(d.base))
             assert_equal(b[:],  b[...])
 
+        # test creating
+        data = numpy.random.uniform(100000, size=128*128).view(dtype=d.base).reshape([-1] + list(d.shape))[:128]
+        with x.create_from_array(d.str, data) as b:
+            pass
+
+        with x[d.str] as b:
+            assert_equal(b[:], data)
+
         # test writing with an offset
         with x[d.str] as b:
             b.write(1, data[0:1])
