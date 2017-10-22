@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <dirent.h>
 
@@ -1761,7 +1762,7 @@ int _big_file_mkdir(const char * dirname)
     );
 
     /* Attempt to update the time stamp */
-    utimensat(0, dirname, NULL, 0);
+    utimes(dirname, NULL);
 
     return 0;
 ex_mkdir:
