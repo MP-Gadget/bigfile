@@ -20,7 +20,7 @@ Be aware NFS is not a true POSIX compliant file system.
 
 Build status
 ------------
-.. image:: https://api.travis-ci.org/rainwoodman/bigfile.svg
+.. image:: https://travis-ci.org/rainwoodman/bigfile.svg?branch=master
     :alt: Build Status
     :target: https://travis-ci.org/rainwoodman/bigfile/
 
@@ -207,5 +207,13 @@ We provide the following shell commands for inspecting a bigfile:
 - bigfile-ls
 - bigfile-get-attr
 - bigfile-set-attr
+
+Rejected Poster for SC17
+------------------------
+
+We submitted a poster to describe bigfile for SC17. Although the poster was rejected, we post them
+here as they contain a description of the design and some benchmarks of bigfile.
+
+    https://github.com/rainwoodman/bigfile/tree/documents
 
 Yu Feng
