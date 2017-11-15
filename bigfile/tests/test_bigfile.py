@@ -356,3 +356,25 @@ def test_mpi_badfilenames(comm):
     fname = fname + '%d' % comm.rank
     assert_raises(BigFileError, BigFileMPI, comm, fname, create=True)
 
+@MPITest(commsize=[1])
+def test_string(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    print(fname)
+    # test creating
+    with x.create("Header", Nfile=1, dtype=None, size=128) as b:
+        b.attrs['v3'] = ['a', 'bb', 'ccc']
+        b.attrs['v32'] = [
+                            ['a', 'bb', 'ccc'],
+                            ['1', '22', '333'],]
+
+        b.attrs['s'] = 'abc'
+        b.attrs['l'] = 'a' * 65536
+
+    with x.open("Header") as b:
+        assert_equal(b.attrs['v3'], ['a', 'bb', 'ccc'])
+        assert_equal(b.attrs['v32'], ['a', 'bb', 'ccc', '1', '22', '333'])
+        assert_equal(b.attrs['s'], 'abc')
+        assert_equal(b.attrs['l'], 'a' * 65536)
+
+    shutil.rmtree(fname)

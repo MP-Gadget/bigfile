@@ -178,6 +178,8 @@ cdef class AttrSet:
             attr[0].nmemb)):
             raise Error()
         if attr[0].dtype[1] == 'S':
+            return [i.tostring().decode() for i in result]
+        if attr[0].dtype[1] == 'a':
             return result.tostring().decode()
         return result
 
@@ -193,20 +195,23 @@ cdef class AttrSet:
     def __setitem__(self, name, value):
         name = name.encode()
         self.bb._check_closed()
-        if isinstance(value, numpy.ndarray):
-            if value.dtype.char == 'U':
-                value = str(value).encode()
 
-        if isstr(value): 
-            value = value.encode()
-        cdef numpy.ndarray buf = numpy.atleast_1d(value).ravel()
-        if buf.dtype.hasobject:
-            raise ValueError("Attribute value of object type is not supported; serialize it first")
-        if buf.dtype.char == 'S':
-            buf = buf.view(dtype='S1')
-            dtype = 'S1'.encode()
+
+        if isstr(value):
+            dtype = b'a1'
+            value = numpy.array(str(value).encode()).ravel().view(dtype='S1').ravel()
         else:
-            dtype = buf.dtype.base.str.encode()
+            value = numpy.array(value).ravel()
+
+            if value.dtype.char == 'U':
+                value = numpy.array([i.encode() for i in value])
+
+            if value.dtype.hasobject:
+                raise ValueError("Attribute value of object type is not supported; serialize it first")
+
+            dtype = value.dtype.base.str.encode()
+
+        cdef numpy.ndarray buf = value
 
         if(0 != big_block_set_attr(&self.bb.bb, name, buf.data, 
                 dtype,

@@ -1052,7 +1052,7 @@ big_array_iter_advance(BigArrayIter * iter)
 typedef struct {double r; double i;} cplx128_t;
 typedef struct {float r; float i;} cplx64_t;
 typedef union {
-    char *S1;
+    char *a1;
     char *b1;
     int64_t *i8;
     uint64_t *u8;
@@ -1093,7 +1093,7 @@ dtype_format(char * buffer, const char * dtype, const void * data, const char * 
         sprintf(buffer, fmt, p.dtype->r, p.dtype->i); \
     } else
 
-    FORMAT1(S1, "%c")
+    FORMAT1(a1, "%c")
     FORMAT1(b1, "%d")
     FORMAT1(i8, "%ld")
     FORMAT1(i4, "%d")
@@ -1134,7 +1134,7 @@ dtype_parse(const char * buffer, const char * dtype, void * data, const char * f
         if(fmt == NULL) fmt = defaultfmt; \
         sscanf(buffer, fmt, &p.dtype->r, &p.dtype->i); \
     } else
-    PARSE1(S1, "%c")
+    PARSE1(a1, "%c")
     PARSE1(i8, "%ld")
     PARSE1(i4, "%d")
     PARSE1(u8, "%lu")
@@ -1489,14 +1489,16 @@ attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
         }
         rawdata[j] = 0;
         for(j = 0; j < a->nmemb; j ++) {
-            if(a->dtype[1] != 'S') {
+            if(a->dtype[1] != 'a' && 
+              !(a->dtype[1] == 'S' && dtype_itemsize(a->dtype) == 1))
+            {
                 char buf[128];
                 dtype_format(buf, a->dtype, &adata[j * itemsize], NULL);
                 strcat(textual, buf);
                 if(j != a->nmemb - 1) {
                     strcat(textual, " ");
                 }
-            } else {
+            } else { /* pretty print string encoded as a1 or S1. */
                 char buf[] = {adata[j], 0};
                 if(buf[0] == '\n') {
                     strcat(textual, "...");
