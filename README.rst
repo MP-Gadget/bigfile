@@ -18,6 +18,11 @@ BigFile makes two assumptions
 
 Be aware NFS is not a true POSIX compliant file system.
 
+To cite bigfile, use DOI at
+
+.. image:: https://zenodo.org/badge/21016779.svg
+   :target: https://zenodo.org/badge/latestdoi/21016779
+
 Build status
 ------------
 .. image:: https://travis-ci.org/rainwoodman/bigfile.svg?branch=master
