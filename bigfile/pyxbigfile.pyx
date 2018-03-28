@@ -53,6 +53,7 @@ cdef extern from "bigfile.c":
     char * big_file_get_error_message()
     void big_file_set_buffer_size(size_t bytes)
     int big_block_open(CBigBlock * bb, char * basename)
+    int big_block_grow(CBigBlock * bb, int Nfilegrow, size_t fsize[])
     int big_block_clear_checksum(CBigBlock * bb)
     int big_block_create(CBigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[])
     int big_block_close(CBigBlock * block)
@@ -271,6 +272,27 @@ cdef class ColumnLowLevelAPI:
         blockname = blockname.encode()
         if 0 != big_file_open_block(&f.bf, &self.bb, blockname):
             raise Error()
+        self.closed = False
+
+    def grow(self, size, Nfile=1):
+        """
+            Increase the size of the column by size.
+        """
+        self._check_closed()
+        cdef numpy.ndarray fsize
+
+        if Nfile < 0:
+            raise ValueError("Cannot create negative number of files.")
+        if Nfile == 0 and size != 0:
+            raise ValueError("Cannot create zero files for non-zero number of items.")
+
+        fsize = numpy.empty(dtype='intp', shape=Nfile)
+        fsize[:] = (numpy.arange(Nfile) + 1) * size // Nfile \
+                 - (numpy.arange(Nfile)) * size // Nfile
+
+        if 0 != big_block_grow(&self.bb, Nfile, <size_t*>fsize.data):
+            raise Error()
+
         self.closed = False
 
     def create(self, FileLowLevelAPI f, blockname, dtype=None, size=None, Nfile=1):

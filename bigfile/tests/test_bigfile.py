@@ -104,6 +104,30 @@ def test_create_odd(comm):
     for b in x:
         assert b in x
 
+    shutil.rmtree(fname)
+
+@MPITest([1])
+def test_grow(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+
+    d = numpy.dtype('f4')
+    numpy.random.seed(1234)
+
+    data = numpy.random.uniform(100000, size=100).astype(d)
+    # test creating
+    with x.create(d.str, Nfile=3, dtype=d, size=100) as b:
+        b.write(0, data)
+
+        b.grow(size=100, Nfile=2)
+        b.write(100, data)
+
+    with x.open(d.str) as b:
+        assert b.Nfile == 5
+        assert_equal(b[:100], data)
+        assert_equal(b[100:], data)
+
+    shutil.rmtree(fname)
 
 @MPITest([1])
 def test_fileattr(comm):
