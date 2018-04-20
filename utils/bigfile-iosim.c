@@ -34,10 +34,11 @@ info(char * fmt, ...) {
     }
 }
 
-#define MODE_CREATE "create"
-#define MODE_READ   "read"
-#define MODE_UPDATE "update"
-
+#define MODE_CREATE 0
+#define MODE_READ   1
+#define MODE_UPDATE 2
+#define MODE_GROW   3
+const char * MODES[] = { "create", "read", "update", "grow"};
 typedef struct log {
     double create;
     double open;
@@ -51,7 +52,7 @@ int Nwriter = 0;
 int Nfile = 0;
 int aggregated = 0;
 size_t size = 1024;
-char * mode = MODE_CREATE;
+int mode = MODE_CREATE;
 int purge = 0;
 
 static void
@@ -85,45 +86,73 @@ iosim(char * filename)
     //
     //+++++++++++++++++ END +++++++++++++++++
 
+    size_t oldsize = 0;
 
-    if(0 == strcmp(mode, MODE_CREATE)) {
-        info("Creating BigFile\n");
-        t0 = MPI_Wtime();
-        big_file_mpi_create(&bf, filename, MPI_COMM_WORLD);
-        t1 = MPI_Wtime();
-        trank.create += t1 - t0;
-        info("Created BigFile\n");
+    switch(mode) {
+        case MODE_CREATE:
+            info("Creating BigFile\n");
+            t0 = MPI_Wtime();
+            big_file_mpi_create(&bf, filename, MPI_COMM_WORLD);
+            t1 = MPI_Wtime();
+            trank.create += t1 - t0;
+            info("Created BigFile\n");
 
-        info("Creating BigBlock\n");
-        t0 = MPI_Wtime();
-        big_file_mpi_create_block(&bf, &bb, "TestBlock", "i8", nmemb, Nfile, size, MPI_COMM_WORLD);
-        t1 = MPI_Wtime();
-        trank.create += t1 - t0;
-        info("Created BigBlock\n");
-    }  else {
-        info("Opening BigFile\n");
-        t0 = MPI_Wtime();
-        big_file_mpi_open(&bf, filename, MPI_COMM_WORLD);
-        t1 = MPI_Wtime();
-        trank.open += t1 - t0;
-        info("Opened BigFile\n");
+            info("Creating BigBlock\n");
+            t0 = MPI_Wtime();
+            big_file_mpi_create_block(&bf, &bb, "TestBlock", "i8", nmemb, Nfile, size, MPI_COMM_WORLD);
+            t1 = MPI_Wtime();
+            trank.create += t1 - t0;
+            info("Created BigBlock\n");
+            big_block_seek(&bb, &ptr, 0);
+            break;
+        case MODE_UPDATE:
+        case MODE_READ:
+            info("Opening BigFile\n");
+            t0 = MPI_Wtime();
+            big_file_mpi_open(&bf, filename, MPI_COMM_WORLD);
+            t1 = MPI_Wtime();
+            trank.open += t1 - t0;
+            info("Opened BigFile\n");
 
-        info("Opening BigBlock\n");
-        t0 = MPI_Wtime();
-        big_file_mpi_open_block(&bf, &bb, "TestBlock", MPI_COMM_WORLD);
-        t1 = MPI_Wtime();
-        trank.open += t1 - t0;
-        info("Opened BigBlock\n");
-        size = bb.size;
-        nmemb = bb.nmemb;
-        Nfile = bb.Nfile;
+            info("Opening BigBlock\n");
+            t0 = MPI_Wtime();
+            big_file_mpi_open_block(&bf, &bb, "TestBlock", MPI_COMM_WORLD);
+            t1 = MPI_Wtime();
+            trank.open += t1 - t0;
+            info("Opened BigBlock\n");
+            size = bb.size;
+            nmemb = bb.nmemb;
+            Nfile = bb.Nfile;
+            big_block_seek(&bb, &ptr, 0);
+        break;
+        case MODE_GROW:
+            info("Growing BigFile\n");
+            t0 = MPI_Wtime();
+            big_file_mpi_open(&bf, filename, MPI_COMM_WORLD);
+            t1 = MPI_Wtime();
+            trank.open += t1 - t0;
+            info("Opened BigFile\n");
+
+            info("Opening BigBlock\n");
+            t0 = MPI_Wtime();
+            big_file_mpi_open_block(&bf, &bb, "TestBlock", MPI_COMM_WORLD);
+            oldsize = bb.size;
+            big_file_mpi_grow_block(&bf, &bb, Nfile, size, MPI_COMM_WORLD);
+            t1 = MPI_Wtime();
+            trank.open += t1 - t0;
+            info("Opened BigBlock\n");
+            nmemb = bb.nmemb;
+            big_block_seek(&bb, &ptr, oldsize);
+        break;
+        default:
+            abort();
     }
 
     start = size * ThisTask / NTask;
     localsize = size * (ThisTask + 1) / NTask - start;
 
     info("Writing to `%s`\n", filename);
-    info("mode %s\n", mode);
+    info("mode %s\n", MODES[mode]);
     info("nmemb %d\n", nmemb);
     info("Size %td\n", size);
     info("NBlobFiles %td\n", Nfile);
@@ -138,48 +167,51 @@ iosim(char * filename)
     big_array_init(&array, fakedata, "i8", 2, (size_t[]){localsize, nmemb}, NULL);
 
 
-    if(0 == strcmp(mode, MODE_CREATE) || 0 == strcmp(mode, MODE_UPDATE)) {
-        info("Initializing FakeData\n");
-        for(i = 0; i < localsize; i ++) {
-            int j;
-            for(j = 0; j < nmemb; j ++) {
-                fakedata[i * nmemb + j] = start + i;
-            }
-        }
-        info("Initialized FakeData\n");
-        info("Writing BigBlock\n");
-        t0 = MPI_Wtime();
-        big_block_mpi_write(&bb, &ptr, &array, Nwriter, MPI_COMM_WORLD);
-        t1 = MPI_Wtime();
-        trank.write += t1 - t0;
-        info("Written BigBlock\n");
-        info("Writing took %f seconds\n", trank.write);
+    switch(mode) {
+        case MODE_CREATE:
+        case MODE_UPDATE:
+        case MODE_GROW:
 
-    }
-    else {
-        info("Reading BigBlock\n");
-
-        big_block_seek(&bb, &ptr, 0);
-        t0 = MPI_Wtime();
-        big_block_mpi_read(&bb, &ptr, &array, Nwriter, MPI_COMM_WORLD);
-        t1 = MPI_Wtime();
-        trank.read += t1 - t0;
-        info("Reading took %f seconds\n", trank.read);
-        info("Initializing FakeData\n");
-        for(i = 0; i < localsize; i ++) {
-            int j;
-            for(j = 0; j < nmemb; j ++) {
-                //printf("%lX ", fakedata[i * nmemb + j]);
-
-                if (fakedata[i * nmemb + j] != start + i) {
-                    info("data is corrupted either due to reading or writing\n");
-                    abort();
-
+            info("Initializing FakeData\n");
+            for(i = 0; i < localsize; i ++) {
+                int j;
+                for(j = 0; j < nmemb; j ++) {
+                    fakedata[i * nmemb + j] = start + i;
                 }
             }
-        }
-        //printf("\n");
-        info("Initialized FakeData\n");
+            info("Initialized FakeData\n");
+            info("Writing BigBlock\n");
+            t0 = MPI_Wtime();
+            big_block_mpi_write(&bb, &ptr, &array, Nwriter, MPI_COMM_WORLD);
+            t1 = MPI_Wtime();
+            trank.write += t1 - t0;
+            info("Written BigBlock\n");
+            info("Writing took %f seconds\n", trank.write);
+            break;
+        case MODE_READ:
+            info("Reading BigBlock\n");
+
+            t0 = MPI_Wtime();
+            big_block_mpi_read(&bb, &ptr, &array, Nwriter, MPI_COMM_WORLD);
+            t1 = MPI_Wtime();
+            trank.read += t1 - t0;
+            info("Reading took %f seconds\n", trank.read);
+            info("Initializing FakeData\n");
+            for(i = 0; i < localsize; i ++) {
+                int j;
+                for(j = 0; j < nmemb; j ++) {
+                    //printf("%lX ", fakedata[i * nmemb + j]);
+
+                    if (fakedata[i * nmemb + j] != start + i) {
+                        info("data is corrupted either due to reading or writing\n");
+                        abort();
+
+                    }
+                }
+            }
+            //printf("\n");
+            info("Initialized FakeData\n");
+        break;
     }
 
     info("Closing BigBlock\n");
@@ -205,7 +237,7 @@ iosim(char * filename)
 
     if (ThisTask == 0){
         char timelog[4096];
-        sprintf(timelog, "%s/%s-timelog", filename, mode);
+        sprintf(timelog, "%s/%s-timelog", filename, MODES[mode]);
         FILE * fp = fopen(timelog, "a+");
         if (!fp){
             info("iosim.c: Couldn't open file %s for writting!\n", timelog);
@@ -213,7 +245,7 @@ iosim(char * filename)
         else{
             fprintf(fp, "# mode\tNfile\tranks\twriters\titems\tnmemb\n"
                         "%s\t%d\t%d\t%d\t%td\t%d\n",
-                         mode, Nfile, NTask, Nwriter, size, nmemb);
+                         MODES[mode], Nfile, NTask, Nwriter, size, nmemb);
 
             fprintf(fp, "# Task\tTcreate\t\tTopen\t\tTwrite\t\tTread\t\tTclose\n");
             for (i=0; i<NTask; i++) {
@@ -233,7 +265,7 @@ usage()
     if(ThisTask != 0) return;
     printf("usage: bigfile-iosim [-%s] command filename \n", getoptstr);
 
-    printf("  command : create / update / read \n"
+    printf("  command : create / update / read / grow \n"
            " -A : Force Aggreated Mode \n"
            " -n N : set number of writer subcommunicators to N; 0 for number of MPI ranks\n"
            " -s N : set number of rows in the block to N (for create)\n"
@@ -299,12 +331,14 @@ int main(int argc, char * argv[]) {
         goto byebye;
     }
 
-    mode = strdup(argv[optind]);
-    if( (0 != strcmp(argv[optind], "read"))
-     && (0 != strcmp(argv[optind], "create")) 
-     && (0 != strcmp(argv[optind], "update"))) {
+    char * smode = strdup(argv[optind]);
+    for(mode = 0; mode < 4; mode ++) {
+        if(0 == strcmp(MODES[mode], smode)) break;
+    }
+    if(mode == 4) {
         usage(); goto byebye;
     }
+
     optind++;
 
     sprintf(filename, "%s", argv[optind]);
