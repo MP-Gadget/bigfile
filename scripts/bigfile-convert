@@ -5,7 +5,7 @@ import logging
 import argparse
 import os
 
-ap = argparse.ArgumentParser('hdf2bigfile',
+ap = argparse.ArgumentParser('bigfile-convert',
     description="""
 Converting between HDF5, bigfile, and FITS files.
 
