@@ -269,6 +269,8 @@ class Dataset:
         dtype = []
         size = None
         for block in self.blocknames:
+            if '/' in block:
+                raise BigFileError('cannot create nested dataset')
             bb = self.blocks[block]
             dtype.append((block, bb.dtype))
             if size is None: size = bb.size
