@@ -783,7 +783,9 @@ int
 big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 {
     char * chunkbuf = malloc(CHUNK_BYTES);
-    int felsize = dtype_itemsize(bb->dtype) * bb->nmemb;
+
+    int nmemb = bb->nmemb ? bb->nmemb : 1;
+    int felsize = dtype_itemsize(bb->dtype) * nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
 
     BigArray chunk_array = {0};
@@ -804,7 +806,7 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
     big_array_iter_init(&array_iter, array);
 
-    toread = array->size / bb->nmemb;
+    toread = array->size / nmemb;
 
     ptrdiff_t abs = bb->foffset[ptr->fileid] + ptr->roffset + toread;
     RAISEIF(abs > bb->size,
@@ -877,7 +879,8 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     /* the file header is modified */
     bb->dirty = 1;
     char * chunkbuf = malloc(CHUNK_BYTES);
-    int felsize = dtype_itemsize(bb->dtype) * bb->nmemb;
+    int nmemb = bb->nmemb ? bb->nmemb : 1;
+    int felsize = dtype_itemsize(bb->dtype) * nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
 
     BigArray chunk_array = {0};
@@ -897,7 +900,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
     big_array_iter_init(&array_iter, array);
 
-    towrite = array->size / bb->nmemb;
+    towrite = array->size / nmemb;
 
     ptrdiff_t abs = bb->foffset[ptr->fileid] + ptr->roffset + towrite;
     RAISEIF(abs > bb->size,
