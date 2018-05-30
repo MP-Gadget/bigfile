@@ -44,6 +44,9 @@ class FileBase(FileLowLevelAPI):
     def __iter__(self):
         return iter(self.blocks)
 
+    def keys(self):
+        return self.blocks
+
     def __getitem__(self, key):
         if key.endswith('/'):
             return self.subfile(key)
@@ -118,7 +121,7 @@ class File(FileBase):
         return self.open(blockname)
 
     def subfile(self, key):
-        return File(os.path.join(self.basename, key))
+        return File(os.path.join(self.basename, key.lstrip('/')))
 
 class ColumnMPI(Column):
     def __init__(self, comm):
