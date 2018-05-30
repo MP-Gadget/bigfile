@@ -7,31 +7,40 @@ import os
 
 ap = argparse.ArgumentParser('hdf2bigfile',
     description="""
-Converting a HDF5 file to a bigfile.
+Converting between HDF5, bigfile, and FITS files.
 
-DataGroup is converted as sub-file,
-Composite Data Types are converted as sub-file,
-Simple Columns are converted as BigBlock.
+Bigfile: (directories)
+    - Composite Data Types are converted as sub-file,
+    - Simple Columns are converted as BigBlock.
+    - Shape are stored as ndarray.shape attribute.
+      Multidimensional arrays are flattened and stored.
+    - attrs are stored as attrs.
 
-Shape are converted to ndarray.shape attribute.
+FITS: (.fits, .fz, .fits.gz)
+    - Composite Data Types are stored as TableHDU
+    - Simple Columns are stored as TableHDU with '_'
+    - attrs are stored as strings.
+    - u8 is converted to i8
+
+HDF5: (.h5, .hdf5, .hdf)
+    - everything, but u1 is not supported.
 
 Vector columns in a DataSet is converted to 2d tables (nmemb >= 1)
-Multidimensional arrays are flattened, and the orginal shape is
-saved as ndarray.shape attribute.
 
-Strides are lost: arrays are always written as C-contiguous.
+include and exclude list are not implemented
 
-Currently, attributes are not carried over.
-Currently, include and exclude filters do not work.
-
+Type of file is infered from file name / type
 """)
 
-ap.add_argument("source")
+ap.add_argument("src")
 ap.add_argument("dest")
+ap.add_argument("--src-format", default=None)
+ap.add_argument("--dest-format", default=None)
+ap.add_argument("--stop-on-errors", default=False, action='store_true')
 ap.add_argument("--verify", action='store_true', default=True)
 ap.add_argument("--no-verify", dest='verify', action='store_false', default=True)
-ap.add_argument("--include", action="append")
-ap.add_argument("--exclude", action="append")
+#ap.add_argument("--include", action="append")
+#ap.add_argument("--exclude", action="append")
 
 def ishdf5(path):
     if os.path.exists(path):
@@ -56,30 +65,50 @@ def isbigfile(path):
     return True
 
 def main(ns):
-    if ishdf5(ns.source):
-        reader = HDFReader
-    elif isfits(ns.source):
-        reader = FITSReader
-    elif isbigfile(ns.source):
-        reader = BigFileReader
+    if ns.src_format is None:
+        if ishdf5(ns.src):
+            ns.src_format = "hdf"
+        elif isfits(ns.src):
+            ns.src_format = "fits"
+        elif isbigfile(ns.src):
+            ns.src_format = "bigfile"
+
+    readers = {'hdf' : HDFReader,
+               'fits': FITSReader,
+               'bigfile' : BigFileReader,
+              }
+    writers = {'hdf' : HDFWriter,
+               'fits': FITSWriter,
+               'bigfile' : BigFileWriter,
+              }
 
     if ishdf5(ns.dest):
-        writer = HDFWriter
-        verify = HDFReader if ns.verify else None
+        ns.dest_format = "hdf"
     elif isfits(ns.dest):
-        writer = FITSWriter
-        verify = FITSReader if ns.verify else None
+        ns.dest_format = "fits"
     elif isbigfile(ns.dest):
-        writer = BigFileWriter
-        verify = BigFileReader if ns.verify else None
+        ns.dest_format = "bigfile"
 
-    convert(ns.source, ns.dest, reader, writer, verify)
+    if not ns.stop_on_errors:
+        logger = []
+    else:
+        logger = None
+
+    convert(ns.src, ns.dest, readers[ns.src_format], writers[ns.dest_format],
+            readers[ns.dest_format] if ns.verify else None,
+            errlogger=logger)
+
+    if logger is not None:
+        print('\n'.join(logger))
+        import sys
+        if len(logger) > 0:
+            sys.exit(-1)
 
 class ReadProxy(object):
     def __init__(self, obj):
         self.obj = obj
     def __getitem__(self, index):
-        return self.obj[index].view(dtype=self.dtype)
+        return self.obj[index].view(dtype=self.dtype).reshape(self.shape)
     def __len__(self):
         return self.shape[0]
     def __repr__(self):
@@ -93,27 +122,29 @@ class IOBase:
     def __exit__(self, *args):
         self.fileobj.__exit__(*args)
 
-    def traverse(self, operation, prefix="", dtype=None):
+    def traverse(self, operation, prefix="", errlogger=None):
         children = self.getchildren(prefix)
         for k in children:
             path = '/'.join([prefix, k])
-            self.traverse(operation, path)
+            self.traverse(operation, path, errlogger=errlogger)
 
         if len(children) == 0:
             srcobj = self.getobj(prefix)
-            # operation(srcobj, prefix)
-            try:
+            if errlogger is not None:
+                try:
+                    operation(srcobj, prefix)
+                except Exception as e:
+                    errlogger.append('Error processing %s : %s' % (prefix, str(e)))
+            else:
                 operation(srcobj, prefix)
-            except Exception as e:
-                print('Error processing %s' % prefix, e)
 
     def verify(self, srcobj, path):
-        print("Verifying %s against %s" % (str(srcobj), path))
         from numpy.testing import assert_allclose
         destobj = self.getobj(path)
         if len(srcobj) > 0:
+        # by pass dtype yet because it may change endianess e.g.
         #    assert (srcobj.dtype == destobj.dtype)
-            assert tuple(srcobj.shape) == tuple(destobj.shape)
+            assert_allclose(tuple(srcobj.shape), tuple(destobj.shape))
 
         src = srcobj[:].ravel()
         dest = destobj[:].ravel()
@@ -318,7 +349,16 @@ class FITSReader(IOBase):
         else:
             obj1.dtype = tbldtype
 
-        obj1.shape = (obj.get_nrows(), )
+        header = obj.read_header()
+        if 'NDARRAY_NDIM' in header:
+            ndim = int(header['NDARRAY_NDIM'])
+            shape = [
+                int(header['NDARRAY_SHAPE_%d' % i]) for i in range(ndim)]
+            shape = tuple(shape)
+        else:
+            shape = (obj.get_nrows(), )
+
+        obj1.shape = shape
         obj1.size = numpy.prod(obj1.shape, dtype='intp')
 
         obj1.attrs = dict(obj.read_header())
@@ -371,27 +411,33 @@ class FITSWriter(IOBase):
             # workaround FITS not allowing non-structured data
             data = data.view(dtype=[('_', data.dtype)])
 
-        obj.create_table_hdu(extname=extname, dtype=data.dtype, dims=data.shape)
+        obj.create_table_hdu(extname=extname, dtype=data.dtype)
         bb = obj[extname]
-        bb.write(data)
+        bb.write(data.ravel())
+
+        header = {}
         if srcobj.attrs is not None:
-            header = dict([(k, str(v)) for k, v in srcobj.attrs.items()])
-            bb.write_keys(header)
+            header.update(dict([(k, str(v)) for k, v in srcobj.attrs.items()]))
+
+        header['NDARRAY_NDIM'] = len(data.shape)
+
+        for i, s in enumerate(data.shape):
+            header['NDARRAY_SHAPE_%d' % i] = s
+
+        bb.write_keys(header)
 
         #print(extname, data.shape)
-        #print('created table', bb,)
+        #print('created table', bb, bb.read_header())
 
-def convert(srcpath, outpath, readertype, writertype, verifiertype):
-
+def convert(srcpath, outpath, readertype, writertype, verifiertype, errlogger):
     with readertype(srcpath) as hin:
 
         with writertype(outpath) as writer:
-            hin.traverse(writer.create)
+            hin.traverse(writer.create, errlogger=errlogger)
 
         if verifiertype:
             with verifiertype(outpath) as reader:
-                hin.traverse(reader.verify)
-
+                hin.traverse(reader.verify, errlogger=errlogger)
 
 if __name__ == "__main__" :
     ns = ap.parse_args()
