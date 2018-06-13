@@ -79,17 +79,17 @@ Description
 -----------
 
 :code:`bigfile` provides a hierarchical structure of data columns via 
-:code:`BigFile`, :code:`BigData` and :code:`BigBlock`. 
+:code:`File`, :code:`Dataset` and :code:`Column`. 
 
-A :code:`BigBlock` stores a two dimesional table of :code:`nmemb` columns 
+A :code:`Column` stores a two dimesional table of :code:`nmemb` columns 
 and :code:`size` rows. Numerical typed columns are supported.
 
-Attributes can be attached to a :code:`BigBlock`. 
+Attributes can be attached to a :code:`Column`. 
 Numerical attributes and string attributes are supported.
 
 Type casting is performed on-the-fly if read/write operation requests a different data type than the file has stored.
 
-:code:`bigfile.BigData` works with `dask.from_array <http://dask.pydata.org>`_.
+:code:`bigfile.Dataset` works with `dask.from_array <http://dask.pydata.org>`_.
 
 The Anatomy of a BigFile
 ++++++++++++++++++++++++
@@ -189,11 +189,11 @@ Examples
 
     import bigfile
 
-    f = bigfile.BigFile('PART_018')
+    f = bigfile.File('PART_018')
 
     print (f.blocks)
     # Position and Velocity of GAS particles
-    data = bigfile.BigData(f["0/"], ['Position', 'Velocity'])
+    data = bigfile.DataSet(f["0/"], ['Position', 'Velocity'])
     
     print (data.size)
     print (data.dtype)
