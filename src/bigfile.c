@@ -464,7 +464,17 @@ int
 _big_block_create_internal(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
 {
     memset(bb, 0, sizeof(bb[0]));
+
     if(basename == NULL) basename = "/.";
+
+    RAISEIF (
+         strchr(basename, ' ')
+      || strchr(basename, '\t')
+      || strchr(basename, '\n'),
+      ex_name,
+      "Column name cannot contain blanks (space, tab or newline)"
+    );
+
     bb->basename = strdup(basename);
 
     bb->attrset = attrset_create();
@@ -528,6 +538,9 @@ ex_flush2:
         attrset_free(bb->attrset);
         return -1;
     }
+
+ex_name:
+    return -1;
 }
 
 static void
@@ -1687,6 +1700,14 @@ attrset_set_attr(BigAttrSet * attrset, const char * attrname, const void * data,
     BigAttr * attr;
     attrset->dirty = 1;
 
+    RAISEIF (
+         strchr(attrname, ' ')
+      || strchr(attrname, '\t')
+      || strchr(attrname, '\n'),
+      ex_name,
+      "Attribute name cannot contain blanks (space, tab or newline)"
+    );
+
     attrset_remove_attr(attrset, attrname);
     /* add ensures the dtype has been normalized! */
     RAISEIF(0 != attrset_add_attr(attrset, attrname, dtype, nmemb),
@@ -1698,6 +1719,7 @@ attrset_set_attr(BigAttrSet * attrset, const char * attrname, const void * data,
             "attr nmemb mismatch");
     return dtype_convert_simple(attr->data, attr->dtype, data, dtype, attr->nmemb);
 
+ex_name:
 ex_mismatch:
 ex_add:
     return -1;

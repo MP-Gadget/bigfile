@@ -175,9 +175,8 @@ def test_bigdata(comm):
     for d in dtypes:
         dt = numpy.dtype(d)
         numpy.random.seed(1234)
-
         # test creating
-        with x.create(str(d), Nfile=1, dtype=dt, size=128) as b:
+        with x.create(str(d).replace(' ', '_'), Nfile=1, dtype=dt, size=128) as b:
             data = numpy.random.uniform(100000, size=128*128).view(dtype=b.dtype.base).reshape([-1] + list(dt.shape))[:b.size]
             b.write(0, data)
 
@@ -387,14 +386,23 @@ def test_blank_attr(comm):
     x = BigFile(fname, create=True)
 
     with x.create("Header", Nfile=1, dtype=None, size=128) as b:
-        with pytest.raises(KeyError):
+        with pytest.raises(BigFileError):
             b.attrs['v 3'] = ['a', 'bb', 'ccc']
 
-        with pytest.raises(KeyError):
+        with pytest.raises(BigFileError):
             b.attrs['v\t3'] = ['a', 'bb', 'ccc']
 
-        with pytest.raises(KeyError):
+        with pytest.raises(BigFileError):
             b.attrs['v\n3'] = ['a', 'bb', 'ccc']
+
+    with pytest.raises(BigFileError):
+        x.create(" ", Nfile=1, dtype=None, size=128)
+
+    with pytest.raises(BigFileError):
+        x.create("\t", Nfile=1, dtype=None, size=128)
+
+    with pytest.raises(BigFileError):
+        x.create("\n", Nfile=1, dtype=None, size=128)
 
 @MPITest(commsize=[1])
 def test_string(comm):
