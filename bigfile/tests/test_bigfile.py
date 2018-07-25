@@ -9,6 +9,7 @@ import tempfile
 import numpy
 import shutil
 from numpy.testing import assert_equal, assert_raises
+import pytest
 
 dtypes = [
     '?', 
@@ -379,6 +380,21 @@ def test_mpi_badfilenames(comm):
     fname = tempfile.mkdtemp()
     fname = fname + '%d' % comm.rank
     assert_raises(BigFileError, BigFileMPI, comm, fname, create=True)
+
+@MPITest(commsize=[1])
+def test_blank_attr(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+
+    with x.create("Header", Nfile=1, dtype=None, size=128) as b:
+        with pytest.raises(KeyError):
+            b.attrs['v 3'] = ['a', 'bb', 'ccc']
+
+        with pytest.raises(KeyError):
+            b.attrs['v\t3'] = ['a', 'bb', 'ccc']
+
+        with pytest.raises(KeyError):
+            b.attrs['v\n3'] = ['a', 'bb', 'ccc']
 
 @MPITest(commsize=[1])
 def test_string(comm):

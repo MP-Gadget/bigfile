@@ -195,6 +195,10 @@ cdef class AttrSet:
 
     def __setitem__(self, name, value):
         name = name.encode()
+
+        if b' ' in name or b'\t' in name or b'\n' in name:
+            raise KeyError("attr has space, tab or newlin in it; this is not supported.")
+
         self.bb._check_closed()
 
 
