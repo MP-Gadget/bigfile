@@ -543,9 +543,6 @@ ex_name:
     return -1;
 }
 
-static void
-big_block_close_internal(BigBlock * block);
-
 int
 big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
 {
@@ -566,7 +563,7 @@ big_block_create(BigBlock * bb, const char * basename, const char * dtype, int n
 ex_internal:
     return rt;
 ex_fileio:
-    big_block_close_internal(bb);
+    _big_block_close_internal(bb);
     return -1;
 }
 
@@ -622,8 +619,8 @@ ex_fileio:
     return -1;
 }
 
-static void
-big_block_close_internal(BigBlock * block)
+void
+_big_block_close_internal(BigBlock * block)
 {
     attrset_free(block->attrset);
 
@@ -642,7 +639,7 @@ big_block_close(BigBlock * block)
             ex_flush,
             NULL);
 finalize:
-    big_block_close_internal(block);
+    _big_block_close_internal(block);
     return rt;
 
 ex_flush:
