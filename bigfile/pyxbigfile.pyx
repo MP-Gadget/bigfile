@@ -50,33 +50,33 @@ cdef extern from "bigfile.c":
     struct CBigAttrSet "BigAttrSet":
         pass
 
-    char * big_file_get_error_message()
-    void big_file_set_buffer_size(size_t bytes)
-    int big_block_open(CBigBlock * bb, char * basename)
-    int big_block_grow(CBigBlock * bb, int Nfilegrow, size_t fsize[])
-    int big_block_clear_checksum(CBigBlock * bb)
-    int big_block_create(CBigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[])
-    int big_block_close(CBigBlock * block)
-    int big_block_flush(CBigBlock * block)
-    void big_block_set_dirty(CBigBlock * block, int value)
-    void big_attrset_set_dirty(CBigAttrSet * attrset, int value)
-    int big_block_seek(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t offset)
-    int big_block_seek_rel(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t rel)
-    int big_block_read(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array)
-    int big_block_write(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array)
-    int big_block_set_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
-    int big_block_remove_attr(CBigBlock * block, char * attrname)
-    int big_block_get_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb)
-    CBigAttr * big_block_lookup_attr(CBigBlock * block, char * attrname)
-    CBigAttr * big_block_list_attrs(CBigBlock * block, size_t * count)
-    int big_array_init(CBigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[])
+    char * big_file_get_error_message() nogil
+    void big_file_set_buffer_size(size_t bytes) nogil
+    int big_block_open(CBigBlock * bb, char * basename) nogil
+    int big_block_grow(CBigBlock * bb, int Nfilegrow, size_t fsize[]) nogil
+    int big_block_clear_checksum(CBigBlock * bb) nogil
+    int big_block_create(CBigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[]) nogil
+    int big_block_close(CBigBlock * block) nogil
+    int big_block_flush(CBigBlock * block) nogil
+    void big_block_set_dirty(CBigBlock * block, int value) nogil
+    void big_attrset_set_dirty(CBigAttrSet * attrset, int value) nogil
+    int big_block_seek(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t offset) nogil
+    int big_block_seek_rel(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t rel) nogil
+    int big_block_read(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array) nogil
+    int big_block_write(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array) nogil
+    int big_block_set_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb) nogil
+    int big_block_remove_attr(CBigBlock * block, char * attrname) nogil
+    int big_block_get_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb) nogil
+    CBigAttr * big_block_lookup_attr(CBigBlock * block, char * attrname) nogil
+    CBigAttr * big_block_list_attrs(CBigBlock * block, size_t * count) nogil
+    int big_array_init(CBigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[]) nogil
 
-    int big_file_open_block(CBigFile * bf, CBigBlock * block, char * blockname)
-    int big_file_create_block(CBigFile * bf, CBigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[])
-    int big_file_open(CBigFile * bf, char * basename)
-    int big_file_list(CBigFile * bf, char *** list, int * N)
-    int big_file_create(CBigFile * bf, char * basename)
-    int big_file_close(CBigFile * bf)
+    int big_file_open_block(CBigFile * bf, CBigBlock * block, char * blockname) nogil
+    int big_file_create_block(CBigFile * bf, CBigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[]) nogil
+    int big_file_open(CBigFile * bf, char * basename) nogil
+    int big_file_list(CBigFile * bf, char *** list, int * N) nogil
+    int big_file_create(CBigFile * bf, char * basename) nogil
+    int big_file_close(CBigFile * bf) nogil
 
 def set_buffer_size(bytes):
     big_file_set_buffer_size(bytes)
@@ -104,12 +104,15 @@ cdef class FileLowLevelAPI:
     def __init__(self, filename, create=False):
         """ if create is True, create the file if it is nonexisting"""
         filename = filename.encode()
+        cdef char * filenameptr = filename
         if create:
-            if 0 != big_file_create(&self.bf, filename):
-                raise Error()
+            with nogil:
+                rt = big_file_create(&self.bf, filenameptr)
         else:
-            if 0 != big_file_open(&self.bf, filename):
-                raise Error()
+            with nogil:
+                rt = big_file_open(&self.bf, filenameptr)
+        if rt != 0:
+            raise Error()
         self.closed = False
 
     def __dealloc__(self):
@@ -129,7 +132,8 @@ cdef class FileLowLevelAPI:
         cdef char ** list
         cdef int N
         self._check_closed();
-        big_file_list(&self.bf, &list, &N)
+        with nogil:
+            big_file_list(&self.bf, &list, &N)
         try:
             return sorted([str(list[i].decode()) for i in range(N)])
         finally:
@@ -139,7 +143,9 @@ cdef class FileLowLevelAPI:
         return []
 
     def close(self):
-        if 0 != big_file_close(&self.bf):
+        with nogil:
+            rt = big_file_close(&self.bf)
+        if rt != 0:
             raise Error()
         self.closed = True
 
@@ -236,7 +242,7 @@ cdef class ColumnLowLevelAPI:
         def __get__(self):
             self._check_closed()
             return self.bb.size
-    
+
     property dtype:
         def __get__(self):
             self._check_closed()
@@ -271,11 +277,14 @@ cdef class ColumnLowLevelAPI:
     def open(self, FileLowLevelAPI f, blockname):
         f._check_closed()
         blockname = blockname.encode()
-        if 0 != big_file_open_block(&f.bf, &self.bb, blockname):
+        cdef char * blocknameptr = blockname
+        with nogil:
+            rt = big_file_open_block(&f.bf, &self.bb, blocknameptr)
+        if rt != 0:
             raise Error()
         self.closed = False
 
-    def grow(self, size, Nfile=1):
+    def grow(self, numpy.intp_t size, numpy.intp_t Nfile=1):
         """
             Increase the size of the column by size.
         """
@@ -291,18 +300,30 @@ cdef class ColumnLowLevelAPI:
         fsize[:] = (numpy.arange(Nfile) + 1) * size // Nfile \
                  - (numpy.arange(Nfile)) * size // Nfile
 
-        if 0 != big_block_grow(&self.bb, Nfile, <size_t*>fsize.data):
+        with nogil:
+            rt = big_block_grow(&self.bb, Nfile, <size_t*>fsize.data)
+        if rt != 0:
             raise Error()
 
         self.closed = False
 
-    def create(self, FileLowLevelAPI f, blockname, dtype=None, size=None, Nfile=1):
+    def create(self, FileLowLevelAPI f, blockname, dtype=None, size=None, numpy.intp_t Nfile=1):
         f._check_closed()
+
+        # need to hold the reference
         blockname = blockname.encode()
+
         cdef numpy.ndarray fsize
+        cdef numpy.intp_t items
+        cdef char * dtypeptr
+        cdef char * blocknameptr
+
+        blocknameptr = blockname
         if dtype is None:
-            if 0 != big_file_create_block(&f.bf, &self.bb, blockname, NULL,
-                    0, 0, NULL):
+            with nogil:
+                rt = big_file_create_block(&f.bf, &self.bb, blocknameptr, NULL,
+                        0, 0, NULL)
+            if rt != 0:
                 raise Error()
 
         else:
@@ -319,10 +340,15 @@ cdef class ColumnLowLevelAPI:
             fsize = numpy.empty(dtype='intp', shape=Nfile)
             fsize[:] = (numpy.arange(Nfile) + 1) * size // Nfile \
                      - (numpy.arange(Nfile)) * size // Nfile
-            if 0 != big_file_create_block(&f.bf, &self.bb, blockname, 
-                    dtype.base.str.encode(),
-                    items, Nfile, <size_t*> fsize.data):
+            dtype2 = dtype.base.str.encode()
+            dtypeptr = dtype2
+            with nogil:
+                rt = big_file_create_block(&f.bf, &self.bb, blocknameptr,
+                    dtypeptr,
+                    items, Nfile, <size_t*> fsize.data)
+            if rt != 0:
                 raise Error()
+
         self.closed = False
 
     def clear_checksum(self):
@@ -331,9 +357,9 @@ cdef class ColumnLowLevelAPI:
         self._check_closed()
         big_block_clear_checksum(&self.bb)
 
-    def write(self, start, numpy.ndarray buf):
+    def write(self, numpy.intp_t start, numpy.ndarray buf):
         """ write at offset `start' a chunk of data inf buf.
-           
+
             no checking is performed. assuming buf is of the correct dtype.
         """
         self._check_closed()
@@ -344,9 +370,14 @@ cdef class ColumnLowLevelAPI:
                 buf.ndim, 
                 <size_t *> buf.shape,
                 <ptrdiff_t *> buf.strides)
-        if 0 != big_block_seek(&self.bb, &ptr, start):
+        with nogil:
+            rt = big_block_seek(&self.bb, &ptr, start)
+        if rt != 0:
             raise Error()
-        if 0 != big_block_write(&self.bb, &ptr, &array):
+
+        with nogil:
+            rt = big_block_write(&self.bb, &ptr, &array)
+        if rt != 0:
             raise Error()
 
     def __getitem__(self, sl):
@@ -367,7 +398,7 @@ cdef class ColumnLowLevelAPI:
             raise TypeError('Expecting a slice or a scalar, got a `%s`' %
                     str(type(sl)))
 
-    def read(self, start, length, out=None):
+    def read(self, numpy.intp_t start, numpy.intp_t length, out=None):
         """ read from offset `start' a chunk of data of length `length', 
             into array `out'.
 
@@ -392,20 +423,28 @@ cdef class ColumnLowLevelAPI:
                 raise ValueError("output array length mismatches with the request")
             if result.dtype.base.itemsize != self.dtype.base.itemsize:
                 raise ValueError("output array type mismatches with the block")
-            
+
         big_array_init(&array, result.data, self.bb.dtype, 
                 result.ndim, 
                 <size_t *> result.shape,
                 <ptrdiff_t *> result.strides)
-        if 0 != big_block_seek(&self.bb, &ptr, start):
+
+        with nogil:
+            rt = big_block_seek(&self.bb, &ptr, start)
+        if rt != 0:
             raise Error()
-        if 0 != big_block_read(&self.bb, &ptr, &array):
+
+        with nogil:
+            rt = big_block_read(&self.bb, &ptr, &array)
+        if rt != 0:
             raise Error()
         return result
 
     def _flush(self):
         if self.closed: return
-        if 0 != big_block_flush(&self.bb):
+        with nogil:
+            rt = big_block_flush(&self.bb)
+        if rt != 0:
             raise Error()
 
     def _MPI_flush(self):
@@ -424,29 +463,35 @@ cdef class ColumnLowLevelAPI:
             for i in range(Nfile):
                 fchecksum[i] = fchecksum2[i]
 
-        if comm.rank == 0: 
+        if comm.rank == 0:
             big_block_set_dirty(&self.bb, dirty);
         else:
             big_block_set_dirty(&self.bb, 0);
             big_attrset_set_dirty(self.bb.attrset, 0);
 
-        if 0 != big_block_flush(&self.bb):
+        with nogil:
+            rt = big_block_flush(&self.bb)
+        if rt != 0:
             raise Error()
         comm.barrier()
 
     def _close(self):
         if self.closed: return
-        if 0 != big_block_close(&self.bb):
+        with nogil:
+            rt = big_block_close(&self.bb)
+        if rt != 0:
             raise Error()
         self.closed = True
 
     def _MPI_close(self):
         if self.closed: return
         self._MPI_flush()
-        rt = big_block_close(&self.bb)
-        self.closed = True
-        if 0 != rt:
+        with nogil:
+            rt = big_block_close(&self.bb)
+        if rt != 0:
             raise Error()
+
+        self.closed = True
         comm = self.comm
         comm.barrier()
 
