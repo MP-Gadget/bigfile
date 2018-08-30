@@ -387,7 +387,7 @@ cdef class ColumnLowLevelAPI:
         if isinstance(sl, slice):
             start, end, stop = sl.indices(self.size)
             if stop != 1:
-                raise ValueError('must request a continous chunk')
+                raise ValueError('must request a contiguous chunk')
             return self.read(start, end-start)
         elif sl is Ellipsis:
             return self[:]
