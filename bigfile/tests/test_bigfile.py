@@ -146,6 +146,21 @@ def test_fileattr(comm):
     shutil.rmtree(fname)
 
 @MPITest([1])
+def test_file_large_attr(comm):
+    import os.path
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    data = numpy.ones(1024 * 128 * 8, dtype='f8')
+
+    with x['.'] as bb:
+        bb.attrs['value'] = data
+
+    with x['.'] as bb:
+        assert_equal(bb.attrs['value'], data)
+
+    shutil.rmtree(fname)
+
+@MPITest([1])
 def test_casts(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
