@@ -109,7 +109,10 @@ iosim(char * filename)
         case MODE_READ:
             info("Opening BigFile\n");
             t0 = MPI_Wtime();
-            big_file_mpi_open(&bf, filename, MPI_COMM_WORLD);
+            if(0 != big_file_mpi_open(&bf, filename, MPI_COMM_WORLD)) {
+                printf("%s\n", big_file_get_error_message()); 
+                return;
+            }
             t1 = MPI_Wtime();
             trank.open += t1 - t0;
             info("Opened BigFile\n");
@@ -128,7 +131,10 @@ iosim(char * filename)
         case MODE_GROW:
             info("Growing BigFile\n");
             t0 = MPI_Wtime();
-            big_file_mpi_open(&bf, filename, MPI_COMM_WORLD);
+            if (0 != big_file_mpi_open(&bf, filename, MPI_COMM_WORLD)) {
+                printf("%s\n", big_file_get_error_message()); 
+                return;
+            }
             t1 = MPI_Wtime();
             trank.open += t1 - t0;
             info("Opened BigFile\n");
