@@ -26,7 +26,7 @@
 #define RAISE(ex, errormsg, ...) { __raise__(errormsg, __FILE__, __LINE__, ##__VA_ARGS__); goto ex; } 
 #define RAISEIF(condition, ex, errormsg, ...) { if(condition) RAISE(ex, errormsg, ##__VA_ARGS__); }
 
-static char * ERRORSTR = NULL;
+static char * volatile ERRORSTR = NULL;
 static size_t CHUNK_BYTES = 64 * 1024 * 1024;
 
 /* Internal AttrSet API */
@@ -44,7 +44,7 @@ struct BigAttrSet {
 };
 
 static BigAttrSet *
-attrset_create();
+attrset_create(void);
 static void attrset_free(BigAttrSet * attrset);
 static int
 attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename);
@@ -94,12 +94,35 @@ big_file_set_buffer_size(size_t bytes)
 char * big_file_get_error_message() {
     return ERRORSTR;
 }
-void big_file_clear_error_message() {
-    if(ERRORSTR) {
-        free(ERRORSTR);
-        ERRORSTR = NULL;
-    }
+
+#if __STDC_VERSION__ >= 201112L
+    #include <stdatomic.h>
+#endif
+
+void
+big_file_set_error_message(char * msg)
+{
+    char * errorstr;
+    if(msg != NULL) msg = strdup(msg);
+
+#if __STDC_VERSION__ >= 201112L
+    errorstr = atomic_exchange(&ERRORSTR, msg);
+#elif defined(__ATOMIC_SEQ_CST)
+    errorstr = __atomic_exchange_n(&ERRORSTR, msg, __ATOMIC_SEQ_CST);
+#elif _OPENMP >= 201307
+    /* openmp 4.0 supports swap capture*/
+    #pragma omp capture 
+     { errorstr = ERRORSTR; ERRORSTR = msg; }
+#else
+    errorstr = ERRORSTR;
+    ERRORSTR = msg;
+    /* really should have propagated errors over the stack! */
+    #warning "enable -std=c11 or -std=gnu11, or luse gcc for thread friendly error handling"
+#endif
+
+    if(errorstr) free(ERRORSTR);
 }
+
 
 static char * _path_join(const char * part1, const char * part2)
 {
@@ -120,8 +143,10 @@ static char * _path_join(const char * part1, const char * part2)
 static int
 _big_file_path_is_block(const char * basename)
 {
-    FILE * fheader = _big_file_open_a_file(basename, FILEID_HEADER, "r");
-    if(fheader == NULL) return 0;
+    FILE * fheader = _big_file_open_a_file(basename, FILEID_HEADER, "r", 0);
+    if(fheader == NULL) {
+        return 0;
+    }
     fclose(fheader);
     return 1;
 }
@@ -141,23 +166,17 @@ __raise__(const char * msg, const char * file, const int line, ...)
         mymsg = strdup(msg);
     }
 
-    if(ERRORSTR) free(ERRORSTR);
-    ERRORSTR = malloc(strlen(mymsg) + 512);
+    char * errorstr = malloc(strlen(mymsg) + 512);
 
     char * fmtstr = alloca(strlen(mymsg) + 512);
     sprintf(fmtstr, "%s @(%s:%d)", mymsg, file, line);
     free(mymsg);
     va_list va;
     va_start(va, line);
-    vsprintf(ERRORSTR, fmtstr, va); 
+    vsprintf(errorstr, fmtstr, va); 
     va_end(va);
-}
 
-void
-big_file_set_error_message(char * msg)
-{
-    if(ERRORSTR) free(ERRORSTR);
-    ERRORSTR = strdup(msg);
+    big_file_set_error_message(errorstr);
 }
 
 /* BigFile */
@@ -228,7 +247,6 @@ bblist * listbigfile_r(const char * basename, char * blockname, struct bblist * 
             strcpy(n->blockname, blockname1);
             bblist = n;
         } else {
-            big_file_clear_error_message();
             bblist = listbigfile_r(basename, blockname1, bblist);
         }
         free(fullpath1);
@@ -322,7 +340,7 @@ big_block_open(BigBlock * bb, const char * basename)
             NULL);
 
     if (!endswith(bb->basename, "/.") && 0 != strcmp(bb->basename, ".")) {
-        FILE * fheader = _big_file_open_a_file(bb->basename, FILEID_HEADER, "r");
+        FILE * fheader = _big_file_open_a_file(bb->basename, FILEID_HEADER, "r", 1);
         RAISEIF (!fheader,
                 ex_open,
                 NULL);
@@ -448,7 +466,7 @@ big_block_grow(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[])
 
     /* now truncate the new files */
     for(i = oldNfile; i < bb->Nfile; i ++) {
-        FILE * fp = _big_file_open_a_file(bb->basename, i, "w");
+        FILE * fp = _big_file_open_a_file(bb->basename, i, "w", 1);
         RAISEIF(fp == NULL, 
                 ex_fileio, 
                 NULL);
@@ -554,7 +572,7 @@ big_block_create(BigBlock * bb, const char * basename, const char * dtype, int n
 
     /* now truncate all files */
     for(i = 0; i < bb->Nfile; i ++) {
-        FILE * fp = _big_file_open_a_file(bb->basename, i, "w");
+        FILE * fp = _big_file_open_a_file(bb->basename, i, "w", 1);
         RAISEIF(fp == NULL, 
                 ex_fileio, 
                 NULL);
@@ -586,7 +604,7 @@ big_block_flush(BigBlock * block)
     FILE * fheader = NULL;
     if(block->dirty) {
         int i;
-        fheader = _big_file_open_a_file(block->basename, FILEID_HEADER, "w+");
+        fheader = _big_file_open_a_file(block->basename, FILEID_HEADER, "w+", 1);
         RAISEIF(fheader == NULL, ex_fileio, NULL);
         RAISEIF(
             (0 > fprintf(fheader, "DTYPE: %s\n", block->dtype)) ||
@@ -842,7 +860,7 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         /* read to the beginning of chunk */
         big_array_iter_init(&chunk_iter, &chunk_array);
 
-        fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r");
+        fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r", 1);
         RAISEIF(fp == NULL,
                 ex_open,
                 NULL);
@@ -937,7 +955,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 
         sysvsum(&bb->fchecksum[ptr->fileid], chunkbuf, chunk_size * felsize);
 
-        fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r+");
+        fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r+", 1);
         RAISEIF(fp == NULL,
                 ex_open,
                 NULL);
@@ -1421,9 +1439,8 @@ attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
 {
     attrset->dirty = 0;
 
-    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR, "r");
+    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR, "r", 0);
     if(fattr == NULL) {
-        big_file_clear_error_message();
         return 0;
     }
     int nmemb;
@@ -1473,9 +1490,8 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
 {
     attrset->dirty = 0;
 
-    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR_V2, "r");
+    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR_V2, "r", 0);
     if(fattr == NULL) {
-        big_file_clear_error_message();
         return 0;
     }
     fseek(fattr, 0, SEEK_END);
@@ -1550,7 +1566,7 @@ attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
     static char conv[] = "0123456789ABCDEF";
     attrset->dirty = 0;
 
-    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR_V2, "w");
+    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR_V2, "w", 1);
     RAISEIF(fattr == NULL,
             ex_open,
             NULL);
@@ -1743,7 +1759,7 @@ ex_notfound:
 }
 
 static BigAttrSet *
-attrset_create()
+attrset_create(void)
 {
     BigAttrSet * attrset = calloc(1, sizeof(BigAttrSet));
     attrset->attrbuf = malloc(128);
@@ -1813,7 +1829,7 @@ BigAttrSet * big_attrset_unpack(void * p)
 /* File Path */
 
 FILE *
-_big_file_open_a_file(const char * basename, int fileid, char * mode)
+_big_file_open_a_file(const char * basename, int fileid, char * mode, int raise)
 {
     char * filename;
     int unbuffered = 0;
@@ -1832,10 +1848,16 @@ _big_file_open_a_file(const char * basename, int fileid, char * mode)
         unbuffered = 1;
     }
     FILE * fp = fopen(filename, mode);
+
+    if(!raise && fp == NULL) {
+        goto ex_fopen;
+    }
+
     RAISEIF(fp == NULL,
         ex_fopen,
         "Failed to open physical file `%s' with mode `%s' (%s)",
         filename, mode, strerror(errno));
+
     if(unbuffered) {
         setbuf(fp, NULL);
     }

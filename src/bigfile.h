@@ -68,7 +68,6 @@ typedef struct BigArrayIter {
 
 int big_file_set_buffer_size(size_t bytes);
 char * big_file_get_error_message(void);
-void big_file_clear_error_message();
 void big_file_set_error_message(char * msg);
 void big_file_checksum(unsigned int * sum, void * buf, size_t size);
 
@@ -108,7 +107,7 @@ void _big_block_close_internal(BigBlock * block);
 int _big_block_grow_internal(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[]);
 
 /* The internal routine to open a physical file */
-FILE * _big_file_open_a_file(const char * basename, int fileid, char * mode);
+FILE * _big_file_open_a_file(const char * basename, int fileid, char * mode, int raise);
 
 void * big_attrset_pack(BigAttrSet * attrset, size_t * bytes);
 void big_attrset_set_dirty(BigAttrSet * attrset, int value);

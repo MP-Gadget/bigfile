@@ -158,7 +158,7 @@ int big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtyp
 
     int i;
     for(i = (size_t) bb->Nfile * rank / NTask; i < (size_t) bb->Nfile * (rank + 1) / NTask; i ++) {
-        FILE * fp = _big_file_open_a_file(bb->basename, i, "w");
+        FILE * fp = _big_file_open_a_file(bb->basename, i, "w", 1);
         if(fp == NULL) {
             rt = -1;
             break;
@@ -199,7 +199,7 @@ int big_block_mpi_grow(BigBlock * bb, int Nfile_grow, size_t fsize_grow[], MPI_C
 
     int i;
     for(i = (size_t) Nfile_grow * rank / NTask; i < (size_t) Nfile_grow * (rank + 1) / NTask; i ++) {
-        FILE * fp = _big_file_open_a_file(bb->basename, i + oldNfile, "w");
+        FILE * fp = _big_file_open_a_file(bb->basename, i + oldNfile, "w", 1);
         if(fp == NULL) {
             rt = -1;
             break;
