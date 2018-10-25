@@ -143,11 +143,11 @@ cdef class FileLowLevelAPI:
         return []
 
     def close(self):
+        self.closed = True
         with nogil:
             rt = big_file_close(&self.bf)
         if rt != 0:
             raise Error()
-        self.closed = True
 
 cdef class AttrSet:
     cdef readonly ColumnLowLevelAPI bb
@@ -441,14 +441,14 @@ cdef class ColumnLowLevelAPI:
         return result
 
     def _flush(self):
-        if self.closed: return
+        self._check_closed()
         with nogil:
             rt = big_block_flush(&self.bb)
         if rt != 0:
             raise Error()
 
     def _MPI_flush(self):
-        if self.closed: return
+        self._check_closed()
         comm = self.comm
         cdef unsigned int Nfile = self.bb.Nfile
         cdef unsigned int[:] fchecksum
@@ -477,21 +477,25 @@ cdef class ColumnLowLevelAPI:
 
     def _close(self):
         if self.closed: return
+        self.closed = True
+
         with nogil:
             rt = big_block_close(&self.bb)
         if rt != 0:
             raise Error()
-        self.closed = True
 
     def _MPI_close(self):
         if self.closed: return
+        # flush the other ranks
         self._MPI_flush()
+
+        self.closed = True
+
         with nogil:
             rt = big_block_close(&self.bb)
         if rt != 0:
             raise Error()
 
-        self.closed = True
         comm = self.comm
         comm.barrier()
 
