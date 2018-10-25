@@ -418,6 +418,7 @@ def test_blank_attr(comm):
 
     with pytest.raises(BigFileError):
         x.create("\n", Nfile=1, dtype=None, size=128)
+    shutil.rmtree(fname)
 
 @MPITest(commsize=[1])
 def test_string(comm):
