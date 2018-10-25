@@ -396,6 +396,36 @@ def test_mpi_badfilenames(comm):
     assert_raises(BigFileError, BigFileMPI, comm, fname, create=True)
 
 @MPITest(commsize=[1])
+def test_threads(comm):
+    from threading import Thread, Event
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+
+    with x.create("Threading", Nfile=1, dtype='i8', size=128) as b:
+        E = Event()
+        def func():
+            E.wait()
+            for i in range(100):
+                with pytest.raises(BigFileError):
+                    b.attrs['v 3'] = ['a', 'bb', 'ccc']
+
+                b.write(0, numpy.ones(128))
+                b[3:10]
+
+        t = []
+        for i in range(4):
+            t.append(Thread(target = func))
+
+        for i in t: i.start()
+
+        E.set()
+
+        for i in t: i.join()
+
+    shutil.rmtree(fname)
+
+
+@MPITest(commsize=[1])
 def test_blank_attr(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
