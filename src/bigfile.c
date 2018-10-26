@@ -304,65 +304,6 @@ ex_subdir:
     return -1;
 }
 
-void *
-_big_block_pack(BigBlock * block, size_t * bytes)
-{
-    size_t attrsize = 0;
-    void * attrset = _big_attrset_pack(block->attrset, &attrsize);
-    int Nfile = block->Nfile;
-
-    * bytes =   sizeof(block[0])
-              + strlen(block->basename) + 1
-              + (Nfile) * sizeof(block->fsize[0])
-              + (Nfile + 1) * sizeof(block->foffset[0])
-              + (Nfile) * sizeof(block->fchecksum[0])
-              + attrsize;
-
-    void * buf = malloc(*bytes);
-
-    char * ptr = (char *) buf;
-
-
-    memcpy(ptr, block, sizeof(block[0]));
-    ptr += sizeof(block[0]);
-    memcpy(ptr, block->basename, strlen(block->basename) + 1);
-    ptr += strlen(block->basename) + 1;
-    memcpy(ptr, block->fsize, (Nfile) * sizeof(block->fsize[0]));
-    ptr += (Nfile) * sizeof(block->fsize[0]);
-    memcpy(ptr, block->foffset, (Nfile + 1) * sizeof(block->foffset[0]));
-    ptr += (Nfile + 1) * sizeof(block->foffset[0]);
-    memcpy(ptr, block->fchecksum, (Nfile) * sizeof(block->fchecksum[0]));
-    ptr += (Nfile) * sizeof(block->fchecksum[0]);
-    memcpy(ptr, attrset, attrsize);
-    ptr += attrsize;
-
-    return buf;
-}
-
-void
-_big_block_unpack(BigBlock * block, void * buf)
-{
-    char * ptr = (char*)buf;
-
-    memcpy(block, ptr, sizeof(block[0]));
-    ptr += sizeof(block[0]);
-    int Nfile = block->Nfile;
-
-    block->fsize = calloc(Nfile, sizeof(size_t));
-    block->foffset = calloc(Nfile + 1, sizeof(size_t));
-    block->fchecksum = calloc(Nfile, sizeof(int));
-
-    block->basename = strdup(ptr);
-    ptr += strlen(ptr) + 1;
-    memcpy(block->fsize, ptr, (Nfile) * sizeof(block->fsize[0]));
-    ptr += (Nfile) * sizeof(block->fsize[0]);
-    memcpy(block->foffset, ptr, (Nfile + 1) * sizeof(block->foffset[0]));
-    ptr += (Nfile + 1) * sizeof(block->foffset[0]);
-    memcpy(block->fchecksum, ptr, (Nfile) * sizeof(block->fchecksum[0]));
-    ptr += (Nfile) * sizeof(block->fchecksum[0]);
-    block->attrset = _big_attrset_unpack(ptr);
-}
-
 int
 big_file_close(BigFile * bf)
 {
@@ -414,7 +355,7 @@ _big_block_open(BigBlock * bb, const char * basename)
                 "Unreasonable value for nmemb in header of block `%s' (%d)",bb->basename,bb->nmemb);
         RAISEIF(!dtype_isvalid(bb->dtype), ex_fscanf, 
                 "Unreasonable value for dtype in header of block `%s' (%s)",bb->basename,bb->dtype);
-        bb->fsize = calloc(bb->Nfile, sizeof(size_t));
+        bb->fsize = calloc(bb->Nfile + 1, sizeof(size_t));
         RAISEIF(!bb->fsize,
                 ex_fsize,
                 "Failed to alloc memory of block `%s'", bb->basename);
@@ -422,7 +363,7 @@ _big_block_open(BigBlock * bb, const char * basename)
         RAISEIF(!bb->foffset,
                 ex_foffset,
                 "Failed to alloc memory of block `%s'", bb->basename);
-        bb->fchecksum = calloc(bb->Nfile, sizeof(int));
+        bb->fchecksum = calloc(bb->Nfile + 1, sizeof(int));
         RAISEIF(!bb->fchecksum,
                 ex_fchecksum,
                 "Failed to alloc memory `%s'", bb->basename);
@@ -565,9 +506,9 @@ _big_block_create_internal(BigBlock * bb, const char * basename, const char * dt
 
         bb->Nfile = Nfile;
         bb->nmemb = nmemb;
-        bb->fsize = calloc(bb->Nfile, sizeof(size_t));
+        bb->fsize = calloc(bb->Nfile + 1, sizeof(size_t));
         RAISEIF(!bb->fsize, ex_fsize, "No memory"); 
-        bb->fchecksum = calloc(bb->Nfile, sizeof(int));
+        bb->fchecksum = calloc(bb->Nfile + 1, sizeof(int));
         RAISEIF(!bb->fchecksum, ex_fchecksum, "No memory"); 
         bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
         RAISEIF(!bb->foffset, ex_foffset, "No memory"); 
@@ -1894,6 +1835,72 @@ _big_attrset_unpack(void * p)
     }
     return attrset;
 }
+
+void *
+_big_block_pack(BigBlock * block, size_t * bytes)
+{
+    size_t attrsize = 0;
+    void * attrset = _big_attrset_pack(block->attrset, &attrsize);
+    int Nfile = block->Nfile;
+
+    * bytes =   sizeof(block[0])
+              + strlen(block->basename) + 1
+              + (Nfile + 1) * sizeof(block->fsize[0])
+              + (Nfile + 1) * sizeof(block->foffset[0])
+              + (Nfile + 1) * sizeof(block->fchecksum[0])
+              + attrsize;
+
+    void * buf = malloc(*bytes);
+
+    char * ptr = (char *) buf;
+
+
+    memcpy(ptr, block, sizeof(block[0]));
+    ptr += sizeof(block[0]);
+    memcpy(ptr, block->basename, strlen(block->basename) + 1);
+    ptr += strlen(block->basename) + 1;
+    if(block->fsize)
+        memcpy(ptr, block->fsize, (Nfile + 1) * sizeof(block->fsize[0]));
+    ptr += (Nfile + 1) * sizeof(block->fsize[0]);
+    if(block->foffset)
+        memcpy(ptr, block->foffset, (Nfile + 1) * sizeof(block->foffset[0]));
+    ptr += (Nfile + 1) * sizeof(block->foffset[0]);
+    if(block->fchecksum)
+        memcpy(ptr, block->fchecksum, (Nfile + 1j) * sizeof(block->fchecksum[0]));
+    ptr += (Nfile + 1) * sizeof(block->fchecksum[0]);
+    memcpy(ptr, attrset, attrsize);
+    ptr += attrsize;
+
+    return buf;
+}
+
+void
+_big_block_unpack(BigBlock * block, void * buf)
+{
+    char * ptr = (char*)buf;
+
+    memcpy(block, ptr, sizeof(block[0]));
+    ptr += sizeof(block[0]);
+    int Nfile = block->Nfile;
+
+    block->fsize = calloc(Nfile + 1, sizeof(size_t));
+    block->foffset = calloc(Nfile + 1, sizeof(size_t));
+    block->fchecksum = calloc(Nfile + 1, sizeof(int));
+
+    block->basename = strdup(ptr);
+    ptr += strlen(ptr) + 1;
+    if(block->fsize)
+        memcpy(block->fsize, ptr, (Nfile + 1) * sizeof(block->fsize[0]));
+    ptr += (Nfile + 1) * sizeof(block->fsize[0]);
+    if(block->foffset)
+        memcpy(block->foffset, ptr, (Nfile + 1) * sizeof(block->foffset[0]));
+    ptr += (Nfile + 1) * sizeof(block->foffset[0]);
+    if(block->fchecksum)
+        memcpy(block->fchecksum, ptr, (Nfile + 1) * sizeof(block->fchecksum[0]));
+    ptr += (Nfile + 1) * sizeof(block->fchecksum[0]);
+    block->attrset = _big_attrset_unpack(ptr);
+}
+
 
 /* File Path */
 
