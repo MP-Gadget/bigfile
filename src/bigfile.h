@@ -69,7 +69,6 @@ typedef struct BigArrayIter {
 int big_file_set_buffer_size(size_t bytes);
 char * big_file_get_error_message(void);
 void big_file_set_error_message(char * msg);
-void big_file_checksum(unsigned int * sum, void * buf, size_t size);
 
 /** Open a Bigfile: this stats the directory tree, but does not open the file.
  * It initialises the BigFile structure.
@@ -91,7 +90,6 @@ int big_block_flush(BigBlock * block);
 void big_block_set_dirty(BigBlock * block, int value);
 
 int big_block_open(BigBlock * bb, const char * basename);
-int big_block_clear_checksum(BigBlock * bb);
 int big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[]);
 int big_block_close(BigBlock * block);
 int big_block_grow(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[]);

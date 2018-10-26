@@ -54,7 +54,6 @@ cdef extern from "bigfile.c":
     void big_file_set_buffer_size(size_t bytes) nogil
     int big_block_open(CBigBlock * bb, char * basename) nogil
     int big_block_grow(CBigBlock * bb, int Nfilegrow, size_t fsize[]) nogil
-    int big_block_clear_checksum(CBigBlock * bb) nogil
     int big_block_create(CBigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[]) nogil
     int big_block_close(CBigBlock * block) nogil
     int big_block_flush(CBigBlock * block) nogil
@@ -326,11 +325,6 @@ cdef class ColumnLowLevelAPI:
                 raise Error()
 
         self._deallocated = False
-
-    def clear_checksum(self):
-        """ reset the checksum to zero for freshly overwriting the data set
-        """
-        big_block_clear_checksum(&self.bb)
 
     def write(self, numpy.intp_t start, numpy.ndarray buf):
         """ write at offset `start' a chunk of data inf buf.

@@ -311,15 +311,9 @@ big_file_close(BigFile * bf)
     bf->basename = NULL;
     return 0;
 }
+
 static void
 sysvsum(unsigned int * sum, void * buf, size_t size);
-
-void
-big_file_checksum(unsigned int * sum, void * buf, size_t size)
-{
-    sysvsum(sum, buf, size);
-}
-
 
 /* Bigblock */
 
@@ -586,13 +580,6 @@ ex_internal:
 ex_fileio:
     _big_block_close_internal(bb);
     return -1;
-}
-
-int
-big_block_clear_checksum(BigBlock * bb)
-{
-    memset(bb->fchecksum, 0, bb->Nfile * sizeof(int));
-    return 0;
 }
 
 void
