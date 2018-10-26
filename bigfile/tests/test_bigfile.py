@@ -3,6 +3,7 @@ from bigfile import BigBlock
 from bigfile import BigFileMPI
 from bigfile import BigData
 from bigfile import BigFileClosedError
+from bigfile import BigBlockClosedError
 from bigfile import BigFileError
 
 import tempfile
@@ -397,31 +398,48 @@ def test_mpi_badfilenames(comm):
 
 @MPITest(commsize=[1])
 def test_threads(comm):
+    # This test shall not core dump
+    # raise many errors here and there on many threads
+
     from threading import Thread, Event
+    import gc
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
 
-    with x.create("Threading", Nfile=1, dtype='i8', size=128) as b:
-        E = Event()
-        def func():
-            E.wait()
-            for i in range(100):
+    b = x.create("Threading", Nfile=1, dtype='i8', size=128)
+
+    old = gc.get_threshold()
+
+    gc.set_threshold(1, 1, 1)
+    E = Event()
+    def func(i, b):
+        E.wait()
+        x['.'].attrs['v3'] = [1, 2, 3]
+        err = 0
+        for j in range(100 * i):
+            try:
                 with pytest.raises(BigFileError):
                     b.attrs['v 3'] = ['a', 'bb', 'ccc']
 
                 b.write(0, numpy.ones(128))
-                b[3:10]
+            except BigBlockClosedError:
+                err = err + 1
 
-        t = []
-        for i in range(4):
-            t.append(Thread(target = func))
+        b.close()
 
-        for i in t: i.start()
+        x['Threading'].attrs['v3'] = [1, 2, 3]
 
-        E.set()
+    t = []
+    for i in range(4):
+        t.append(Thread(target = func, args=(i, b)))
 
-        for i in t: i.join()
+    for i in t: i.start()
 
+    E.set()
+
+    for i in t: i.join()
+
+    gc.set_threshold(*old)
     shutil.rmtree(fname)
 
 
