@@ -1209,7 +1209,7 @@ big_file_dtype_format(char * buffer, const char * dtype, const void * data, cons
 }
 
 /* parse data in dtype to a string in buffer */
-void
+int
 big_file_dtype_parse(const char * buffer, const char * dtype, void * data, const char * fmt)
 {
     char ndtype[8];
@@ -1228,25 +1228,26 @@ big_file_dtype_parse(const char * buffer, const char * dtype, void * data, const
     if(0 == strcmp(ndtype + 1, # dtype)) { \
         if(fmt == NULL) fmt = defaultfmt; \
         sscanf(buffer, fmt, p.dtype); \
-    } else
+    }
 #define PARSE2(dtype, defaultfmt) \
     if(0 == strcmp(ndtype + 1, # dtype)) { \
         if(fmt == NULL) fmt = defaultfmt; \
         sscanf(buffer, fmt, &p.dtype->r, &p.dtype->i); \
-    } else
-    PARSE1(a1, "%c")
-    PARSE1(i8, "%ld")
-    PARSE1(i4, "%d")
-    PARSE1(u8, "%lu")
-    PARSE1(u4, "%u")
-    PARSE1(f8, "%lf")
-    PARSE1(f4, "%f")
-    PARSE2(c8, "%f + %f I")
-    PARSE2(c16, "%lf + %lf I")
-    abort();
-    /* FIXME: shall not abort */
+    }
+    PARSE1(a1, "%c") else
+    PARSE1(i8, "%ld") else
+    PARSE1(i4, "%d") else
+    PARSE1(u8, "%lu") else
+    PARSE1(u4, "%u") else
+    PARSE1(f8, "%lf") else
+    PARSE1(f4, "%f") else
+    PARSE2(c8, "%f + %f I") else
+    PARSE2(c16, "%lf + %lf I") else
+    return -1;
+
     dtype_convert_simple(data, dtype, converted, ndtype, 1);
 
+    return 0;
 }
 
 static int

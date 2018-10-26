@@ -85,7 +85,10 @@ int main(int argc, char * argv[]) {
         }
         for(i = 4; i < argc - optind + 1; i ++) {
             char * p = data + (i - 4) * big_file_dtype_itemsize(dtype);
-            big_file_dtype_parse(argv[i], dtype, p, NULL);
+            if(0 != big_file_dtype_parse(argv[i], dtype, p, NULL)) {
+                fprintf(stderr, "failed to parse the data `%s`\n", p);
+                exit(1);
+            }
         }
     }
 
