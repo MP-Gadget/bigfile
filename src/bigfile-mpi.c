@@ -309,35 +309,29 @@ big_file_mpi_broadcast_anyerror(int rt, MPI_Comm comm)
     return rt;
 }
 
-static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm) {
+static int
+big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm)
+{
     int rank;
     MPI_Comm_rank(comm, &rank);
-    int lname = 0;
-    void * attrpack=NULL;
-    size_t attrpacksize = 0;
+    void * buf = NULL;
+    size_t bytes = 0;
+
     if(rank == root) {
-        lname = strlen(bb->basename);
-        attrpack = _big_attrset_pack(bb->attrset, &attrpacksize);
+        buf = _big_block_pack(bb, &bytes);
     }
-    MPI_Bcast(&lname, 1, MPI_INT, root, comm);
-    MPI_Bcast(bb, sizeof(BigBlock), MPI_BYTE, root, comm);
-    MPI_Bcast(&attrpacksize, sizeof(size_t), MPI_BYTE, root, comm);
+
+    MPI_Bcast(&bytes, sizeof(bytes), MPI_BYTE, root, comm);
+
     if(rank != root) {
-        bb->basename = calloc(lname + 1, 1);
-        bb->fsize = calloc(bb->Nfile, sizeof(size_t));
-        bb->foffset = calloc(bb->Nfile + 1, sizeof(size_t));
-        bb->fchecksum = calloc(bb->Nfile, sizeof(int));
-        attrpack = malloc(attrpacksize);
+        buf = malloc(bytes);
     }
-    MPI_Bcast(attrpack, attrpacksize, MPI_BYTE, root, comm);
-    if(rank != root) {
-        bb->attrset = _big_attrset_unpack(attrpack);
-    }
-    free(attrpack);
-    MPI_Bcast(bb->basename, lname + 1, MPI_BYTE, root, comm);
-    MPI_Bcast(bb->fsize, sizeof(ptrdiff_t) * bb->Nfile, MPI_BYTE, root, comm);
-    MPI_Bcast(bb->fchecksum, sizeof(int) * bb->Nfile, MPI_BYTE, root, comm);
-    MPI_Bcast(bb->foffset, sizeof(ptrdiff_t) * (bb->Nfile + 1), MPI_BYTE, root, comm);
+
+    MPI_Bcast(buf, bytes, MPI_BYTE, root, comm);
+
+    _big_block_unpack(bb, buf);
+
+    free(buf);
     return 0;
 }
 

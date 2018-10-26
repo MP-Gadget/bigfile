@@ -15,9 +15,13 @@ int _big_block_grow_internal(BigBlock * bb, int Nfile_grow, const size_t fsize_g
 /* The internal routine to open a physical file */
 FILE * _big_file_open_a_file(const char * basename, int fileid, char * mode, int raise);
 
-/* Internal routine to serialize/deserialize a attrset */
-void * _big_attrset_pack(BigAttrSet * attrset, size_t * bytes);
-BigAttrSet * _big_attrset_unpack(void * p);
+/* Internal routine to serialize/deserialize a block. */
+
+void *
+_big_block_pack(BigBlock * block, size_t * bytes);
+
+void
+_big_block_unpack(BigBlock * block, void * buf);
 
 int _dtype_normalize(char * dst, const char * src);
 

@@ -304,6 +304,65 @@ ex_subdir:
     return -1;
 }
 
+void *
+_big_block_pack(BigBlock * block, size_t * bytes)
+{
+    size_t attrsize = 0;
+    void * attrset = _big_attrset_pack(block->attrset, &attrsize);
+    int Nfile = block->Nfile;
+
+    * bytes =   sizeof(block[0])
+              + strlen(block->basename) + 1
+              + (Nfile) * sizeof(block->fsize[0])
+              + (Nfile + 1) * sizeof(block->foffset[0])
+              + (Nfile) * sizeof(block->fchecksum[0])
+              + attrsize;
+
+    void * buf = malloc(*bytes);
+
+    char * ptr = (char *) buf;
+
+
+    memcpy(ptr, block, sizeof(block[0]));
+    ptr += sizeof(block[0]);
+    memcpy(ptr, block->basename, strlen(block->basename) + 1);
+    ptr += strlen(block->basename) + 1;
+    memcpy(ptr, block->fsize, (Nfile) * sizeof(block->fsize[0]));
+    ptr += (Nfile) * sizeof(block->fsize[0]);
+    memcpy(ptr, block->foffset, (Nfile + 1) * sizeof(block->foffset[0]));
+    ptr += (Nfile + 1) * sizeof(block->foffset[0]);
+    memcpy(ptr, block->fchecksum, (Nfile) * sizeof(block->fchecksum[0]));
+    ptr += (Nfile) * sizeof(block->fchecksum[0]);
+    memcpy(ptr, attrset, attrsize);
+    ptr += attrsize;
+
+    return buf;
+}
+
+void
+_big_block_unpack(BigBlock * block, void * buf)
+{
+    char * ptr = (char*)buf;
+
+    memcpy(block, ptr, sizeof(block[0]));
+    ptr += sizeof(block[0]);
+    int Nfile = block->Nfile;
+
+    block->fsize = calloc(Nfile, sizeof(size_t));
+    block->foffset = calloc(Nfile + 1, sizeof(size_t));
+    block->fchecksum = calloc(Nfile, sizeof(int));
+
+    block->basename = strdup(ptr);
+    ptr += strlen(ptr) + 1;
+    memcpy(block->fsize, ptr, (Nfile) * sizeof(block->fsize[0]));
+    ptr += (Nfile) * sizeof(block->fsize[0]);
+    memcpy(block->foffset, ptr, (Nfile + 1) * sizeof(block->foffset[0]));
+    ptr += (Nfile + 1) * sizeof(block->foffset[0]);
+    memcpy(block->fchecksum, ptr, (Nfile) * sizeof(block->fchecksum[0]));
+    ptr += (Nfile) * sizeof(block->fchecksum[0]);
+    block->attrset = _big_attrset_unpack(ptr);
+}
+
 int
 big_file_close(BigFile * bf)
 {
@@ -1792,7 +1851,7 @@ void big_attrset_set_dirty(BigAttrSet * attrset, int dirty)
     attrset->dirty = dirty;
 }
 
-void *
+static void *
 _big_attrset_pack(BigAttrSet * attrset, size_t * bytes)
 {
     size_t n = 0;
@@ -1817,7 +1876,7 @@ _big_attrset_pack(BigAttrSet * attrset, size_t * bytes)
     return (void*) p;
 }
 
-BigAttrSet *
+static BigAttrSet *
 _big_attrset_unpack(void * p)
 {
     BigAttrSet * attrset = calloc(1, sizeof(attrset[0]));
