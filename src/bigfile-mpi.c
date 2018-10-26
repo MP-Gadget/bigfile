@@ -4,6 +4,7 @@
 #include <alloca.h>
 #include <string.h>
 #include "bigfile-mpi.h"
+#include "bigfile-internal.h"
 
 /* disable aggregation by default */
 static size_t _BigFileAggThreshold = 0;
@@ -291,7 +292,7 @@ static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm) {
     size_t attrpacksize = 0;
     if(rank == root) {
         lname = strlen(bb->basename);
-        attrpack = big_attrset_pack(bb->attrset, &attrpacksize);
+        attrpack = _big_attrset_pack(bb->attrset, &attrpacksize);
     }
     MPI_Bcast(&lname, 1, MPI_INT, root, comm);
     MPI_Bcast(bb, sizeof(BigBlock), MPI_BYTE, root, comm);
@@ -305,7 +306,7 @@ static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm) {
     }
     MPI_Bcast(attrpack, attrpacksize, MPI_BYTE, root, comm);
     if(rank != root) {
-        bb->attrset = big_attrset_unpack(attrpack);
+        bb->attrset = _big_attrset_unpack(attrpack);
     }
     free(attrpack);
     MPI_Bcast(bb->basename, lname + 1, MPI_BYTE, root, comm);

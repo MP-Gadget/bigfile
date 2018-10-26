@@ -89,7 +89,6 @@ int big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname
 int big_file_close(BigFile * bf);
 int big_block_flush(BigBlock * block);
 void big_block_set_dirty(BigBlock * block, int value);
-int _big_file_mksubdir_r(const char * pathname, const char * subdir);
 
 int big_block_open(BigBlock * bb, const char * basename);
 int big_block_clear_checksum(BigBlock * bb);
@@ -97,21 +96,7 @@ int big_block_create(BigBlock * bb, const char * basename, const char * dtype, i
 int big_block_close(BigBlock * block);
 int big_block_grow(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[]);
 
-/* The internal code creates the meta data but not the physical back-end storage files */
-int _big_block_create_internal(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[]);
-
-/* the internal code to free meta-data associated with a block. */
-void _big_block_close_internal(BigBlock * block);
-
-/* The internal code grows the internal meta data but not the physical back-end stroage files */
-int _big_block_grow_internal(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[]);
-
-/* The internal routine to open a physical file */
-FILE * _big_file_open_a_file(const char * basename, int fileid, char * mode, int raise);
-
-void * big_attrset_pack(BigAttrSet * attrset, size_t * bytes);
 void big_attrset_set_dirty(BigAttrSet * attrset, int value);
-BigAttrSet * big_attrset_unpack(void * p);
 
 /** Initialise BigBlockPtr to the place in the BigBlock offset elements from the beginning of the block.
  * This allows you to write into the BigBlock at a position other than the beginning.
@@ -212,8 +197,6 @@ void dtype_format(char * buffer, const char * dtype, const void * data, const ch
 void dtype_parse(const char * buffer, const char * dtype, void * data, const char * fmt);
 int dtype_itemsize(const char * dtype);
 int dtype_normalize(char * dst, const char * src);
-
-int _dtype_convert(BigArrayIter * dst, BigArrayIter * src, size_t nmemb);
 
 /** Create a BigArray from raw memory.
  *

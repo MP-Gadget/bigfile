@@ -14,6 +14,7 @@
 #include <dirent.h>
 
 #include "bigfile.h"
+#include "bigfile-internal.h"
 
 #define EXT_HEADER "header"
 #define EXT_ATTR "attr"
@@ -1786,7 +1787,9 @@ void big_attrset_set_dirty(BigAttrSet * attrset, int dirty)
 {
     attrset->dirty = dirty;
 }
-void * big_attrset_pack(BigAttrSet * attrset, size_t * bytes)
+
+void *
+_big_attrset_pack(BigAttrSet * attrset, size_t * bytes)
 {
     size_t n = 0;
     n += sizeof(BigAttrSet);
@@ -1810,7 +1813,8 @@ void * big_attrset_pack(BigAttrSet * attrset, size_t * bytes)
     return (void*) p;
 }
 
-BigAttrSet * big_attrset_unpack(void * p)
+BigAttrSet *
+_big_attrset_unpack(void * p)
 {
     BigAttrSet * attrset = calloc(1, sizeof(attrset[0]));
     memcpy(attrset, p, sizeof(BigAttrSet));
