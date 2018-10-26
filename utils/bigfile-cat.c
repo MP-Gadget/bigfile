@@ -82,7 +82,7 @@ int main(int argc, char * argv[]) {
 
     ptrdiff_t end = start + size;
 
-    size_t chunksize = buffersize / (bb.nmemb * dtype_itemsize(bb.dtype));
+    size_t chunksize = buffersize / (bb.nmemb * big_file_dtype_itemsize(bb.dtype));
     BigBlockPtr ptr;
     BigBlockPtr ptrnew;
     ptrdiff_t offset;
@@ -96,7 +96,7 @@ int main(int argc, char * argv[]) {
         }
 
         if(!humane) {
-            fwrite(array.data, dtype_itemsize(bb.dtype), array.size, stdout);
+            fwrite(array.data, big_file_dtype_itemsize(bb.dtype), array.size, stdout);
         } else {
             char str[300];
             BigArrayIter iter;
@@ -105,7 +105,7 @@ int main(int argc, char * argv[]) {
             for(i = 0; i < array.dims[0]; i++) {
                 int j;
                 for(j = 0; j < bb.nmemb; j ++) {
-                    dtype_format(str, array.dtype, iter.dataptr, fmt);
+                    big_file_dtype_format(str, array.dtype, iter.dataptr, fmt);
                     big_array_iter_advance(&iter);
                     fprintf(stdout, "%s ", str);
                 }

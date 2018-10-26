@@ -193,10 +193,12 @@ BigAttr * big_block_list_attrs(BigBlock * block, size_t * count);
  *
  */
 
-void dtype_format(char * buffer, const char * dtype, const void * data, const char * flags);
-void dtype_parse(const char * buffer, const char * dtype, void * data, const char * fmt);
-int dtype_itemsize(const char * dtype);
-int dtype_normalize(char * dst, const char * src);
+int big_file_dtype_itemsize(const char * dtype);
+int big_file_dtype_kind(const char * dtype);
+void big_file_dtype_format(char * buffer, const char * dtype, const void * data, const char * flags);
+void big_file_dtype_parse(const char * buffer, const char * dtype, void * data, const char * fmt);
+
+#define dtype_itemsize big_file_dtype_itemsize
 
 /** Create a BigArray from raw memory.
  *

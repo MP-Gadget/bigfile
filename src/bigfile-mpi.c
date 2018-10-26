@@ -383,7 +383,7 @@ _throttle_plan_create(ThrottlePlan * plan, MPI_Comm comm, int concurrency, BigBl
     plan->totalsize = offsets[NTask];
     plan->localsize = localsize;
     plan->grouptotalsize = grouptotalsize;
-    plan->elsize = dtype_itemsize(block->dtype) * block->nmemb;
+    plan->elsize = big_file_dtype_itemsize(block->dtype) * block->nmemb;
     plan->action = action;
     plan->block = block;
 

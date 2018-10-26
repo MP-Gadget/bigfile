@@ -75,7 +75,7 @@ static int
 dtype_convert_simple(void * dst, const char * dstdtype, const void * src, const char * srcdtype, size_t nmemb);
 
 /*Check dtype is valid*/
-int dtype_isvalid(const char * dtype);
+static int dtype_isvalid(const char * dtype);
 
 /* postfix detection, 1 if postfix is a postfix of str */
 static int
@@ -508,7 +508,7 @@ _big_block_create_internal(BigBlock * bb, const char * basename, const char * dt
             fsize = NULL;
         }
         /* always use normalized dtype in files. */
-        dtype_normalize(bb->dtype, dtype);
+        _dtype_normalize(bb->dtype, dtype);
 
         bb->Nfile = Nfile;
         bb->nmemb = nmemb;
@@ -685,6 +685,7 @@ big_block_list_attrs(BigBlock * block, size_t * count)
 {
     return attrset_list_attrs(block->attrset, count);
 }
+
 int
 big_block_set_attr(BigBlock * block, const char * attrname, const void * data, const char * dtype, int nmemb)
 {
@@ -792,7 +793,7 @@ big_block_read_simple(BigBlock * bb, ptrdiff_t start, ptrdiff_t size, BigArray *
             ex_seek,
             "failed to seek");
 
-    buffer = malloc(size * dtype_itemsize(dtype) * bb->nmemb);
+    buffer = malloc(size * big_file_dtype_itemsize(dtype) * bb->nmemb);
 
     dims[0] = size;
     dims[1] = bb->nmemb;
@@ -816,7 +817,7 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     char * chunkbuf = malloc(CHUNK_BYTES);
 
     int nmemb = bb->nmemb ? bb->nmemb : 1;
-    int felsize = dtype_itemsize(bb->dtype) * nmemb;
+    int felsize = big_file_dtype_itemsize(bb->dtype) * nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
 
     BigArray chunk_array = {0};
@@ -911,7 +912,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     bb->dirty = 1;
     char * chunkbuf = malloc(CHUNK_BYTES);
     int nmemb = bb->nmemb ? bb->nmemb : 1;
-    int felsize = dtype_itemsize(bb->dtype) * nmemb;
+    int felsize = big_file_dtype_itemsize(bb->dtype) * nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
 
     BigArray chunk_array = {0};
@@ -1003,7 +1004,7 @@ MACHINE_ENDIAN_F(void)
 }
 
 int
-dtype_normalize(char * dst, const char * src)
+_dtype_normalize(char * dst, const char * src)
 {
 /* normalize a dtype, so that
  * dst[0] is the endian-ness
@@ -1033,7 +1034,7 @@ dtype_normalize(char * dst, const char * src)
 
 /*Check that the passed dtype is valid.
  * Returns 1 if valid, 0 if invalid*/
-int
+static int
 dtype_isvalid(const char * dtype)
 {
     if(!dtype)
@@ -1065,11 +1066,19 @@ dtype_isvalid(const char * dtype)
 }
 
 int
-dtype_itemsize(const char * dtype)
+big_file_dtype_itemsize(const char * dtype)
 {
     char ndtype[8];
-    dtype_normalize(ndtype, dtype);
+    _dtype_normalize(ndtype, dtype);
     return atoi(&ndtype[2]);
+}
+
+int
+big_file_dtype_kind(const char * dtype)
+{
+    char ndtype[8];
+    _dtype_normalize(ndtype, dtype);
+    return ndtype[1];
 }
 
 int
@@ -1078,7 +1087,7 @@ big_array_init(BigArray * array, void * buf, const char * dtype, int ndim, const
 
     memset(array, 0, sizeof(array[0]));
 
-    dtype_normalize(array->dtype, dtype);
+    _dtype_normalize(array->dtype, dtype);
     array->data = buf;
     array->ndim = ndim;
     int i;
@@ -1094,7 +1103,7 @@ big_array_init(BigArray * array, void * buf, const char * dtype, int ndim, const
             array->strides[i] = strides[i];
         }
     } else {
-        array->strides[ndim - 1] = dtype_itemsize(dtype);
+        array->strides[ndim - 1] = big_file_dtype_itemsize(dtype);
         for(i = ndim - 2; i >= 0; i --) {
             array->strides[i] = array->strides[i + 1] * array->dims[i + 1];
         }
@@ -1113,7 +1122,7 @@ big_array_iter_init(BigArrayIter * iter, BigArray * array)
     iter->dataptr = array->data;
 
     /* see if the iter is contiguous */
-    size_t elsize = dtype_itemsize(array->dtype);
+    size_t elsize = big_file_dtype_itemsize(array->dtype);
 
     int i = 0; 
     ptrdiff_t stride_contiguous = elsize;
@@ -1171,7 +1180,7 @@ typedef union {
 
 /* format data in dtype to a string in buffer */
 void
-dtype_format(char * buffer, const char * dtype, const void * data, const char * fmt)
+big_file_dtype_format(char * buffer, const char * dtype, const void * data, const char * fmt)
 {
     char ndtype[8];
     char ndtype2[8];
@@ -1180,9 +1189,9 @@ dtype_format(char * buffer, const char * dtype, const void * data, const char * 
     /* handle the endianness stuff in case it is not machine */
     char converted[128];
 
-    dtype_normalize(ndtype2, dtype);
+    _dtype_normalize(ndtype2, dtype);
     ndtype2[0] = '=';
-    dtype_normalize(ndtype, ndtype2);
+    _dtype_normalize(ndtype, ndtype2);
     dtype_convert_simple(converted, ndtype, data, dtype, 1);
 
     p.v = converted;
@@ -1214,7 +1223,7 @@ dtype_format(char * buffer, const char * dtype, const void * data, const char * 
 
 /* parse data in dtype to a string in buffer */
 void
-dtype_parse(const char * buffer, const char * dtype, void * data, const char * fmt)
+big_file_dtype_parse(const char * buffer, const char * dtype, void * data, const char * fmt)
 {
     char ndtype[8];
     char ndtype2[8];
@@ -1223,9 +1232,9 @@ dtype_parse(const char * buffer, const char * dtype, void * data, const char * f
     /* handle the endianness stuff in case it is not machine */
     char converted[128];
 
-    dtype_normalize(ndtype2, dtype);
+    _dtype_normalize(ndtype2, dtype);
     ndtype2[0] = '=';
-    dtype_normalize(ndtype, ndtype2);
+    _dtype_normalize(ndtype, ndtype2);
 
     p.v = converted;
 #define PARSE1(dtype, defaultfmt) \
@@ -1300,7 +1309,7 @@ static void
 byte_swap(BigArrayIter * iter, size_t nmemb)
 {
     /* swap a buffer in-place */
-    int elsize = dtype_itemsize(iter->array->dtype);
+    int elsize = big_file_dtype_itemsize(iter->array->dtype);
     if(elsize == 1) return;
     /* need byte swap; do it now on buf2 */
     /* XXX: this may still be wrong. */
@@ -1354,7 +1363,7 @@ cast(BigArrayIter * dst, BigArrayIter * src, size_t nmemb)
             return 0;
         } else {
             /* copy one by one, discontinuous */
-            size_t elsize = dtype_itemsize(dst->array->dtype);
+            size_t elsize = big_file_dtype_itemsize(dst->array->dtype);
             for(i = 0; i < nmemb; i ++) {
                 void * p1 = dst->dataptr;
                 void * p2 = src->dataptr;
@@ -1460,7 +1469,7 @@ attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
             ex_fread,
             "Failed to read from file"
                 )
-        int ldata = dtype_itemsize(dtype) * nmemb;
+        int ldata = big_file_dtype_itemsize(dtype) * nmemb;
         data = alloca(ldata);
         name = alloca(lname + 1);
         RAISEIF(
@@ -1526,7 +1535,7 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
         if(buffer[i] == '\n') i++;
 
         int nmemb = atoi(rawlength);
-        int itemsize = dtype_itemsize(dtype);
+        int itemsize = big_file_dtype_itemsize(dtype);
 
         RAISEIF(nmemb * itemsize * 2!= strlen(rawdata),
             ex_parse_attr,
@@ -1577,7 +1586,7 @@ attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
     ptrdiff_t i;
     for(i = 0; i < attrset->listused; i ++) {
         BigAttr * a = & attrset->attrlist[i];
-        int itemsize = dtype_itemsize(a->dtype);
+        int itemsize = big_file_dtype_itemsize(a->dtype);
         int ldata = itemsize * a->nmemb;
 
         char * rawdata = malloc(ldata * 2 + 1);
@@ -1598,10 +1607,10 @@ attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
             textual[0] = 0;
             for(j = 0; j < a->nmemb; j ++) {
                 if(a->dtype[1] != 'a' &&
-                  !(a->dtype[1] == 'S' && dtype_itemsize(a->dtype) == 1))
+                  !(a->dtype[1] == 'S' && big_file_dtype_itemsize(a->dtype) == 1))
                 {
                     char buf[128];
-                    dtype_format(buf, a->dtype, &adata[j * itemsize], NULL);
+                    big_file_dtype_format(buf, a->dtype, &adata[j * itemsize], NULL);
                     strcat(textual, buf);
                     if(j != a->nmemb - 1) {
                         strcat(textual, " ");
@@ -1656,7 +1665,7 @@ attrset_append_attr(BigAttrSet * attrset)
 static int
 attrset_add_attr(BigAttrSet * attrset, const char * attrname, const char * dtype, int nmemb)
 {
-    size_t size = dtype_itemsize(dtype) * nmemb + strlen(attrname) + 1;
+    size_t size = big_file_dtype_itemsize(dtype) * nmemb + strlen(attrname) + 1;
     while(attrset->bufsize - attrset->bufused < size) {
         int i;
         for(i = 0; i < attrset->listused; i ++) {
@@ -1677,7 +1686,7 @@ attrset_add_attr(BigAttrSet * attrset, const char * attrname, const char * dtype
 
     n->nmemb = nmemb;
     memset(n->dtype, 0, 8);
-    dtype_normalize(n->dtype, dtype);
+    _dtype_normalize(n->dtype, dtype);
 
     n->name = free;
     strcpy(free, attrname);

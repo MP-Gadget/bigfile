@@ -19,3 +19,5 @@ FILE * _big_file_open_a_file(const char * basename, int fileid, char * mode, int
 void * _big_attrset_pack(BigAttrSet * attrset, size_t * bytes);
 BigAttrSet * _big_attrset_unpack(void * p);
 
+int _dtype_normalize(char * dst, const char * src);
+
