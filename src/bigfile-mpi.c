@@ -64,12 +64,18 @@ int big_file_mpi_create(BigFile * bf, const char * basename, MPI_Comm comm) {
     return rt;
 }
 
+/**Helper function for big_file_mpi_create_block, above*/
+static int _big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, size_t fsize[], MPI_Comm comm);
+
+/** Helper function for big_file_mpi_open_block, above*/
+static int _big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm);
+
 int big_file_mpi_open_block(BigFile * bf, BigBlock * block, const char * blockname, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     if(!bf || !bf->basename || !blockname) return 1;
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
-    return big_block_mpi_open(block, basename, comm);
+    return _big_block_mpi_open(block, basename, comm);
 }
 
 int big_file_mpi_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, size_t size, MPI_Comm comm) {
@@ -95,22 +101,7 @@ int big_file_mpi_create_block(BigFile * bf, BigBlock * block, const char * block
 
     char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
-    return big_block_mpi_create(block, basename, dtype, nmemb, Nfile, fsize, comm);
-}
-
-int
-big_file_mpi_grow_block(BigFile * bf, BigBlock * bb, int Nfile_grow, size_t size_grow, MPI_Comm comm)
-{
-    size_t fsize[Nfile_grow];
-    int i;
-    for(i = 0; i < Nfile_grow; i ++) {
-        fsize[i] = size_grow * (i + 1) / Nfile_grow
-                 - size_grow * (i) / Nfile_grow;
-    }
-    int rank;
-    MPI_Comm_rank(comm, &rank);
-
-    return big_block_mpi_grow(bb, Nfile_grow, fsize, comm);
+    return _big_block_mpi_create(block, basename, dtype, nmemb, Nfile, fsize, comm);
 }
 
 int big_file_mpi_close(BigFile * bf, MPI_Comm comm) {
@@ -120,13 +111,15 @@ int big_file_mpi_close(BigFile * bf, MPI_Comm comm) {
     return rt;
 }
 
-int big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm) {
+static int
+_big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm)
+{
     if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
     int rt;
     if(rank == 0) { 
-        rt = big_block_open(bb, basename);
+        rt = _big_block_open(bb, basename);
     } else {
         rt = 0;
     }
@@ -137,7 +130,9 @@ int big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm) {
     return 0;
 }
 
-int big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, size_t fsize[], MPI_Comm comm) {
+static int
+_big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, size_t fsize[], MPI_Comm comm)
+{
     int rank;
     int NTask;
     int rt;
@@ -213,32 +208,62 @@ int big_block_mpi_grow(BigBlock * bb, int Nfile_grow, size_t fsize_grow[], MPI_C
     return rt;
 }
 
-int big_block_mpi_close(BigBlock * block, MPI_Comm comm) {
-    if(comm == MPI_COMM_NULL) return 0;
+int
+big_block_mpi_grow_simple(BigBlock * bb, int Nfile_grow, size_t size_grow, MPI_Comm comm)
+{
+    size_t fsize[Nfile_grow];
+    int i;
+    for(i = 0; i < Nfile_grow; i ++) {
+        fsize[i] = size_grow * (i + 1) / Nfile_grow
+                 - size_grow * (i) / Nfile_grow;
+    }
     int rank;
     MPI_Comm_rank(comm, &rank);
+
+    return big_block_mpi_grow(bb, Nfile_grow, fsize, comm);
+}
+
+
+int
+big_block_mpi_flush(BigBlock * block, MPI_Comm comm)
+{
+    if(comm == MPI_COMM_NULL) return 0;
+
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+
     unsigned int * checksum = alloca(sizeof(int) * block->Nfile);
     MPI_Reduce(block->fchecksum, checksum, block->Nfile, MPI_UNSIGNED, MPI_SUM, 0, comm);
     int dirty;
     MPI_Reduce(&block->dirty, &dirty, 1, MPI_INT, MPI_LOR, 0, comm);
     int rt;
     if(rank == 0) {
+        /* only the root rank updates */
         int i;
         big_block_set_dirty(block, dirty);
         for(i = 0; i < block->Nfile; i ++) {
             block->fchecksum[i] = checksum[i];
         }
+        rt = big_block_flush(block);
     } else {
-        /* only the root rank updates */
-        big_block_set_dirty(block, 0);
-        big_attrset_set_dirty(block->attrset, 0);
+        rt = 0;
     }
-    rt = big_block_close(block);
-    if(rt) {
-        return rt;
+
+    BCAST_AND_RAISEIF(rt, comm);
+    /* close as we will broadcast the block */
+    if(rank != 0) {
+        _big_block_close_internal(block);
     }
-    MPI_Barrier(comm);
+    big_block_mpi_broadcast(block, 0, comm);
     return 0;
+
+}
+int big_block_mpi_close(BigBlock * block, MPI_Comm comm) {
+
+    int rt = big_block_mpi_flush(block, comm);
+    _big_block_close_internal(block);
+
+    return rt;
 }
 
 static int

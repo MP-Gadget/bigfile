@@ -21,3 +21,5 @@ BigAttrSet * _big_attrset_unpack(void * p);
 
 int _dtype_normalize(char * dst, const char * src);
 
+int _big_block_open(BigBlock * bb, const char * basename); /* raises */
+int _big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[]); /* raises*/

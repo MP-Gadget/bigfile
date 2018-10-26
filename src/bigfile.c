@@ -285,7 +285,7 @@ int
 big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname)
 {
     char * basename = _path_join(bf->basename, blockname);
-    int rt = big_block_open(block, basename);
+    int rt = _big_block_open(block, basename);
     free(basename);
     return rt;
 }
@@ -297,7 +297,7 @@ big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, co
             ex_subdir,
             NULL);
     char * basename = _path_join(bf->basename, blockname);
-    int rt = big_block_create(block, basename, dtype, nmemb, Nfile, fsize);
+    int rt = _big_block_create(block, basename, dtype, nmemb, Nfile, fsize);
     free(basename);
     return rt;
 ex_subdir:
@@ -318,7 +318,7 @@ sysvsum(unsigned int * sum, void * buf, size_t size);
 /* Bigblock */
 
 int
-big_block_open(BigBlock * bb, const char * basename)
+_big_block_open(BigBlock * bb, const char * basename)
 {
     memset(bb, 0, sizeof(bb[0]));
     if(basename == NULL) basename = "/.";
@@ -559,7 +559,7 @@ ex_name:
 }
 
 int
-big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
+_big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
 {
     int rt = _big_block_create_internal(bb, basename, dtype, nmemb, Nfile, fsize);
     int i;
@@ -658,7 +658,8 @@ ex_flush:
 BigAttr *
 big_block_lookup_attr(BigBlock * block, const char * attrname)
 {
-    return attrset_lookup_attr(block->attrset, attrname);
+    BigAttr * attr = attrset_lookup_attr(block->attrset, attrname);
+    return attr;
 }
 
 int
@@ -1698,13 +1699,19 @@ static int
 attrset_remove_attr(BigAttrSet * attrset, const char * attrname)
 {
     BigAttr *attr = attrset_lookup_attr(attrset, attrname);
-    if(attr) {
-        ptrdiff_t ind = attr - attrset->attrlist;
-        memmove(&attrset->attrlist[ind], &attrset->attrlist[ind + 1],
-            (attrset->listused - ind - 1) * sizeof(BigAttr));
-        attrset->listused -= 1;
-    }
+    RAISEIF(attr == NULL,
+      ex_notfound,
+      "Attribute name '%s' is not found.", attrname
+    )
+    ptrdiff_t ind = attr - attrset->attrlist;
+    memmove(&attrset->attrlist[ind], &attrset->attrlist[ind + 1],
+        (attrset->listused - ind - 1) * sizeof(BigAttr));
+    attrset->listused -= 1;
+
     return 0;
+
+ex_notfound:
+    return -1;
 }
 
 static BigAttr *
