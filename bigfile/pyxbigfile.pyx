@@ -1,7 +1,7 @@
 #cython: embedsignature=True
 cimport numpy
 from libc.stddef cimport ptrdiff_t
-from libc.string cimport strcpy
+from libc.string cimport strcpy, memcpy
 from libc.stdlib cimport free
 import numpy
 
@@ -52,13 +52,14 @@ cdef extern from "bigfile.c":
 
     char * big_file_get_error_message() nogil
     void big_file_set_buffer_size(size_t bytes) nogil
-    int big_block_open(CBigBlock * bb, char * basename) nogil
     int big_block_grow(CBigBlock * bb, int Nfilegrow, size_t fsize[]) nogil
-    int big_block_create(CBigBlock * bb, char * basename, char * dtype, int nmemb, int Nfile, size_t fsize[]) nogil
     int big_block_close(CBigBlock * block) nogil
+    void _big_block_close_internal(CBigBlock * block) nogil
+    void * _big_block_pack(CBigBlock * block, size_t * n) nogil
+    void _big_block_unpack(CBigBlock * block, void * buf) nogil
+
     int big_block_flush(CBigBlock * block) nogil
-    void big_block_set_dirty(CBigBlock * block, int value) nogil
-    void big_attrset_set_dirty(CBigAttrSet * attrset, int value) nogil
+    int big_block_set_dirty(CBigBlock * block, int dirty) nogil
     int big_block_seek(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t offset) nogil
     int big_block_seek_rel(CBigBlock * bb, CBigBlockPtr * ptr, ptrdiff_t rel) nogil
     int big_block_read(CBigBlock * bb, CBigBlockPtr * ptr, CBigArray * array) nogil
@@ -412,6 +413,28 @@ cdef class ColumnLowLevelAPI:
         if rt != 0:
             raise Error()
 
+    def _MPI_broadcast(self, root, comm):
+
+        cdef void * buf
+        cdef size_t n
+        cdef numpy.ndarray container
+
+        if comm.rank == root:
+            buf = _big_block_pack(&self.bb, &n)
+            container = numpy.zeros(n, dtype='uint8')
+            memcpy(container.data, buf, n)
+        else:
+            container = None
+
+        container = comm.bcast(container, root=root)
+
+        if comm.rank != root:
+            _big_block_close_internal(&self.bb)
+            _big_block_unpack(&self.bb, container.data)
+
+        if comm.rank == root:
+            free(buf)
+
     def _MPI_flush(self):
         comm = self.comm
         cdef unsigned int Nfile = self.bb.Nfile
@@ -427,16 +450,20 @@ cdef class ColumnLowLevelAPI:
             for i in range(Nfile):
                 fchecksum[i] = fchecksum2[i]
 
+        cdef int rt
+
         if comm.rank == 0:
             big_block_set_dirty(&self.bb, dirty);
+            with nogil:
+                rt = big_block_flush(&self.bb)
         else:
-            big_block_set_dirty(&self.bb, 0);
-            big_attrset_set_dirty(self.bb.attrset, 0);
+            rt = 0
 
-        with nogil:
-            rt = big_block_flush(&self.bb)
-        if rt != 0:
+        self._MPI_broadcast(root=0, comm=comm)
+
+        if any(comm.allgather(rt != 0)):
             raise Error()
+
         comm.barrier()
 
     def _close(self):

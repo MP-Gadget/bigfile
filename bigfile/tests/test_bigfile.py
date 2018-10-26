@@ -336,6 +336,7 @@ def test_mpi_attr(comm):
     else:
         fname = comm.bcast(None)
     x = BigFileMPI(comm, fname, create=True)
+
     with x.create('.', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
