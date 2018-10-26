@@ -83,8 +83,11 @@ def set_buffer_size(bytes):
 
 class Error(Exception):
     def __init__(self, msg=None):
+        cdef char * errmsg = big_file_get_error_message()
+        if errmsg == NULL:
+            errmsg = "Unknown error (could have been swallowed due to poor threading support)"
         if msg is None:
-            msg = big_file_get_error_message()
+            msg = errmsg
         Exception.__init__(self, msg)
 
 class FileClosedError(Exception):
