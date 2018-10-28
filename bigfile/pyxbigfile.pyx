@@ -100,10 +100,11 @@ class ColumnClosedError(Exception):
 
 cdef class FileLowLevelAPI:
     cdef CBigFile bf
-    cdef int closed
-
+    cdef int _deallocated
     def __cinit__(self):
-        self.closed = True
+        self._deallocated = True
+        pass
+
     def __init__(self, filename, create=False):
         """ if create is True, create the file if it is nonexisting"""
         filename = filename.encode()
@@ -116,25 +117,20 @@ cdef class FileLowLevelAPI:
                 rt = big_file_open(&self.bf, filenameptr)
         if rt != 0:
             raise Error()
-        self.closed = False
+        self._deallocated = False
 
     def __dealloc__(self):
-        if not self.closed:
+        if not self._deallocated:
             big_file_close(&self.bf)
-
-    def _check_closed(self):
-        if self.closed:
-            raise FileClosedError(self)
+            self._deallocated = True
 
     property basename:
         def __get__(self):
-            self._check_closed();
             return '%s' % self.bf.basename.decode()
 
     def list_blocks(self):
         cdef char ** list
         cdef int N
-        self._check_closed();
         with nogil:
             big_file_list(&self.bf, &list, &N)
         try:
@@ -146,17 +142,13 @@ cdef class FileLowLevelAPI:
         return []
 
     def close(self):
-        self.closed = True
-        with nogil:
-            rt = big_file_close(&self.bf)
-        if rt != 0:
-            raise Error()
+        #never really need to close, since we are just freeing a few memory blocks
+        pass
 
 cdef class AttrSet:
     cdef readonly ColumnLowLevelAPI bb
 
     def keys(self):
-        self.bb._check_closed()
         cdef size_t count
         cdef CBigAttr * list
         list = big_block_list_attrs(&self.bb.bb, &count)
@@ -170,7 +162,6 @@ cdef class AttrSet:
 
     def __contains__(self, name):
         name = name.encode()
-        self.bb._check_closed()
         cdef CBigAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
             return False
@@ -178,7 +169,6 @@ cdef class AttrSet:
 
     def __getitem__(self, name):
         name = name.encode()
-        self.bb._check_closed()
 
         cdef CBigAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
@@ -195,7 +185,6 @@ cdef class AttrSet:
 
     def __delitem__(self, name):
         name = name.encode()
-        self.bb._check_closed()
 
         cdef CBigAttr * attr = big_block_lookup_attr(&self.bb.bb, name)
         if attr == NULL:
@@ -205,7 +194,6 @@ cdef class AttrSet:
     def __setitem__(self, name, value):
         name = name.encode()
 
-        self.bb._check_closed()
 
 
         if isstr(value):
@@ -238,60 +226,47 @@ cdef class AttrSet:
 
 cdef class ColumnLowLevelAPI:
     cdef CBigBlock bb
-    cdef readonly int closed
     cdef public comm
-
+    cdef int _deallocated
     property size:
         def __get__(self):
-            self._check_closed()
             return self.bb.size
 
     property dtype:
         def __get__(self):
-            self._check_closed()
             return numpy.dtype((self.bb.dtype, self.bb.nmemb))
     property attrs:
         def __get__(self):
-            self._check_closed()
             return AttrSet(self)
     property Nfile:
         def __get__(self):
-            self._check_closed()
             return self.bb.Nfile
 
-    def _check_closed(self):
-        if self.closed:
-            raise ColumnClosedError(self)
-
     def __cinit__(self):
-        self.closed = True
         self.comm = None
-
+        self._deallocated = True
     def __init__(self):
         pass
 
     def __enter__(self):
-        self._check_closed()
         return self
 
     def __exit__(self, type, value, tb):
-        self.close()
+        self.flush()
 
     def open(self, FileLowLevelAPI f, blockname):
-        f._check_closed()
         blockname = blockname.encode()
         cdef char * blocknameptr = blockname
         with nogil:
             rt = big_file_open_block(&f.bf, &self.bb, blocknameptr)
         if rt != 0:
             raise Error()
-        self.closed = False
+        self._deallocated = False
 
     def grow(self, numpy.intp_t size, numpy.intp_t Nfile=1):
         """
             Increase the size of the column by size.
         """
-        self._check_closed()
         cdef numpy.ndarray fsize
 
         if Nfile < 0:
@@ -308,10 +283,8 @@ cdef class ColumnLowLevelAPI:
         if rt != 0:
             raise Error()
 
-        self.closed = False
 
     def create(self, FileLowLevelAPI f, blockname, dtype=None, size=None, numpy.intp_t Nfile=1):
-        f._check_closed()
 
         # need to hold the reference
         blockname = blockname.encode()
@@ -352,12 +325,11 @@ cdef class ColumnLowLevelAPI:
             if rt != 0:
                 raise Error()
 
-        self.closed = False
+        self._deallocated = False
 
     def clear_checksum(self):
         """ reset the checksum to zero for freshly overwriting the data set
         """
-        self._check_closed()
         big_block_clear_checksum(&self.bb)
 
     def write(self, numpy.intp_t start, numpy.ndarray buf):
@@ -365,7 +337,6 @@ cdef class ColumnLowLevelAPI:
 
             no checking is performed. assuming buf is of the correct dtype.
         """
-        self._check_closed()
         cdef CBigArray array
         cdef CBigBlockPtr ptr
 
@@ -386,7 +357,6 @@ cdef class ColumnLowLevelAPI:
     def __getitem__(self, sl):
         """ returns a copy of data, sl can be a slice or a scalar
         """
-        self._check_closed()
         if isinstance(sl, slice):
             start, end, stop = sl.indices(self.size)
             if stop != 1:
@@ -409,7 +379,6 @@ cdef class ColumnLowLevelAPI:
 
             returns out, or a newly allocated array of out is None.
         """
-        self._check_closed()
         cdef numpy.ndarray result 
         cdef CBigArray array
         cdef CBigBlockPtr ptr
@@ -444,14 +413,12 @@ cdef class ColumnLowLevelAPI:
         return result
 
     def _flush(self):
-        self._check_closed()
         with nogil:
             rt = big_block_flush(&self.bb)
         if rt != 0:
             raise Error()
 
     def _MPI_flush(self):
-        self._check_closed()
         comm = self.comm
         cdef unsigned int Nfile = self.bb.Nfile
         cdef unsigned int[:] fchecksum
@@ -479,36 +446,22 @@ cdef class ColumnLowLevelAPI:
         comm.barrier()
 
     def _close(self):
-        if self.closed: return
-        self.closed = True
-
+        # only need to flush; memory management is done at dealloc
         with nogil:
-            rt = big_block_close(&self.bb)
+            rt = big_block_flush(&self.bb)
         if rt != 0:
             raise Error()
 
     def _MPI_close(self):
-        if self.closed: return
-        # flush the other ranks
+        # only need to flush; memory management is done at dealloc
         self._MPI_flush()
 
-        self.closed = True
-
-        with nogil:
-            rt = big_block_close(&self.bb)
-        if rt != 0:
-            raise Error()
-
-        comm = self.comm
-        comm.barrier()
-
     def __dealloc__(self):
-        if self.closed: return
-        self.close()
+        if not self._deallocated:
+            big_block_close(&self.bb)
+            self._deallocated = True
 
     def __repr__(self):
-        if self.closed:
-            return "<CBigBlock: Closed>"
         if self.bb.dtype == b'####':
             return "<CBigBlock: %s>" % self.bb.basename
 
