@@ -26,7 +26,13 @@
 #define RAISE(ex, errormsg, ...) { __raise__(errormsg, __FILE__, __LINE__, ##__VA_ARGS__); goto ex; } 
 #define RAISEIF(condition, ex, errormsg, ...) { if(condition) RAISE(ex, errormsg, ##__VA_ARGS__); }
 
+#if __STDC_VERSION__ >= 201112L
+    #include <stdatomic.h>
+static char * volatile _Atomic ERRORSTR = NULL;
+#else
 static char * volatile ERRORSTR = NULL;
+#endif
+
 static size_t CHUNK_BYTES = 64 * 1024 * 1024;
 
 /* Internal AttrSet API */
@@ -94,10 +100,6 @@ big_file_set_buffer_size(size_t bytes)
 char * big_file_get_error_message() {
     return ERRORSTR;
 }
-
-#if __STDC_VERSION__ >= 201112L
-    #include <stdatomic.h>
-#endif
 
 void
 big_file_set_error_message(char * msg)
