@@ -143,7 +143,7 @@ iosim(char * filename)
             t0 = MPI_Wtime();
             big_file_mpi_open_block(&bf, &bb, "TestBlock", MPI_COMM_WORLD);
             oldsize = bb.size;
-            big_file_mpi_grow_block(&bf, &bb, Nfile, size, MPI_COMM_WORLD);
+            big_block_mpi_grow_simple(&bb, Nfile, size, MPI_COMM_WORLD);
             t1 = MPI_Wtime();
             trank.open += t1 - t0;
             info("Opened BigBlock\n");

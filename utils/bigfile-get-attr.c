@@ -29,7 +29,7 @@ static void print_attr(BigAttr * attr, int brief) {
         } else {
             endl = "";
         }
-        dtype_format(buffer, attr->dtype, data, NULL);
+        big_file_dtype_format(buffer, attr->dtype, data, NULL);
         printf("%s%s", buffer, endl);
         data += dtype_itemsize(attr->dtype);
     }

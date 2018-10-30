@@ -66,16 +66,16 @@ int main(int argc, char * argv[]) {
             nmemb = attr->nmemb;
         }
     }
-    dtype_normalize(ndtype, dtype);
-    char * data;
+    char * data = malloc(big_file_dtype_itemsize(dtype) * nmemb);
 
-    if(ndtype[1] == 'S') {
+    memset(data, 0, big_file_dtype_itemsize(dtype) * nmemb);
+
+    if(big_file_dtype_kind(dtype) == 'S') {
         if (nmemb == 0) nmemb = strlen(argv[4]) + 1;
         if (nmemb != strlen(argv[4]) + 1) {
             fprintf(stderr, "nmemb and number of arguments mismatch\n");
             exit(1);
         }
-        data = malloc(dtype_itemsize(ndtype) * nmemb);
         memcpy(data, argv[4], strlen(argv[4]) + 1); 
     } else {
         if (nmemb == 0) nmemb = argc - optind + 1 - 4;
@@ -83,10 +83,12 @@ int main(int argc, char * argv[]) {
             fprintf(stderr, "nmemb and number of arguments mismatch\n");
             exit(1);
         }
-        data = malloc(dtype_itemsize(ndtype) * nmemb);
         for(i = 4; i < argc - optind + 1; i ++) {
-            char * p = data + (i - 4) * dtype_itemsize(ndtype);
-            dtype_parse(argv[i], dtype, p, NULL);
+            char * p = data + (i - 4) * big_file_dtype_itemsize(dtype);
+            if(0 != big_file_dtype_parse(argv[i], dtype, p, NULL)) {
+                fprintf(stderr, "failed to parse the data `%s`\n", p);
+                exit(1);
+            }
         }
     }
 
