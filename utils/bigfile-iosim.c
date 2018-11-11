@@ -188,7 +188,9 @@ iosim(char * filename)
             info("Initialized FakeData\n");
             info("Writing BigBlock\n");
             t0 = MPI_Wtime();
-            big_block_mpi_write(&bb, &ptr, &array, Nwriter, MPI_COMM_WORLD);
+            if(0 != big_block_mpi_write(&bb, &ptr, &array, Nwriter, MPI_COMM_WORLD)) {
+                info("Error occured: %s\n", big_file_get_error_message());
+            }
             t1 = MPI_Wtime();
             trank.write += t1 - t0;
             info("Written BigBlock\n");
@@ -198,7 +200,9 @@ iosim(char * filename)
             info("Reading BigBlock\n");
 
             t0 = MPI_Wtime();
-            big_block_mpi_read(&bb, &ptr, &array, Nwriter, MPI_COMM_WORLD);
+            if(0 != big_block_mpi_read(&bb, &ptr, &array, Nwriter, MPI_COMM_WORLD)) {
+                info("Error occured: %s\n", big_file_get_error_message());
+            }
             t1 = MPI_Wtime();
             trank.read += t1 - t0;
             info("Reading took %f seconds\n", trank.read);
