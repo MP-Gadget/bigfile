@@ -386,7 +386,7 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
         concurrency = NTask;
     }
 
-    ptrdiff_t * sizes = malloc(sizeof(sizes[0]) * NTask);
+    size_t * sizes = malloc(sizeof(sizes[0]) * NTask);
     size_t * offsets = malloc(sizeof(offsets[0]) * (NTask + 1));
 
     ptrdiff_t totalsize;
