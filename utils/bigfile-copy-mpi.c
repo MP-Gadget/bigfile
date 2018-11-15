@@ -140,7 +140,7 @@ void server() {
 
         offset += chunksize;
         if(verbose) {
-            fprintf(stderr, "%td / %td done (%0.4g%%)\r", offset, bb.size, (100. / bb.size) * offset);
+            fprintf(stderr, "%ld / %td done (%0.4g%%)\r", offset, bb.size, (100. / bb.size) * offset);
         }
     }
     int i;

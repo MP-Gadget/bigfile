@@ -259,7 +259,7 @@ iosim(char * filename)
 
             fprintf(fp, "# Task\tTcreate\t\tTopen\t\tTwrite\t\tTread\t\tTclose\n");
             for (i=0; i<NTask; i++) {
-                fprintf(fp, "%04d\t%012.8f\t%012.8f\t%012.8f\t%012.8f\t%012.8f\n",
+                fprintf(fp, "%04td\t%012.8f\t%012.8f\t%012.8f\t%012.8f\t%012.8f\n",
                     i, times[i].create, times[i].open, times[i].write, times[i].read, times[i].close);
             }
         }
@@ -283,7 +283,7 @@ usage()
            " -p : purge the block afterwards \n "
            );
 
-    printf("Defaults: -n %d -s %d -w %d\n", 
+    printf("Defaults: -n %d -s %td -w %d\n", 
              Nwriter, size, nmemb);
 }
 
