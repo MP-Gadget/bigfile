@@ -375,16 +375,13 @@ _assign_colors(size_t glocalsize, size_t * sizes, int * ncolor, MPI_Comm comm)
 }
 
 static size_t
-_collect_sizes_and_offsets(size_t localsize, size_t ** psizes, size_t ** poffsets, MPI_Comm comm)
+_collect_sizes(size_t localsize, size_t * sizes, size_t * myoffset, MPI_Comm comm)
 {
 
     int ThisTask, NTask;
 
     MPI_Comm_size(comm, &NTask);
     MPI_Comm_rank(comm, &ThisTask);
-
-    size_t * sizes = malloc(sizeof(sizes[0]) * NTask);
-    size_t * offsets = malloc(sizeof(offsets[0]) * (NTask + 1));
 
     size_t totalsize;
 
@@ -395,33 +392,23 @@ _collect_sizes_and_offsets(size_t localsize, size_t ** psizes, size_t ** poffset
     if(sizeof(ptrdiff_t) == sizeof(long)) {
         MPI_PTRDIFFT = MPI_LONG;
     } else if(sizeof(ptrdiff_t) == sizeof(int)) {
-            MPI_PTRDIFFT = MPI_INT;
-    } else {
-        /* Weird architecture indeed. */
-        abort();
-    }
-
+        MPI_PTRDIFFT = MPI_INT;
+    } else { abort(); }
 
     MPI_Allreduce(&sizes[ThisTask], &totalsize, 1, MPI_PTRDIFFT, MPI_SUM, comm);
     MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, sizes, 1, MPI_PTRDIFFT, comm);
 
-    /* offsets */
-    offsets[0] = 0;
     int i;
-    for(i = 0; i < NTask; i ++) {
-        offsets[i + 1] = offsets[i] + sizes[i];
+    *myoffset = 0;
+    for(i = 0; i < ThisTask; i ++) {
+        (*myoffset) += sizes[i];
     }
-
-    *psizes = sizes;
-    *poffsets = offsets;
 
     return totalsize;
 }
 
 struct SegmentGroupDescr {
-    size_t * sizes;
-    size_t * offsets;
-
+    /* data model: rank <- segment <- group */
     int Ngroup;
     int Nsegments;
     int GroupID; /* ID of the group of this rank */
@@ -432,13 +419,13 @@ struct SegmentGroupDescr {
     int segment_end;
 
     int is_leader;
-    MPI_Comm Group;
-    MPI_Comm Leader;
-    MPI_Comm Segment;
+    MPI_Comm Group;  /* communicator for all ranks in the group */
+    MPI_Comm Leader; /* communicator for all ranks that are group leaders */
+    MPI_Comm Segment; /* communicator for all ranks in this segment */
 };
 
 static void
-_create_segment_group(struct SegmentGroupDescr * descr, size_t localsize, size_t maxsegsize, int Ngroup, MPI_Comm comm)
+_create_segment_group(struct SegmentGroupDescr * descr, size_t * sizes, size_t avgsegsize, int Ngroup, MPI_Comm comm)
 {
     int i;
     int ThisTask, NTask;
@@ -446,18 +433,10 @@ _create_segment_group(struct SegmentGroupDescr * descr, size_t localsize, size_t
     MPI_Comm_size(comm, &NTask);
     MPI_Comm_rank(comm, &ThisTask);
 
-    descr->totalsize = _collect_sizes_and_offsets(localsize, &descr->sizes, &descr->offsets, comm);
+    descr->ThisSegment = _assign_colors(avgsegsize, sizes, &descr->Nsegments, comm);
 
-    size_t avgsegsize;
-
-    /* try to create as many segments as number of groups (thus one segment per group) */
-    avgsegsize = (descr->totalsize + Ngroup - 1) / Ngroup + 1;
-
-    /* no segment shall exceed the memory bound set by maxsegsize, since it will be collected to a single rank */
-    if(avgsegsize > maxsegsize) avgsegsize = maxsegsize;
-
-    descr->ThisSegment = _assign_colors(avgsegsize, descr->sizes, &descr->Nsegments, comm);
-
+    /* assign segments to groups.
+     * if Nsegments < Ngroup, some groups will have no segments, and thus no ranks belong to them. */
     descr->GroupID = descr->ThisSegment * Ngroup / descr->Nsegments;
 
     descr->Ngroup = Ngroup;
@@ -490,8 +469,6 @@ _create_segment_group(struct SegmentGroupDescr * descr, size_t localsize, size_t
 static void
 _destroy_segment_group(struct SegmentGroupDescr * descr)
 {
-    free(descr->sizes);
-    free(descr->offsets);
 
     MPI_Comm_free(&descr->Segment);
     MPI_Comm_free(&descr->Group);
@@ -527,8 +504,22 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
         concurrency = NTask;
     }
 
-    _create_segment_group(seggrp, array->dims[0], _BigFileAggThreshold, concurrency, comm);
+    size_t avgsegsize;
+    size_t localsize = array->dims[0];
+    size_t myoffset;
+    size_t * sizes = malloc(sizeof(sizes[0]) * NTask);
 
+    size_t totalsize = _collect_sizes(localsize, sizes, &myoffset, comm);
+
+    /* try to create as many segments as number of groups (thus one segment per group) */
+    avgsegsize = (totalsize + concurrency - 1) / concurrency + 1;
+
+    /* no segment shall exceed the memory bound set by maxsegsize, since it will be collected to a single rank */
+    if(avgsegsize > _BigFileAggThreshold) avgsegsize = _BigFileAggThreshold;
+
+    _create_segment_group(seggrp, sizes, avgsegsize, concurrency, comm);
+
+    free(sizes);
 
     int rt = 0;
     int segment;
@@ -546,7 +537,7 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
         if(seggrp->ThisSegment != segment) continue;
 
         /* offset on the root of SegGroup matters */
-        rt = _aggregated(block, ptr, seggrp->offsets[ThisTask], seggrp->sizes[ThisTask], array, action, seggrp->Segment);
+        rt = _aggregated(block, ptr, myoffset, localsize, array, action, seggrp->Segment);
 
     }
 
