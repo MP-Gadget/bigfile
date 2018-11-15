@@ -418,16 +418,6 @@ _collect_sizes_and_offsets(size_t localsize, size_t ** psizes, size_t ** poffset
     return totalsize;
 }
 
-static int
-_aggregated(
-            BigBlock * block,
-            BigBlockPtr * ptr,
-            ptrdiff_t offset, /* offset of the entire comm */
-            size_t localsize,
-            BigArray * array,
-            int (*action)(BigBlock * bb, BigBlockPtr * ptr, BigArray * array),
-            MPI_Comm comm);
-
 struct SegmentGroupDescr {
     size_t * sizes;
     size_t * offsets;
@@ -448,7 +438,7 @@ struct SegmentGroupDescr {
 };
 
 static void
-_create_segment_group(struct SegmentGroupDescr * descr, size_t localsize, size_t threshold, int Ngroup, MPI_Comm comm)
+_create_segment_group(struct SegmentGroupDescr * descr, size_t localsize, size_t maxsegsize, int Ngroup, MPI_Comm comm)
 {
     int i;
     int ThisTask, NTask;
@@ -458,10 +448,15 @@ _create_segment_group(struct SegmentGroupDescr * descr, size_t localsize, size_t
 
     descr->totalsize = _collect_sizes_and_offsets(localsize, &descr->sizes, &descr->offsets, comm);
 
-    size_t glocalsize = (descr->totalsize + Ngroup - 1) / Ngroup + 1;
-    if(glocalsize > threshold) glocalsize = threshold;
+    size_t avgsegsize;
 
-    descr->ThisSegment = _assign_colors(glocalsize, descr->sizes, &descr->Nsegments, comm);
+    /* try to create as many segments as number of groups (thus one segment per group) */
+    avgsegsize = (descr->totalsize + Ngroup - 1) / Ngroup + 1;
+
+    /* no segment shall exceed the memory bound set by maxsegsize, since it will be collected to a single rank */
+    if(avgsegsize > maxsegsize) avgsegsize = maxsegsize;
+
+    descr->ThisSegment = _assign_colors(avgsegsize, descr->sizes, &descr->Nsegments, comm);
 
     descr->GroupID = descr->ThisSegment * Ngroup / descr->Nsegments;
 
@@ -487,7 +482,8 @@ _create_segment_group(struct SegmentGroupDescr * descr, size_t localsize, size_t
     MPI_Comm_rank(descr->Segment, &rank2);
 
     if (_big_file_mpi_verbose) {
-        printf("bigfile: ThisTask = %d ThisSegment = %d / %d GroupID = %d / %d rank = %d rank in segment = %d segstart = %d segend = %d\n", ThisTask, descr->ThisSegment, descr->Nsegments, descr->GroupID, descr->Ngroup, rank, rank2, descr->segment_start, descr->segment_end);
+        printf("bigfile: ThisTask = %d ThisSegment = %d / %d GroupID = %d / %d rank = %d rank in segment = %d segstart = %d segend = %d\n",
+            ThisTask, descr->ThisSegment, descr->Nsegments, descr->GroupID, descr->Ngroup, rank, rank2, descr->segment_start, descr->segment_end);
     }
 }
 
@@ -501,6 +497,16 @@ _destroy_segment_group(struct SegmentGroupDescr * descr)
     MPI_Comm_free(&descr->Group);
     MPI_Comm_free(&descr->Leader);
 }
+
+static int
+_aggregated(
+            BigBlock * block,
+            BigBlockPtr * ptr,
+            ptrdiff_t offset, /* offset of the entire comm */
+            size_t localsize,
+            BigArray * array,
+            int (*action)(BigBlock * bb, BigBlockPtr * ptr, BigArray * array),
+            MPI_Comm comm);
 
 static int
 _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
