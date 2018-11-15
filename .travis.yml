@@ -36,11 +36,11 @@ script:
     - pip install runtests
     - python ./runtests.py
     - bash check_tag.sh bigfile/version.py
-    - mpirun -n 4 build/utils/iosim -n 1 -s 1024000 create
-    - mpirun -n 4 build/utils/iosim -n 1 -s 1024000 read
-    - mpirun -n 4 build/utils/iosim -n 4 -s 1024000 read
-    - mpirun -n 4 build/utils/iosim -A -n 1 -s 1024000 read
-    - mpirun -n 4 build/utils/iosim -A -n 4 -s 1024000 read
+    - mpirun -n 4 build/utils/bigfile-iosim -n 1 -s 1024000 create
+    - mpirun -n 4 build/utils/bigfile-iosim -n 1 -s 1024000 read
+    - mpirun -n 4 build/utils/bigfile-iosim -n 4 -s 1024000 read
+    - mpirun -n 4 build/utils/bigfile-iosim -A -n 1 -s 1024000 read
+    - mpirun -n 4 build/utils/bigfile-iosim -A -n 4 -s 1024000 read
 
 deploy:
     - provider: pypi
