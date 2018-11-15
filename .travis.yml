@@ -25,7 +25,8 @@ before_install:
 install:
     - conda create --yes -n test python=$PYTHON_VERSION
     - source activate test
-    - conda install --yes numpy=$NUMPY_VERSION nose cython mpi4py
+    - conda install --yes numpy=$NUMPY_VERSION nose cython
+    - conda install -c bccp mpi4py # will pull in mpich that 'works' on linux till anaconda fixes theirs.
     - python setup.py install
 
 script:
