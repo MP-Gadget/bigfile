@@ -343,55 +343,52 @@ big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm)
 }
 
 static int
-_assign_colors(size_t glocalsize, size_t * sizes, int * color, int NTask)
+_assign_colors(size_t glocalsize, size_t * sizes, int * ncolor, MPI_Comm comm)
 {
-    int i;
+    int NTask;
+    int ThisTask;
+    MPI_Comm_rank(comm, &ThisTask);
+    MPI_Comm_size(comm, &NTask);
 
+    int i;
+    int mycolor;
     size_t current_size = 0;
     int current_color = 0;
+    int lastcolor = 0;
     for(i = 0; i < NTask; i ++) {
         current_size += sizes[i];
-        color[i] = current_color;
+
+        lastcolor = current_color;
+
+        if(i == ThisTask) {
+            mycolor = lastcolor;
+        }
+
         if(current_size > glocalsize) {
             current_size = 0;
             current_color ++;
         }
     }
-    return color[NTask - 1] + 1;
+
+    *ncolor = lastcolor + 1;
+    return mycolor;
 }
 
-static int
-_aggregated(
-            BigBlock * block,
-            BigBlockPtr * ptr,
-            ptrdiff_t offset, /* offset of the entire comm */
-            size_t localsize,
-            BigArray * array,
-            int (*action)(BigBlock * bb, BigBlockPtr * ptr, BigArray * array),
-            MPI_Comm comm);
-
-static int
-_throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
-    BigBlockPtr * ptr,
-    BigArray * array,
-    int (*action)(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
-)
+static size_t
+_collect_sizes_and_offsets(size_t localsize, size_t ** psizes, size_t ** poffsets, MPI_Comm comm)
 {
+
     int ThisTask, NTask;
 
     MPI_Comm_size(comm, &NTask);
     MPI_Comm_rank(comm, &ThisTask);
 
-    if(concurrency <= 0) {
-        concurrency = NTask;
-    }
-
     size_t * sizes = malloc(sizeof(sizes[0]) * NTask);
     size_t * offsets = malloc(sizeof(offsets[0]) * (NTask + 1));
 
-    ptrdiff_t totalsize;
+    size_t totalsize;
 
-    sizes[ThisTask] = array->dims[0];
+    sizes[ThisTask] = localsize;
 
     MPI_Datatype MPI_PTRDIFFT;
 
@@ -408,103 +405,151 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
     MPI_Allreduce(&sizes[ThisTask], &totalsize, 1, MPI_PTRDIFFT, MPI_SUM, comm);
     MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, sizes, 1, MPI_PTRDIFFT, comm);
 
-    /* divide into groups of this size */
-
-    ptrdiff_t glocalsize = totalsize / concurrency + 1;
-
-    if (glocalsize > _BigFileAggThreshold) {
-        glocalsize = _BigFileAggThreshold;
-    }
-
-    int * segid = malloc(sizeof(segid[0]) * NTask);
-    int Nsegid = _assign_colors(glocalsize, sizes, segid, NTask);
-
-    int * seg_writer = malloc(sizeof(seg_writer[0]) * Nsegid);
-    int i;
-
-    for(i = 0; i < Nsegid; i ++) {
-        seg_writer[i] = i * concurrency / Nsegid;
-    }
-
-    int WriterID = seg_writer[segid[ThisTask]];
-    MPI_Comm WriterGroup;
-    int WriterGroupSize;
-    int WriterGroupRank;
-
-    MPI_Comm_split(comm, WriterID, ThisTask, &WriterGroup);
-
-    MPI_Comm_size(WriterGroup, &WriterGroupSize);
-    MPI_Comm_rank(WriterGroup, &WriterGroupRank);
-
-    /* compute the unique segments on this writer */
-    int Nseg_this_writer = 0;
-
-    for(i = 0; i < Nsegid; i ++) {
-        if(seg_writer[i] == WriterID) {
-            Nseg_this_writer ++;
-        }
-    }
-
-    int * unique_segs = malloc(sizeof(int) * Nseg_this_writer);
-
-    Nseg_this_writer = 0;
-    for(i = 0; i < Nsegid; i ++) {
-        if(seg_writer[i] == WriterID) {
-            unique_segs[Nseg_this_writer] = i;
-            Nseg_this_writer ++;
-        }
-    }
-
-    if (_big_file_mpi_verbose) {
-        if (WriterGroupRank == 0) {
-            printf("WriterGroup = %d WriterGroupSize = %d segs = [ ", WriterID, WriterGroupSize);
-            for(i = 0; i < Nseg_this_writer; i ++) {
-                printf("%d ", unique_segs[i]);
-            }
-            printf("] \n");
-        }
-    }
-
     /* offsets */
     offsets[0] = 0;
+    int i;
     for(i = 0; i < NTask; i ++) {
         offsets[i + 1] = offsets[i] + sizes[i];
     }
 
-    MPI_Comm SegGroup;
+    *psizes = sizes;
+    *poffsets = offsets;
 
-    MPI_Comm_split(WriterGroup, segid[ThisTask], ThisTask, &SegGroup);
+    return totalsize;
+}
+
+static int
+_aggregated(
+            BigBlock * block,
+            BigBlockPtr * ptr,
+            ptrdiff_t offset, /* offset of the entire comm */
+            size_t localsize,
+            BigArray * array,
+            int (*action)(BigBlock * bb, BigBlockPtr * ptr, BigArray * array),
+            MPI_Comm comm);
+
+struct SegmentGroupDescr {
+    size_t * sizes;
+    size_t * offsets;
+
+    int Ngroup;
+    int Nsegments;
+    int GroupID; /* ID of the group of this rank */
+    int ThisSegment; /* SegmentID of the local data chunk on this rank*/
+
+    size_t totalsize;
+    int segment_start; /* segments responsible in this group */
+    int segment_end;
+
+    int is_leader;
+    MPI_Comm Group;
+    MPI_Comm Leader;
+    MPI_Comm Segment;
+};
+
+static void
+_create_segment_group(struct SegmentGroupDescr * descr, size_t localsize, size_t threshold, int Ngroup, MPI_Comm comm)
+{
+    int i;
+    int ThisTask, NTask;
+
+    MPI_Comm_size(comm, &NTask);
+    MPI_Comm_rank(comm, &ThisTask);
+
+    descr->totalsize = _collect_sizes_and_offsets(localsize, &descr->sizes, &descr->offsets, comm);
+
+    size_t glocalsize = (descr->totalsize + Ngroup - 1) / Ngroup + 1;
+    if(glocalsize > threshold) glocalsize = threshold;
+
+    descr->ThisSegment = _assign_colors(glocalsize, descr->sizes, &descr->Nsegments, comm);
+
+    descr->GroupID = descr->ThisSegment * Ngroup / descr->Nsegments;
+
+    descr->Ngroup = Ngroup;
+
+    MPI_Comm_split(comm, descr->GroupID, ThisTask, &descr->Group);
+
+    MPI_Allreduce(&descr->ThisSegment, &descr->segment_start, 1, MPI_INT, MPI_MIN, descr->Group);
+    MPI_Allreduce(&descr->ThisSegment, &descr->segment_end, 1, MPI_INT, MPI_MAX, descr->Group);
+
+    descr->segment_end ++;
+
+    int rank;
+
+    MPI_Comm_rank(descr->Group, &rank);
+
+    descr->is_leader = !(rank == 0);
+    MPI_Comm_split(comm, rank == 0? 0 : 1, ThisTask, &descr->Leader);
+
+    MPI_Comm_split(descr->Group, descr->ThisSegment, ThisTask, &descr->Segment);
+    int rank2;
+
+    MPI_Comm_rank(descr->Segment, &rank2);
+
+    if (_big_file_mpi_verbose) {
+        printf("bigfile: ThisTask = %d ThisSegment = %d / %d GroupID = %d / %d rank = %d rank in segment = %d segstart = %d segend = %d\n", ThisTask, descr->ThisSegment, descr->Nsegments, descr->GroupID, descr->Ngroup, rank, rank2, descr->segment_start, descr->segment_end);
+    }
+}
+
+static void
+_destroy_segment_group(struct SegmentGroupDescr * descr)
+{
+    free(descr->sizes);
+    free(descr->offsets);
+
+    MPI_Comm_free(&descr->Segment);
+    MPI_Comm_free(&descr->Group);
+    MPI_Comm_free(&descr->Leader);
+}
+
+static int
+_throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
+    BigBlockPtr * ptr,
+    BigArray * array,
+    int (*action)(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
+)
+{
+    int i;
+    int ThisTask, NTask;
+
+    MPI_Comm_size(comm, &NTask);
+    MPI_Comm_rank(comm, &ThisTask);
+
+    struct SegmentGroupDescr seggrp[1];
+
+    if(concurrency <= 0) {
+        concurrency = NTask;
+    }
+
+    _create_segment_group(seggrp, array->dims[0], _BigFileAggThreshold, concurrency, comm);
+
 
     int rt = 0;
-    int active;
-    for(active = 0; active < Nseg_this_writer; active++) {
+    int segment;
 
-        MPI_Barrier(WriterGroup);
+    for(segment = seggrp->segment_start;
+        segment < seggrp->segment_end;
+        segment ++) {
 
-        if(0 != (rt = big_file_mpi_broadcast_anyerror(rt, WriterGroup))) {
+        MPI_Barrier(seggrp->Group);
+
+        if(0 != (rt = big_file_mpi_broadcast_anyerror(rt, seggrp->Group))) {
             /* failed , abort. */
             continue;
         } 
-        if(segid[ThisTask] != unique_segs[active]) continue;
+        if(seggrp->ThisSegment != segment) continue;
 
         /* offset on the root of SegGroup matters */
-        rt = _aggregated(block, ptr, offsets[ThisTask], sizes[ThisTask], array, action, SegGroup);
+        rt = _aggregated(block, ptr, seggrp->offsets[ThisTask], seggrp->sizes[ThisTask], array, action, seggrp->Segment);
 
     }
-
-    free(segid);
-    free(seg_writer);
-    free(unique_segs);
-    free(sizes);
-    free(offsets);
-
-    MPI_Comm_free(&SegGroup);
-    MPI_Comm_free(&WriterGroup);
 
     if(0 == (rt = big_file_mpi_broadcast_anyerror(rt, comm))) {
         /* no errors*/
-        big_block_seek_rel(block, ptr, totalsize);
+        big_block_seek_rel(block, ptr, seggrp->totalsize);
     }
+
+    _destroy_segment_group(seggrp);
     return rt;
 }
 
