@@ -437,7 +437,7 @@ _create_segment_group(struct SegmentGroupDescr * descr, size_t * sizes, size_t a
 
     /* assign segments to groups.
      * if Nsegments < Ngroup, some groups will have no segments, and thus no ranks belong to them. */
-    descr->GroupID = descr->ThisSegment * Ngroup / descr->Nsegments;
+    descr->GroupID = ((size_t) descr->ThisSegment) * Ngroup / descr->Nsegments;
 
     descr->Ngroup = Ngroup;
 
@@ -452,7 +452,7 @@ _create_segment_group(struct SegmentGroupDescr * descr, size_t * sizes, size_t a
 
     MPI_Comm_rank(descr->Group, &rank);
 
-    descr->is_leader = !(rank == 0);
+    descr->is_leader = rank == 0;
     MPI_Comm_split(comm, rank == 0? 0 : 1, ThisTask, &descr->Leader);
 
     MPI_Comm_split(descr->Group, descr->ThisSegment, ThisTask, &descr->Segment);
