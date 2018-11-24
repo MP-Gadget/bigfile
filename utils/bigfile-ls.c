@@ -59,9 +59,8 @@ static void listbigfile_r(BigFile * bf, char * path) {
                 sprintf(blockname, "%s/%s", path, namelist[i]->d_name);
             else
                 sprintf(blockname, "%s", namelist[i]->d_name);
-            if(0 != listbigblock(bf, blockname)) {
-                listbigfile_r(bf, blockname);
-            }
+            listbigblock(bf, blockname);
+            listbigfile_r(bf, blockname);
             free(namelist[i]);
         }
         free(namelist);
