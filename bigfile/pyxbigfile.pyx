@@ -254,6 +254,25 @@ cdef class ColumnLowLevelAPI:
     def __exit__(self, type, value, tb):
         self.flush()
 
+    def __getstate__(self):
+        cdef void * buf
+        cdef size_t n
+        cdef numpy.ndarray container
+
+        buf = _big_block_pack(&self.bb, &n)
+        container = numpy.zeros(n, dtype='uint8')
+        memcpy(container.data, buf, n)
+        free(buf)
+
+        return (container, self.comm, self._deallocated)
+
+    def __setstate__(self, state):
+        buf, comm, deallocated = state
+        cdef numpy.ndarray container = buf
+        _big_block_unpack(&self.bb, container.data)
+        self.comm = comm
+        self._deallocated = deallocated
+
     def open(self, FileLowLevelAPI f, blockname):
         blockname = blockname.encode()
         cdef char * blocknameptr = blockname

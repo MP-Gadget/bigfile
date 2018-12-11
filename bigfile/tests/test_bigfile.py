@@ -470,6 +470,24 @@ def test_blank_attr(comm):
     shutil.rmtree(fname)
 
 @MPITest(commsize=[1])
+def test_pickle(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    print(fname)
+    # test creating
+    column = x.create("abc", dtype='f8', size=128)
+    
+    import pickle
+    str = pickle.dumps(column)
+    column1 = pickle.loads(str)
+
+    assert column.size == column1.size
+    assert column.dtype == column1.dtype
+    assert column.comm is column1.comm
+
+    shutil.rmtree(fname)
+
+@MPITest(commsize=[1])
 def test_string(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
