@@ -98,9 +98,17 @@ class ColumnClosedError(Exception):
     def __init__(self, bigblock):
         Exception.__init__(self, "Block is closed")
 
+# An unpickle function via __reduce__ is needed for Python 2;
+# c.f. https://github.com/cython/cython/issues/2757
+def _unpickle_file(kls, state):
+    obj = FileLowLevelAPI.__new__(kls)
+    obj.__setstate__(state)
+    return obj
+
 cdef class FileLowLevelAPI:
     cdef CBigFile bf
     cdef int _deallocated
+
     def __cinit__(self):
         self._deallocated = True
         pass
@@ -123,6 +131,23 @@ cdef class FileLowLevelAPI:
         if not self._deallocated:
             big_file_close(&self.bf)
             self._deallocated = True
+
+    def __reduce__(self):
+        return _unpickle_file, (type(self), self.__getstate__(),)
+
+    def __getstate__(self):
+        return (self.bf.basename.decode(), self._deallocated)
+
+    def __setstate__(self, state):
+        filename, deallocated = state
+        filename = filename.encode()
+        cdef char * filenameptr = filename
+
+        self._deallocated = deallocated
+
+        if not deallocated:
+            with nogil:
+                rt = big_file_open(&self.bf, filenameptr)
 
     property basename:
         def __get__(self):
@@ -224,10 +249,18 @@ cdef class AttrSet:
                 for key in self]))
         return t
 
+# An unpickle function via __reduce__ is needed for Python 2;
+# c.f. https://github.com/cython/cython/issues/2757
+def _unpickle_column(kls, state):
+    obj = ColumnLowLevelAPI.__new__(kls)
+    obj.__setstate__(state)
+    return obj
+
 cdef class ColumnLowLevelAPI:
     cdef CBigBlock bb
     cdef public comm
     cdef int _deallocated
+
     property size:
         def __get__(self):
             return self.bb.size
@@ -245,6 +278,7 @@ cdef class ColumnLowLevelAPI:
     def __cinit__(self):
         self.comm = None
         self._deallocated = True
+
     def __init__(self):
         pass
 
@@ -254,24 +288,33 @@ cdef class ColumnLowLevelAPI:
     def __exit__(self, type, value, tb):
         self.flush()
 
+    def __reduce__(self):
+        return _unpickle_column, (type(self), self.__getstate__())
+
     def __getstate__(self):
         cdef void * buf
         cdef size_t n
         cdef numpy.ndarray container
 
-        buf = _big_block_pack(&self.bb, &n)
-        container = numpy.zeros(n, dtype='uint8')
-        memcpy(container.data, buf, n)
-        free(buf)
+        if not self._deallocated:
+            buf = _big_block_pack(&self.bb, &n)
+            container = numpy.zeros(n, dtype='uint8')
+            memcpy(container.data, buf, n)
+            free(buf)
+        else:
+            container = None
 
         return (container, self.comm, self._deallocated)
 
     def __setstate__(self, state):
         buf, comm, deallocated = state
         cdef numpy.ndarray container = buf
-        _big_block_unpack(&self.bb, container.data)
+
         self.comm = comm
         self._deallocated = deallocated
+
+        if not deallocated:
+            _big_block_unpack(&self.bb, container.data)
 
     def open(self, FileLowLevelAPI f, blockname):
         blockname = blockname.encode()

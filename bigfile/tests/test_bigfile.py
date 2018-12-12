@@ -473,7 +473,7 @@ def test_blank_attr(comm):
 def test_pickle(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
-    print(fname)
+
     # test creating
     column = x.create("abc", dtype='f8', size=128)
     
@@ -481,9 +481,24 @@ def test_pickle(comm):
     str = pickle.dumps(column)
     column1 = pickle.loads(str)
 
+    assert type(column) == type(column1)
     assert column.size == column1.size
     assert column.dtype == column1.dtype
     assert column.comm is column1.comm
+
+    column.close()
+    str = pickle.dumps(column)
+    column1 = pickle.loads(str)
+
+    str = pickle.dumps(x)
+    x1 = pickle.loads(str)
+
+    assert type(x) == type(x1)
+    assert x1.basename == x.basename
+
+    x.close()
+    str = pickle.dumps(x)
+    x1 = pickle.loads(str)
 
     shutil.rmtree(fname)
 
@@ -491,7 +506,7 @@ def test_pickle(comm):
 def test_string(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
-    print(fname)
+
     # test creating
     with x.create("Header", Nfile=1, dtype=None, size=128) as b:
         b.attrs['v3'] = ['a', 'bb', 'ccc']

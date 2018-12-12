@@ -22,8 +22,13 @@ def isstrlist(s):
     return all([ isstr(ss) for ss in s])
 
 class Column(ColumnLowLevelAPI):
+
+#    def __init__(self):
+#        ColumeLowLevelAPI.__init__(self)
+
     def flush(self):
         self._flush()
+
     def close(self):
         self._close()
 
