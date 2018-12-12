@@ -36,6 +36,7 @@ class FileBase(FileLowLevelAPI):
     def __init__(self, filename, create=False):
         FileLowLevelAPI.__init__(self, filename, create)
         self._blocks = []
+        self.comm = None
 
     def __enter__(self):
         return self
@@ -58,9 +59,17 @@ class FileBase(FileLowLevelAPI):
 
         return self.open(key)
 
+    def __getstate__(self):
+        return (self.comm, getattr(self, 'blocks', None), FileLowLevelAPI.__getstate__(self)) 
+
+    def __setstate__(self, state):
+        comm, blocks, basestate = state
+        self.comm = comm
+        if blocks is not None:
+            self._blocks = blocks
+        FileLowLevelAPI.__setstate__(self, basestate)
 
 class File(FileBase):
-
     def __init__(self, filename, create=False):
         FileBase.__init__(self, filename, create)
         del self._blocks
@@ -166,8 +175,7 @@ class ColumnMPI(Column):
 class FileMPI(FileBase):
 
     def __init__(self, comm, filename, create=False):
-        self.comm = comm
-        if not check_unique(filename, self.comm):
+        if not check_unique(filename, comm):
             raise BigFileError("filename is inconsistent between ranks")
 
         if create:
@@ -179,8 +187,9 @@ class FileMPI(FileBase):
                     pass
             # if create failed, the next open will fail, collectively
 
-        self.comm.barrier()
+        comm.barrier()
         FileBase.__init__(self, filename, create=False)
+        self.comm = comm
         self.refresh()
 
     @property

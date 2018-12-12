@@ -499,7 +499,7 @@ def test_pickle(comm):
     x.close()
     str = pickle.dumps(x)
     x1 = pickle.loads(str)
-
+    assert tuple(sorted(x1.blocks)) == tuple(sorted(x.blocks))
     shutil.rmtree(fname)
 
 @MPITest(commsize=[1])
