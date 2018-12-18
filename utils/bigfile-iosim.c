@@ -75,7 +75,7 @@ iosim(char * filename)
     BigBlockPtr ptr = {0};
 
     info("iosim.c: started.\n");
-
+    big_file_mpi_set_verbose(1);
     uint64_t * fakedata;
     ptrdiff_t i;
     //
@@ -154,8 +154,16 @@ iosim(char * filename)
             abort();
     }
 
-    start = size * ThisTask / NTask;
-    localsize = size * (ThisTask + 1) / NTask - start;
+    /* staggered data layout */
+    if(ThisTask % 2 == 0) {
+        start = size * ThisTask / NTask;
+        int nextTask = ThisTask + 2;
+        if(nextTask > NTask) nextTask = NTask;
+        localsize = size * nextTask / NTask - start;
+    } else {
+        start = size * (ThisTask - 1) / NTask;
+        localsize = 0;
+    }
 
     info("Writing to `%s`\n", filename);
     info("mode %s\n", MODES[mode]);
