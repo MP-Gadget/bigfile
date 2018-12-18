@@ -42,6 +42,7 @@ script:
     - mpirun -n 4 build/utils/bigfile-iosim -n 4 -s 1024000 read test
     - mpirun -n 4 build/utils/bigfile-iosim -A -n 1 -s 1024000 read test
     - mpirun -n 4 build/utils/bigfile-iosim -A -n 4 -s 1024000 read test
+    - mpirun -n 8 build/utils/bigfile-iosim -A -n 2 -s 1024000 read test
 
 deploy:
     - provider: pypi
