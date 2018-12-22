@@ -524,3 +524,35 @@ def test_string(comm):
         assert_equal(b.attrs['l'], 'a' * 65536)
 
     shutil.rmtree(fname)
+
+@MPITest([1])
+def test_slicing(comm):
+    fname = tempfile.mkdtemp()
+    x = BigFile(fname, create=True)
+    x.create('.')
+
+    numpy.random.seed(1234)
+
+    # test creating
+    with x.create("data", Nfile=1, dtype=('f8', 32), size=128) as b:
+        data = numpy.random.uniform(100000, size=(128, 32))
+        junk = numpy.random.uniform(100000, size=(128, 32))
+
+        b.write(0, data)
+
+        with x['data'] as b:
+            assert_equal(b[:], data)
+            assert_equal(b[0], data[0])
+
+        b[:len(junk)] = junk
+
+        with x['data'] as b:
+            assert_equal(b[:], junk)
+            assert_equal(b[0], junk[0])
+
+        b[3] = data[3]
+
+        with x['data'] as b:
+            assert_equal(b[3], data[3])
+
+    shutil.rmtree(fname)
