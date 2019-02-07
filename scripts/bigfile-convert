@@ -41,6 +41,7 @@ ap.add_argument("--verify", action='store_true', default=True)
 ap.add_argument("--no-verify", dest='verify', action='store_false', default=True)
 #ap.add_argument("--include", action="append")
 #ap.add_argument("--exclude", action="append")
+ap.add_argument("--prefix", default="", help="start convertion from this node of the file")
 
 def ishdf5(path):
     if os.path.exists(path):
@@ -94,7 +95,7 @@ def main(ns):
     else:
         logger = None
 
-    convert(ns.src, ns.dest, readers[ns.src_format], writers[ns.dest_format],
+    convert(ns.src, ns.dest, ns.prefix, readers[ns.src_format], writers[ns.dest_format],
             readers[ns.dest_format] if ns.verify else None,
             errlogger=logger)
 
@@ -181,7 +182,9 @@ class HDFReader(IOBase):
                 return [] # leaf
         raise TypeError("Unknown data block type")
 
-class node(dict): pass
+class node(dict):
+    def __repr__(self):
+        return '%s, final=%s' % (dict.__repr__(self), self.final)
 
 def _blocks_to_tree(blocks):
     tree = node()
@@ -429,15 +432,15 @@ class FITSWriter(IOBase):
         #print(extname, data.shape)
         #print('created table', bb, bb.read_header())
 
-def convert(srcpath, outpath, readertype, writertype, verifiertype, errlogger):
+def convert(srcpath, outpath, prefix, readertype, writertype, verifiertype, errlogger):
     with readertype(srcpath) as hin:
 
         with writertype(outpath) as writer:
-            hin.traverse(writer.create, errlogger=errlogger)
+            hin.traverse(writer.create, prefix=prefix, errlogger=errlogger)
 
         if verifiertype:
             with verifiertype(outpath) as reader:
-                hin.traverse(reader.verify, errlogger=errlogger)
+                hin.traverse(reader.verify, prefix=prefix, errlogger=errlogger)
 
 if __name__ == "__main__" :
     ns = ap.parse_args()
