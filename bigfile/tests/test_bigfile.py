@@ -122,6 +122,8 @@ def test_grow(comm):
         b.write(0, data)
 
         b.grow(size=100, Nfile=2)
+        with x.open(d.str) as bb:
+            assert bb.size == 200
         b.write(100, data)
         assert b.size == 200
 

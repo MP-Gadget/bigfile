@@ -327,8 +327,19 @@ cdef class ColumnLowLevelAPI:
 
     def grow(self, numpy.intp_t size, numpy.intp_t Nfile=1):
         """
-            Increase the size of the column by size.
+            Increase the size of the column by size. size here
+            is the number of rows in the column, not the number of
+            scalar items.
+
+            Note: this will flush the column to disk to ensure
+            future opens of the column sees the grown size.
+
+            All other opened refereneces to the column are no longer
+            correct after this operation; they will not see the
+            new size.
+
         """
+
         cdef numpy.ndarray fsize
 
         if Nfile < 0:
@@ -344,6 +355,10 @@ cdef class ColumnLowLevelAPI:
             rt = big_block_grow(&self.bb, Nfile, <size_t*>fsize.data)
         if rt != 0:
             raise Error()
+
+        # other opened columns are now stale.
+        # flush to ensure bf['block'] gets the grown file.
+        self.flush()
 
 
     def create(self, FileLowLevelAPI f, blockname, dtype=None, size=None, numpy.intp_t Nfile=1):
