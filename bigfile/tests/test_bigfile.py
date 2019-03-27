@@ -113,10 +113,10 @@ def test_grow(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
 
-    d = numpy.dtype('f4')
+    d = numpy.dtype(('f4', 3))
     numpy.random.seed(1234)
 
-    data = numpy.random.uniform(100000, size=100).astype(d)
+    data = numpy.random.uniform(100000, size=(100, 3)).astype('f4')
     # test creating
     with x.create(d.str, Nfile=3, dtype=d, size=100) as b:
         b.write(0, data)
