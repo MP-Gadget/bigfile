@@ -123,11 +123,13 @@ def test_grow(comm):
 
         b.grow(size=100, Nfile=2)
         b.write(100, data)
+        assert b.size == 200
 
     with x.open(d.str) as b:
         assert b.Nfile == 5
         assert_equal(b[:100], data)
         assert_equal(b[100:], data)
+        assert b.size == 200
 
     shutil.rmtree(fname)
 
