@@ -27,7 +27,7 @@
 #define RAISE(ex, errormsg, ...) { __raise__(errormsg, __FILE__, __LINE__, ##__VA_ARGS__); goto ex; } 
 #define RAISEIF(condition, ex, errormsg, ...) { if(condition) RAISE(ex, errormsg, ##__VA_ARGS__); }
 
-#if __STDC_VERSION__ >= 201112L
+#if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_ATOMICS__)
     #include <stdatomic.h>
 static char * volatile _Atomic ERRORSTR = NULL;
 #else
@@ -108,7 +108,7 @@ big_file_set_error_message(char * msg)
     char * errorstr;
     if(msg != NULL) msg = _strdup(msg);
 
-#if __STDC_VERSION__ >= 201112L
+#if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_ATOMICS__)
     errorstr = atomic_exchange(&ERRORSTR, msg);
 #elif defined(__ATOMIC_SEQ_CST)
     errorstr = __atomic_exchange_n(&ERRORSTR, msg, __ATOMIC_SEQ_CST);
