@@ -24,10 +24,12 @@ before_install:
     - conda update --yes conda
 
 install:
-    - conda create --yes -n test python=$PYTHON_VERSION
+    - conda create -q --yes -n test python=$PYTHON_VERSION
     - source activate test
     - if [ $TRAVIS_OS_NAME == "linux" ]; then conda install -y gcc_linux-64; fi
-    - conda install --yes numpy=$NUMPY_VERSION nose cython mpi4py
+    # use bccp for a working mpi4py for now;
+    # see https://github.com/ContinuumIO/anaconda-issues/issues/10903
+    - conda install -q -c bccp --yes numpy=$NUMPY_VERSION nose cython mpi4py
     - python setup.py install
 
 script:
