@@ -6,12 +6,17 @@ os:
 
 env:
     global:
+       - OMPI_MCA_rmaps_base_no_oversubscribe=0
+       - OMPI_MCA_rmaps_base_oversubscribe=1
+       - OMPI_MCA_mpi_yield_when_idle=1
+       - OMPI_MCA_mpi_show_mca_params=1
    # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
    #   via the "travis encrypt" command using the project repo's public key
        - secure: "Qw4OhHWDjXP/dTw91vSkt49J9uOurG4KKyWeAFqSqy6qd9xXY1fK7YoMxOMoe4ADmm9CdpyPM6ISRBH9u7uqn7O/WWtOtDLZq3dibuOLYHNCcHgN5kTOS8aIRY+e8jwEd42Ju2ETx2BvSTvgyop7vYiKlazLuKpVX7SQaFe/iKY0twLeHLJlIgilf83kCs0OaKEZbagYfuJcJHm4ouS/RCvL6biGinYoGafJ632c3vDudDNfOtntLDFamg3MuiZo2XX0BhLJn0fTYXcnW94kAhgB1poKsyqkc3LUrpFt1Tk42POK1pD60/F1XcgaCu8MDYlPJ7K8fxuZ54Uaun7rcv/ymNGyXw+s7lZhaHQ/GqK/oekmZj3q4gJPCMkpib6DL3Qn0iUIIhmHnhha4YYk2MsKRRkF6XcuxXXIJFK4wij/FKGhpWUfmAl8M8ljqj8/Qpdi4QbDltGNbjb0DSYdrENGAo2QhaggddW4pmclvt6eBU8y3OGVhwdMwJuOKTpCg01nmPpfYdLZyJcuRJVe2gTQFbB5wrWR0I4mQmewCKHPsfkQRQOTiydbNqm7H8dGTUczvrRwpemmy5bgg5a8ONJ6a7aGcAH3JLhr9/l4K8fKMz11jKLPebMG5/gdWm6mBpHl3m5BLIBNFegxlleh45JVBdfeMy5TjCikwObDuIo="
     matrix:
-        - NUMPY_VERSION=1.12 PYTHON_VERSION=2.7
-        - NUMPY_VERSION=1.12 PYTHON_VERSION=3.6
+        - NUMPY_VERSION=1.16 PYTHON_VERSION=2.7
+        - NUMPY_VERSION=1.16 PYTHON_VERSION=3.6
+        - NUMPY_VERSION=1.16 PYTHON_VERSION=3.7
 
 
 before_install:
@@ -23,10 +28,12 @@ before_install:
     - conda update --yes conda
 
 install:
-    - conda create --yes -n test python=$PYTHON_VERSION
+    - conda create -q --yes -n test python=$PYTHON_VERSION
     - source activate test
     - if [ $TRAVIS_OS_NAME == "linux" ]; then conda install -y gcc_linux-64; fi
-    - conda install --yes numpy=$NUMPY_VERSION nose cython mpi4py
+    # use bccp for a working mpi4py for now;
+    # see https://github.com/ContinuumIO/anaconda-issues/issues/10903
+    - conda install -q -c bccp --yes numpy=$NUMPY_VERSION nose cython mpi4py
     - python setup.py install
 
 script:
