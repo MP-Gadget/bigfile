@@ -28,7 +28,7 @@ before_install:
     - conda update --yes conda
 
 install:
-    - conda create -q --yes -n test python=$PYTHON_VERSION
+    - conda create -q --yes -n test python=$PYTHON_VERSION cmake
     - source activate test
     - if [ $TRAVIS_OS_NAME == "linux" ]; then conda install -y gcc_linux-64; fi
     # use bccp for a working mpi4py for now;
