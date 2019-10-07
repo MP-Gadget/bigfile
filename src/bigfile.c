@@ -1872,6 +1872,7 @@ _big_block_pack(BigBlock * block, size_t * bytes)
         memcpy(ptr, block->fchecksum, (Nfile + 1) * sizeof(block->fchecksum[0]));
     ptr += (Nfile + 1) * sizeof(block->fchecksum[0]);
     memcpy(ptr, attrset, attrsize);
+    free(attrset);
     ptr += attrsize;
 
     return buf;
