@@ -336,8 +336,9 @@ big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm)
 
     MPI_Bcast(buf, bytes, MPI_BYTE, root, comm);
 
-    _big_block_unpack(bb, buf);
-
+    if(rank != root) {
+        _big_block_unpack(bb, buf);
+    }
     free(buf);
     return 0;
 }
