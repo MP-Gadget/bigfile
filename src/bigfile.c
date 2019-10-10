@@ -1735,7 +1735,10 @@ attrset_set_attr(BigAttrSet * attrset, const char * attrname, const void * data,
       "Attribute name cannot contain blanks (space, tab or newline)"
     );
 
-    attrset_remove_attr(attrset, attrname);
+    /* Remove it if it exists*/
+    attr = attrset_lookup_attr(attrset, attrname);
+    if(attr)
+        attrset_remove_attr(attrset, attrname);
     /* add ensures the dtype has been normalized! */
     RAISEIF(0 != attrset_add_attr(attrset, attrname, dtype, nmemb),
             ex_add,
@@ -1869,6 +1872,7 @@ _big_block_pack(BigBlock * block, size_t * bytes)
         memcpy(ptr, block->fchecksum, (Nfile + 1) * sizeof(block->fchecksum[0]));
     ptr += (Nfile + 1) * sizeof(block->fchecksum[0]);
     memcpy(ptr, attrset, attrsize);
+    free(attrset);
     ptr += attrsize;
 
     return buf;
