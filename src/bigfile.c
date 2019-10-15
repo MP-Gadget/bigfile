@@ -187,7 +187,6 @@ __raise__(const char * msg, const char * file, const int line, ...)
 int
 big_file_open(BigFile * bf, const char * basename)
 {
-    memset(bf, 0, sizeof(bf[0]));
     struct stat st;
     RAISEIF(0 != stat(basename, &st),
             ex_stat,
@@ -200,7 +199,6 @@ ex_stat:
 }
 
 int big_file_create(BigFile * bf, const char * basename) {
-    memset(bf, 0, sizeof(bf[0]));
     bf->basename = _strdup(basename);
     RAISEIF(0 != _big_file_mksubdir_r(NULL, basename),
         ex_subdir,
@@ -406,7 +404,8 @@ ex_open:
     } else {
         /* The meta block of a big file, has on extra files. */
         bb->Nfile = 0;
-        strcpy(bb->dtype, "####");
+        strncpy(bb->dtype, "####", 5);
+        bb->dtype[4] = '\0';
         return 0;
     }
 
@@ -1005,12 +1004,13 @@ _dtype_normalize(char * dst, const char * src)
         case '>':
         case '|':
         case '=':
-            strcpy(dst, src);
+            strncpy(dst, src, 8);
         break;
         default:
             dst[0] = '=';
-            strcpy(dst + 1, src);
+            strncpy(dst + 1, src, 7);
     }
+    dst[7]='\0';
     if(dst[0] == '=') {
         dst[0] = MACHINE_ENDIANNESS;
     }
@@ -1072,8 +1072,6 @@ big_file_dtype_kind(const char * dtype)
 int
 big_array_init(BigArray * array, void * buf, const char * dtype, int ndim, const size_t dims[], const ptrdiff_t strides[])
 {
-
-    memset(array, 0, sizeof(array[0]));
 
     _dtype_normalize(array->dtype, dtype);
     array->data = buf;
@@ -1678,7 +1676,8 @@ attrset_add_attr(BigAttrSet * attrset, const char * attrname, const char * dtype
     _dtype_normalize(n->dtype, dtype);
 
     n->name = free;
-    strcpy(free, attrname);
+    strncpy(free, attrname, size);
+    free[size-1] = '\0';
     free += strlen(attrname) + 1;
     n->data = free;
 
