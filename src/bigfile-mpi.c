@@ -278,20 +278,19 @@ big_file_mpi_broadcast_anyerror(int rt, MPI_Comm comm)
 {
     int rank;
     MPI_Comm_rank(comm, &rank);
+    int root, loc = 0;
+    /* Add 1 so we do not swallow errors on rank 0*/
+    if(rt != 0)
+        loc = rank+1;
 
-    struct {
-        int value;
-        int loc;
-    } ii = {rt != 0, rank};
+    MPI_Allreduce(&loc, &root, 1, MPI_INT, MPI_MAX, comm);
 
-    MPI_Allreduce(MPI_IN_PLACE, &ii, 1, MPI_2INT, MPI_MAXLOC, comm);
-
-    if (ii.value == 0) {
+    if (root == 0) {
         /* no errors */
         return 0;
     }
-    int root = ii.loc;
 
+    root -= 1;
     char * error = big_file_get_error_message();
 
     int errorlen;
@@ -352,7 +351,7 @@ _assign_colors(size_t glocalsize, size_t * sizes, int * ncolor, MPI_Comm comm)
     MPI_Comm_size(comm, &NTask);
 
     int i;
-    int mycolor;
+    int mycolor = -1;
     size_t current_size = 0;
     int current_color = 0;
     int lastcolor = 0;
