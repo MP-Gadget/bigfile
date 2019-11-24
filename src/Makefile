@@ -18,14 +18,16 @@ install: libbigfile.a libbigfile-mpi.a
 
 bigfile.o: bigfile.c bigfile.h bigfile-internal.h
 	$(MPICC) $(CFLAGS) $(PIC) -o $@ -c bigfile.c
-bigfile-mpi.o: bigfile-mpi.c bigfile-mpi.h bigfile-internal.h
+bigfile-mpi.o: bigfile-mpi.c bigfile-mpi.h bigfile-internal.h mp-mpiu.h
 	$(MPICC) $(CFLAGS) $(PIC) -o $@ -c bigfile-mpi.c
+mp-mpiu.o: mp-mpiu.c mp-mpiu.h
+	$(MPICC) $(CFLAGS) $(PIC) -o $@ -c mp-mpiu.c
 
 libbigfile.a: bigfile.o
-	ar r $@ bigfile.o
+	ar r $@ $^
 	ranlib $@
-libbigfile-mpi.a: bigfile-mpi.o
-	ar r $@ bigfile-mpi.o
+libbigfile-mpi.a: bigfile-mpi.o mp-mpiu.o
+	ar r $@ $^
 	ranlib $@
 clean:
 	rm -f *.a *.o
