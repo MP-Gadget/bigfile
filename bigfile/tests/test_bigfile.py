@@ -19,11 +19,12 @@ dtypes = [
     'u8', 
     'f4', 
     'f8', 
-    ('f4', 1),
-    ('f4', 2), 
+#    ('f4', (1,)),  # This case is not well defined. Bigfile will treat it as 'f4', thus automated tests will not work.
+    ('f4', 1),  # This case will start to fail when numpy starts to ('f4', 1) as ('f4').
+    ('f4', (2,)), 
     ('complex64'), 
     ('complex128'), 
-    ('complex128', 2), 
+    ('complex128', (2, )), 
 ]
 
 from runtests.mpi import MPITest

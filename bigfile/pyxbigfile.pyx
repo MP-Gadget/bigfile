@@ -267,7 +267,12 @@ cdef class ColumnLowLevelAPI:
 
     property dtype:
         def __get__(self):
-            return numpy.dtype((self.bb.dtype, self.bb.nmemb))
+            # numpy no longer treats dtype = (x, 1) as dtype = x.
+            # but bigfile relies on this.
+            if self.bb.nmemb != 1:
+                return numpy.dtype((self.bb.dtype, (self.bb.nmemb, )))
+            else:
+                return numpy.dtype(self.bb.dtype)
     property attrs:
         def __get__(self):
             return AttrSet(self)
