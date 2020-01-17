@@ -193,7 +193,7 @@ Examples
 
     print (f.blocks)
     # Position and Velocity of GAS particles
-    data = bigfile.DataSet(f["0/"], ['Position', 'Velocity'])
+    data = bigfile.Dataset(f["0/"], ['Position', 'Velocity'])
     
     print (data.size)
     print (data.dtype)
