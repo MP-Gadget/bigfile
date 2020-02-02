@@ -100,6 +100,37 @@ big_record_view_field(const BigRecordType * rtype,
 }
 
 int
+big_file_grow_records(BigFile * bf,
+    const BigRecordType * rtype,
+    int Nfile_grow,
+    const size_t fsize_grow[])
+{
+    int i;
+    for(i = 0; i < rtype->nfield; i ++) {
+        BigBlock block[1];
+        RAISEIF(0 != big_file_open_block(bf, block, rtype->fields[i].name),
+            ex_open,
+            NULL);
+        RAISEIF(0 != big_block_grow(block, Nfile_grow, fsize_grow),
+            ex_grow,
+            NULL);
+        RAISEIF(0 != big_block_close(block),
+            ex_close,
+            NULL);
+        continue;
+        ex_grow:
+            RAISEIF(0 != big_block_close(block),
+            ex_close,
+            NULL);
+            return -1;
+        ex_open:
+        ex_close:
+            return -1;
+    }
+    return 0;
+}
+
+int
 big_file_write_records(BigFile * bf,
     const BigRecordType * rtype,
     ptrdiff_t offset,
