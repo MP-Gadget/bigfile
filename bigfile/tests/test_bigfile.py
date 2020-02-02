@@ -121,7 +121,7 @@ def test_create_odd(comm):
     shutil.rmtree(fname)
 
 @MPITest([1])
-def test_grow(comm):
+def test_append(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
 
@@ -134,10 +134,9 @@ def test_grow(comm):
     with x.create(name, Nfile=3, dtype=d, size=100) as b:
         b.write(0, data)
 
-        b.grow(size=100, Nfile=2)
+        b.append(data, Nfile=2)
         with x.open(name) as bb:
             assert bb.size == 200
-        b.write(100, data)
         assert b.size == 200
 
     with x.open(name) as b:
@@ -248,6 +247,10 @@ def test_dataset(comm):
     bd[10:20] = data1
     assert_array_equal(bd[:10], data2)
     assert_array_equal(bd[10:20], data1)
+
+    bd.append(data1)
+    assert bd.size == 128 + 10
+    assert_array_equal(bd[-10:], data1)
 
     shutil.rmtree(fname)
 
