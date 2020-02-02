@@ -7,5 +7,6 @@ build/
 __pycache__/
 .cache/
 dist/
+test/
 bigfile/*.c
-bigfile.egginfo/
+bigfile.egg-info/
