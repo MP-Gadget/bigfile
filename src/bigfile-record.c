@@ -13,7 +13,7 @@ big_record_type_clear(BigRecordType * rtype)
 {
     int i;
     int offset = 0;
-    for(i = 0; rtype->nfield; i ++) {
+    for(i = 0; i < rtype->nfield; i ++) {
         free(rtype->fields[i].name);
     }
     free(rtype->fields);
@@ -56,7 +56,7 @@ big_record_type_complete(BigRecordType * rtype)
         }
         rtype->fields[i].offset = offset;
         rtype->fields[i].elsize = big_file_dtype_itemsize(rtype->fields[i].dtype);
-        offset += rtype->fields[i].elsize;
+        offset += rtype->fields[i].elsize * rtype->fields[i].nmemb;
     }
     rtype->nfield = i;
     rtype->itemsize = offset;
@@ -69,7 +69,8 @@ big_record_set(const BigRecordType * rtype,
     const void * data)
 {
     char * p = buf;
-    memcpy(&p[rtype->fields[i].offset], data, rtype->fields[i].elsize);
+    memcpy(&p[rtype->fields[i].offset], data,
+           rtype->fields[i].elsize * rtype->fields[i].nmemb);
 }
 
 void
@@ -78,7 +79,8 @@ big_record_get(const BigRecordType * rtype,
     int i,
     void * data) {
     const char * p = buf;
-    memcpy(data, &p[rtype->fields[i].offset], rtype->fields[i].elsize);
+    memcpy(data, &p[rtype->fields[i].offset],
+           rtype->fields[i].elsize * rtype->fields[i].nmemb);
 }
 
 int
@@ -126,6 +128,7 @@ big_file_write_records(BigFile * bf,
         RAISEIF(0 != big_block_close(block),
             ex_close,
             NULL);
+        continue;
         ex_write:
         ex_seek:
             RAISEIF(0 != big_block_close(block),
@@ -164,12 +167,13 @@ big_file_read_records(BigFile * bf,
             ex_seek,
             NULL);
         RAISEIF(0 != big_block_read(block, &ptr, array),
-            ex_write,
+            ex_read,
             NULL);
         RAISEIF(0 != big_block_close(block),
             ex_close,
             NULL);
-        ex_write:
+        continue;
+        ex_read:
         ex_seek:
             RAISEIF(0 != big_block_close(block),
             ex_close,
