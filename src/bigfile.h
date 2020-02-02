@@ -300,6 +300,12 @@ big_file_write_records(BigFile * bf,
     const void * buf);
 
 int
+big_file_grow_records(BigFile * bf,
+    const BigRecordType * rtype,
+    int Nfile_grow,
+    const size_t fsize_grow[]);
+
+int
 big_file_read_records(BigFile * bf,
     const BigRecordType * rtype,
     ptrdiff_t offset,
