@@ -100,6 +100,8 @@ cdef extern from "bigfile.h":
         ptrdiff_t offset, size_t size, void * buf) nogil
     int big_file_read_records(CBigFile * bf, CBigRecordType * rtype,
         ptrdiff_t offset, size_t size, void * buf) nogil
+    int big_file_grow_records(CBigFile * bf, CBigRecordType * rtype,
+        size_t Nfile, size_t * size_per_file) nogil
 
 cdef extern from "bigfile-internal.h":
     pass
@@ -357,42 +359,6 @@ cdef class ColumnLowLevelAPI:
             raise Error()
         self._deallocated = False
 
-    def grow(self, numpy.intp_t size, numpy.intp_t Nfile=1):
-        """
-            Increase the size of the column by size. size here
-            is the number of rows in the column, not the number of
-            scalar items.
-
-            Note: this will flush the column to disk to ensure
-            future opens of the column sees the grown size.
-
-            All other opened refereneces to the column are no longer
-            correct after this operation; they will not see the
-            new size.
-
-        """
-
-        cdef numpy.ndarray fsize
-
-        if Nfile < 0:
-            raise ValueError("Cannot create negative number of files.")
-        if Nfile == 0 and size != 0:
-            raise ValueError("Cannot create zero files for non-zero number of items.")
-
-        fsize = numpy.empty(dtype='intp', shape=Nfile)
-        fsize[:] = (numpy.arange(Nfile) + 1) * size // Nfile \
-                 - (numpy.arange(Nfile)) * size // Nfile
-
-        with nogil:
-            rt = big_block_grow(&self.bb, Nfile, <size_t*>fsize.data)
-        if rt != 0:
-            raise Error()
-
-        # other opened columns are now stale.
-        # flush to ensure bf['block'] gets the grown file.
-        self.flush()
-
-
     def create(self, FileLowLevelAPI f, blockname, dtype=None, size=None, numpy.intp_t Nfile=1):
 
         # need to hold the reference
@@ -457,6 +423,45 @@ cdef class ColumnLowLevelAPI:
             rt = big_block_write(&self.bb, &ptr, &array)
         if rt != 0:
             raise Error()
+
+    def append(self, numpy.ndarray buf, numpy.intp_t Nfile=1):
+        """ Append new data at the end of the column.
+
+            Note: this will flush the column to disk to ensure
+            future opens of the column sees the grown size.
+
+            All other opened refereneces to the column are no longer
+            correct after this operation; they will not see the
+            new size.
+
+            This function is not concurrency friendly.
+        """
+
+        cdef numpy.ndarray fsize
+        cdef numpy.intp_t size = len(buf)
+
+        if Nfile < 0:
+            raise ValueError("Cannot create negative number of files.")
+        if Nfile == 0 and size != 0:
+            raise ValueError("Cannot create zero files for non-zero number of items.")
+
+        fsize = numpy.empty(dtype='intp', shape=Nfile)
+        fsize[:] = (numpy.arange(Nfile) + 1) * size // Nfile \
+                 - (numpy.arange(Nfile)) * size // Nfile
+
+        # tail is the old end
+        tail = self.bb.size
+
+        with nogil:
+            rt = big_block_grow(&self.bb, Nfile, <size_t*>fsize.data)
+        if rt != 0:
+            raise Error()
+
+        # other opened columns are now stale.
+        # flush to ensure bf['block'] gets the grown file.
+        self.flush()
+
+        return self.write(tail, buf)
 
     def read(self, numpy.intp_t start, numpy.intp_t length, out=None):
         """ read from offset `start' a chunk of data of length `length', 
@@ -629,21 +634,48 @@ cdef class Dataset:
                 shape)
             )
         self.dtype = numpy.dtype(dtype, align=False)
-        for i in range(self.rtype.nfield):
-            print(self.rtype.fields[i].name, self.rtype.fields[i].offset)
-            print(self.dtype.fields[self.rtype.fields[i].name.decode()])
-        assert self.dtype.itemsize == self.rtype.itemsize, "%d, %d" % (self.dtype.itemsize, self.rtype.itemsize)
+        assert self.dtype.itemsize == self.rtype.itemsize
 
     def read(self, numpy.intp_t start, numpy.intp_t length, numpy.ndarray out=None):
         if out is None:
             out = numpy.empty(length, self.dtype)
-        big_file_read_records(&self.file.bf, &self.rtype, start, length, out.data)
+        with nogil:
+            rt = big_file_read_records(&self.file.bf, &self.rtype, start, length, out.data)
+        if rt != 0:
+            raise Error()
         return out
 
-    def write(self, numpy.intp_t start, numpy.ndarray out):
-        assert out.dtype == self.dtype
-        assert out.ndim == 1
-        big_file_write_records(&self.file.bf, &self.rtype, start, len(out), out.data)
+    def append(self, numpy.ndarray buf, numpy.intp_t Nfile=1):
+        cdef numpy.ndarray fsize
+        cdef numpy.intp_t size = len(buf)
+
+        if Nfile < 0:
+            raise ValueError("Cannot create negative number of files.")
+        if Nfile == 0 and size != 0:
+            raise ValueError("Cannot create zero files for non-zero number of items.")
+
+        fsize = numpy.empty(dtype='intp', shape=Nfile)
+        fsize[:] = (numpy.arange(Nfile) + 1) * size // Nfile \
+                 - (numpy.arange(Nfile)) * size // Nfile
+
+        # tail is the old end
+        tail = self.size
+
+        with nogil:
+            rt = big_file_grow_records(&self.file.bf, &self.rtype, Nfile, <size_t*>fsize.data)
+        if rt != 0:
+            raise Error()
+
+        self.write(tail, buf)
+        self.size = tail + len(buf)
+
+    def write(self, numpy.intp_t start, numpy.ndarray buf):
+        assert buf.dtype == self.dtype
+        assert buf.ndim == 1
+        with nogil:
+            rt = big_file_write_records(&self.file.bf, &self.rtype, start, buf.shape[0], buf.data)
+        if rt != 0:
+            raise Error()
 
     def __dealloc__(self):
         big_record_type_clear(&self.rtype)
