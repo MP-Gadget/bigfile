@@ -238,9 +238,74 @@ int big_file_dtype_parse(const char * buffer, const char * dtype, void * data, c
  * You can use strides[1] = sizeof(double), strides[0] = sizeof(struct P).
  * Then set buf to &P[0].pos[0] to dump position or &P[0].vel[0] to dump velocity.
  */
-int big_array_init(BigArray * array, void * buf, const char * dtype, int ndim, const size_t dims[], const ptrdiff_t strides[]);
+
+/* FIXME(rainwoodman): decouple buf from BigArray -- make BigArray a descriptor. */
+int big_array_init(BigArray * array,
+    void * buf,
+    const char * dtype,
+    int ndim,
+    const size_t dims[],
+    const ptrdiff_t strides[]);
+
 int big_array_iter_init(BigArrayIter * iter, BigArray * array);
 void big_array_iter_advance(BigArrayIter * iter);
+
+/**
+ * Record is a composite of fields. Currently each field must be a scalar dtype.
+ *
+ * Use the clear/complete session to build a record type.
+ * */
+typedef struct BigRecordField {
+    char * name;
+    char dtype[8];
+    int nmemb;
+    int offset;
+    int elsize;
+} BigRecordField;
+
+typedef struct BigRecordType {
+    BigRecordField * fields;
+    size_t nfield;
+    size_t itemsize;
+} BigRecordType;
+
+void big_record_type_clear(BigRecordType * rtype);
+void big_record_type_set(BigRecordType * rtype,
+    int i,
+    const char * name,
+    const char * dtype,
+    int nmemb);
+void big_record_type_complete(BigRecordType * rtype);
+
+/*
+ * Get the value of i from a RecordType buffer to data.
+ * */
+void big_record_set(const BigRecordType * rtype, void * buf, int i, const void * data);
+void big_record_get(const BigRecordType * rtype, const void * buf, int i, void * data);
+
+/* View a field in a BigRecordType buffer as a BigArray. */
+int
+big_record_view_field(const BigRecordType * rtype,
+    int i,
+    BigArray * array,
+    size_t size,
+    void * buf
+);
+
+int
+big_file_write_records(BigFile * bf,
+    const BigRecordType * rtype,
+    ptrdiff_t offset,
+    size_t size,
+    const void * buf);
+
+int
+big_file_read_records(BigFile * bf,
+    const BigRecordType * rtype,
+    ptrdiff_t offset,
+    size_t size,
+    void * buf);
+
 #ifdef __cplusplus
 }
 #endif

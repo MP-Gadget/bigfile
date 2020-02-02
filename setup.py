@@ -8,6 +8,7 @@ extensions = [
             sources = [
                 "bigfile/pyxbigfile.pyx",
                 "src/bigfile.c",
+                "src/bigfile-record.c",
             ],
             depends = [
                 "src/bigfile.h",
