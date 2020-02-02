@@ -49,6 +49,9 @@ cdef extern from "bigfile.h":
     struct CBigAttrSet "BigAttrSet":
         pass
 
+    struct CBigRecordType "BigRecordType":
+        pass
+
     char * big_file_get_error_message() nogil
     void big_file_set_buffer_size(size_t bytes) nogil
     int big_block_grow(CBigBlock * bb, int Nfilegrow, size_t fsize[]) nogil
@@ -76,6 +79,18 @@ cdef extern from "bigfile.h":
     int big_file_list(CBigFile * bf, char *** list, int * N) nogil
     int big_file_create(CBigFile * bf, char * basename) nogil
     int big_file_close(CBigFile * bf) nogil
+
+    void big_record_type_clear(CBigRecordType * rtype) nogil
+    void big_record_type_set(CBigRecordType * rtype, int i, char * name, char * dtype, int nmemb) nogil
+    void big_record_type_complete(CBigRecordType * rtype) nogil
+    void big_record_set(CBigRecordType * rtype, void * buf, int ifield, void * data) nogil
+    void big_record_get(CBigRecordType * rtype, void * buf, int ifield, void * data) nogil
+    int big_record_view_field(CBigRecordType * rtype, int ifield,
+        CBigArray * array, size_t size, void * buf) nogil
+    int big_file_write_records(CBigFile * bf, CBigRecordType * rtype,
+        ptrdiff_t offset, size_t size, void * buf) nogil
+    int big_file_read_records(CBigFile * bf, CBigRecordType * rtype,
+        ptrdiff_t offset, size_t size, void * buf) nogil
 
 cdef extern from "bigfile-internal.h":
     pass
@@ -556,3 +571,22 @@ cdef class ColumnLowLevelAPI:
 
         return "<CBigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
                 self.dtype, self.size)
+
+cdef class DataSet:
+    cdef CBigRecordType rtype
+
+    def __init__(self, file, column_names):
+        self.file = file
+        self.column_names = column_names
+        big_record_type_clear(&self.rtype)
+        fields = []
+        for i, name in enumerate(column_names):
+            big_record_type_clear(&self.rtype)
+            column = file.open(name)
+            big_record_type_set(&self.rtype, i,
+                name, column.dtype.str.encode(),
+                column.dtype.shape[0])
+        big_record_type_complete(&self.rtype)
+
+    def __dealloc__(self):
+        big_record_type_clear(&self.rtype)
