@@ -24,9 +24,6 @@
 #define FILEID_ATTR_V2 -3
 #define FILEID_HEADER -1
 
-#define RAISE(ex, errormsg, ...) { __raise__(errormsg, __FILE__, __LINE__, ##__VA_ARGS__); goto ex; } 
-#define RAISEIF(condition, ex, errormsg, ...) { if(condition) RAISE(ex, errormsg, ##__VA_ARGS__); }
-
 #if __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_ATOMICS__)
     #include <stdatomic.h>
 static char * volatile _Atomic ERRORSTR = NULL;
@@ -155,8 +152,8 @@ _big_file_path_is_block(const char * basename)
 }
 
 
-static void 
-__raise__(const char * msg, const char * file, const int line, ...)
+void
+_big_file_raise(const char * msg, const char * file, const int line, ...)
 {
     char * mymsg;
     if(!msg) {

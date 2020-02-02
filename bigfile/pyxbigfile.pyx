@@ -15,8 +15,7 @@ except NameError:
     def isstr(s):
         return isinstance(s, str)
 
-
-cdef extern from "bigfile.c":
+cdef extern from "bigfile.h":
     struct CBigFile "BigFile":
         char * basename
 
@@ -77,6 +76,10 @@ cdef extern from "bigfile.c":
     int big_file_list(CBigFile * bf, char *** list, int * N) nogil
     int big_file_create(CBigFile * bf, char * basename) nogil
     int big_file_close(CBigFile * bf) nogil
+
+cdef extern from "bigfile-internal.h":
+    pass
+
 
 def set_buffer_size(bytes):
     big_file_set_buffer_size(bytes)

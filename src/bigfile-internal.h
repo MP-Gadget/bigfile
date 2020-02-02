@@ -38,3 +38,10 @@ _strdup(const char * s)
     r[l] = '\0';
     return r;
 }
+
+void
+_big_file_raise(const char * msg, const char * file, const int line, ...);
+
+#define RAISE(ex, errormsg, ...) { _big_file_raise(errormsg, __FILE__, __LINE__, ##__VA_ARGS__); goto ex; }
+#define RAISEIF(condition, ex, errormsg, ...) { if(condition) RAISE(ex, errormsg, ##__VA_ARGS__); }
+
