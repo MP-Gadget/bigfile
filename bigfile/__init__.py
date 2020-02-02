@@ -7,6 +7,7 @@ from .pyxbigfile import set_buffer_size
 
 import os
 import numpy
+from functools import wraps
 
 try:
     basestring  # attempt to evaluate basestring
@@ -21,6 +22,34 @@ def isstrlist(s):
         return False
     return all([ isstr(ss) for ss in s])
 
+def _enhance_slicefunc(getitem, returns_none):
+    @wraps(getitem)
+    def enhanced(self, index, *args):
+        if isinstance(index, slice):
+            return getitem(self, index, *args)
+        elif index is Ellipsis:
+            return getitem(self, slice(None, None, None), *args)
+        elif numpy.isscalar(index):
+            index = slice(index, index + 1)
+            if returns_none:
+               return getitem(self, index, *args)
+            else:
+               return getitem(self, index, *args)[0]
+        else:
+            raise TypeError("Expecting a slice or a scalar, got a `%s`" %
+                    str(type(sl)))
+    return enhanced
+
+def _enhance_getslice(getitem):
+    """
+    This decorator adds Ellipsis and scalar support to a slice only
+    getitem function.
+    """
+    return _enhance_slicefunc(getitem, returns_none=False)
+
+def _enhance_setslice(getitem):
+    return _enhance_slicefunc(getitem, returns_none=True)
+
 class Column(ColumnLowLevelAPI):
 
 #    def __init__(self):
@@ -31,6 +60,31 @@ class Column(ColumnLowLevelAPI):
 
     def close(self):
         self._close()
+
+    @_enhance_getslice
+    def __getitem__(self, sl):
+        """ returns a copy of data, sl can be a slice or a scalar
+        """
+        if isinstance(sl, slice):
+            start, end, stop = sl.indices(self.size)
+            if stop != 1:
+                raise ValueError('must request a contiguous chunk')
+            return self.read(start, end-start)
+        else:
+            raise TypeError('Expecting a slice, got a `%s`' % str(type(sl)))
+
+    @_enhance_setslice
+    def __setitem__(self, sl, value):
+        """ write to a column sl can be a slice or a scalar
+        """
+        if isinstance(sl, slice):
+            start, end, stop = sl.indices(self.size)
+            if stop != 1:
+                raise ValueError('must request a contiguous chunk')
+            self.write(start, value)
+        else:
+            raise TypeError('Expecting a slice, got a `%s`' % str(type(sl)))
+
 
 class FileBase(FileLowLevelAPI):
     def __init__(self, filename, create=False):
@@ -151,6 +205,10 @@ class ColumnMPI(Column):
             super(ColumnMPI, self).close()
         return self.open(f, blockname)
 
+    @_enhance_getslice
+    def __getitem__(self, index):
+        return Column.__getitem__(self, index)
+
     def open(self, f, blockname):
         if not check_unique(blockname, self.comm):
             raise BigFileError("blockname is inconsistent between ranks")
@@ -262,7 +320,7 @@ class FileMPI(FileBase):
 
 class Dataset:
     """ Accessing read-only subset of blocks from a bigfile.
-    
+
         Parameters
         ----------
         file : File
@@ -296,11 +354,23 @@ class Dataset:
         self.ndim = 1
         self.shape = (size, )
 
+    @_enhance_getslice
+    def _getslice(self, sl):
+        if not isinstance(sl, slice):
+            raise TypeError('Expecting a slice or a scalar, got a `%s`' %
+                    str(type(sl)))
+        start, end, stop = sl.indices(self.size)
+        assert stop == 1
+        result = numpy.empty(end - start, dtype=self.dtype)
+        for block in self.blocknames:
+            result[block][:] = self.blocks[block][sl]
+        return result
+
     def __getitem__(self, sl):
         if isinstance(sl, tuple):
             if len(sl) == 2:
                 if isstr(sl[1]) or isstrlist(sl[1]):
-                    # sl[0] shall be column name
+                    # swap, sl[0] shall be column name
                     sl = (sl[1], sl[0])
                 col, sl = sl
                 return self[col][sl]
@@ -308,26 +378,13 @@ class Dataset:
                 # Python 3? (a,) is sent in.
                 return self[sl[0]]
 
-        if isinstance(sl, slice):
-            start, end, stop = sl.indices(self.size)
-            assert stop == 1
-            result = numpy.empty(end - start, dtype=self.dtype)
-            for block in self.blocknames:
-                result[block][:] = self.blocks[block][sl]
-            return result
-        elif sl is Ellipsis:
-            return self[:]
-        elif isstr(sl):
+        if isstr(sl):
             return self.blocks[sl]
         elif isstrlist(sl):
             assert all([(col in self.blocks) for col in sl])
             return type(self)(self.file, sl)
-        elif numpy.isscalar(sl):
-            sl = slice(sl, sl + 1)
-            return self[sl][0]
         else:
-            raise TypeError('Expecting a slice or a scalar, got a `%s`' %
-                    str(type(sl)))
+            return self._getslice(sl)
 
 def check_unique(variable, comm):
     s = set(comm.allgather(variable))

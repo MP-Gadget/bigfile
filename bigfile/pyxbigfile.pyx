@@ -431,40 +431,6 @@ cdef class ColumnLowLevelAPI:
         if rt != 0:
             raise Error()
 
-    def __getitem__(self, sl):
-        """ returns a copy of data, sl can be a slice or a scalar
-        """
-        if isinstance(sl, slice):
-            start, end, stop = sl.indices(self.size)
-            if stop != 1:
-                raise ValueError('must request a contiguous chunk')
-            return self.read(start, end-start)
-        elif sl is Ellipsis:
-            return self[:]
-        elif numpy.isscalar(sl):
-            sl = slice(sl, sl + 1)
-            return self[sl][0]
-        else:
-            raise TypeError('Expecting a slice or a scalar, got a `%s`' %
-                    str(type(sl)))
-
-    def __setitem__(self, sl, value):
-        """ write to a column sl can be a slice or a scalar
-        """
-        if isinstance(sl, slice):
-            start, end, stop = sl.indices(self.size)
-            if stop != 1:
-                raise ValueError('must request a contiguous chunk')
-            self.write(start, value)
-        elif sl is Ellipsis:
-            self.write(0, value)
-        elif numpy.isscalar(sl):
-            sl = slice(sl, sl + 1)
-            self[sl] = value
-        else:
-            raise TypeError('Expecting a slice or a scalar, got a `%s`' %
-                    str(type(sl)))
-
     def read(self, numpy.intp_t start, numpy.intp_t length, out=None):
         """ read from offset `start' a chunk of data of length `length', 
             into array `out'.
