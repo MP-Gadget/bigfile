@@ -1,3 +1,9 @@
 *.o
 *.a
 *.swp
+bigfile/*.c
+build/
+bigfile.egginfo/
+__pycache__
+*.pyc
+*.so
