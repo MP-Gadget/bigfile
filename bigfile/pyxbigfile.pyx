@@ -49,8 +49,17 @@ cdef extern from "bigfile.h":
     struct CBigAttrSet "BigAttrSet":
         pass
 
+    struct CBigRecordField "BigRecordField":
+        char * name
+        char * dtype
+        int nmemb
+        int elsize
+        int offset
+
     struct CBigRecordType "BigRecordType":
-        pass
+        CBigRecordField * fields
+        int nfield
+        int itemsize
 
     char * big_file_get_error_message() nogil
     void big_file_set_buffer_size(size_t bytes) nogil
@@ -572,21 +581,69 @@ cdef class ColumnLowLevelAPI:
         return "<CBigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
                 self.dtype, self.size)
 
-cdef class DataSet:
+cdef class Dataset:
     cdef CBigRecordType rtype
+    cdef readonly FileLowLevelAPI file
+    cdef readonly size_t size
+    cdef readonly tuple shape
+    cdef readonly numpy.dtype dtype
 
     def __init__(self, file, column_names):
+        cdef ColumnLowLevelAPI column
         self.file = file
         self.column_names = column_names
+        self.rtype.nfield = 0
         big_record_type_clear(&self.rtype)
         fields = []
+
+        size = None
         for i, name in enumerate(column_names):
-            big_record_type_clear(&self.rtype)
             column = file.open(name)
+            if size is None:
+                size = column.size
+            elif column.size != size:
+                raise Error("Dataset length is inconsistent on %s" % name)
+
             big_record_type_set(&self.rtype, i,
-                name, column.dtype.str.encode(),
-                column.dtype.shape[0])
+                name.encode(),
+                column.bb.dtype,
+                column.bb.nmemb,
+            )
         big_record_type_complete(&self.rtype)
+
+        self.size = size
+        self.ndim = 1
+        self.shape = (size, )
+
+        dtype = []
+        # No need to use offset, because numpy is also
+        # compactly packed
+        for i in range(self.rtype.nfield):
+            if self.rtype.fields[i].nmemb == 1:
+                shape = 1
+            else:
+                shape = (self.rtype.fields[i].nmemb, )
+            dtype.append((
+                self.rtype.fields[i].name.decode(),
+                self.rtype.fields[i].dtype,
+                shape)
+            )
+        self.dtype = numpy.dtype(dtype, align=False)
+        for i in range(self.rtype.nfield):
+            print(self.rtype.fields[i].name, self.rtype.fields[i].offset)
+            print(self.dtype.fields[self.rtype.fields[i].name.decode()])
+        assert self.dtype.itemsize == self.rtype.itemsize, "%d, %d" % (self.dtype.itemsize, self.rtype.itemsize)
+
+    def read(self, numpy.intp_t start, numpy.intp_t length, numpy.ndarray out=None):
+        if out is None:
+            out = numpy.empty(length, self.dtype)
+        big_file_read_records(&self.file.bf, &self.rtype, start, length, out.data)
+        return out
+
+    def write(self, numpy.intp_t start, numpy.ndarray out):
+        assert out.dtype == self.dtype
+        assert out.ndim == 1
+        big_file_write_records(&self.file.bf, &self.rtype, start, len(out), out.data)
 
     def __dealloc__(self):
         big_record_type_clear(&self.rtype)

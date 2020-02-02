@@ -4,6 +4,7 @@ from .pyxbigfile import Error, FileClosedError, ColumnClosedError
 from .pyxbigfile import ColumnLowLevelAPI
 from .pyxbigfile import FileLowLevelAPI
 from .pyxbigfile import set_buffer_size
+from . import pyxbigfile
 
 import os
 import numpy
@@ -318,7 +319,7 @@ class FileMPI(FileBase):
 
         return self.open(blockname)
 
-class Dataset:
+class Dataset(pyxbigfile.Dataset):
     """ Accessing read-only subset of blocks from a bigfile.
 
         Parameters
@@ -329,30 +330,16 @@ class Dataset:
             a list of blocks to use. If None is given, all blocks are used.
 
     """
-    def __init__(self, file, blocks=None):
-        if blocks is None:
-            blocks = file.blocks
+    def __init__(self, file, column_names=None, blocks=None):
+        if blocks is not None:
+            warnings.warn('blocks deprecated, use column_names instead',
+                 DeprecationWarning, stacklevel=2)
+        if column_names is None:
+            column_names = blocks
+        if column_names is None:
+            column_names = sorted(file.blocks)
 
-        self.blocknames = blocks
-        self.blocks = dict([
-            (block, file[block]) for block in self.blocknames])
-
-        self.file = file
-        dtype = []
-        size = None
-        for block in self.blocknames:
-            if '/' in block:
-                raise BigFileError('cannot create nested dataset')
-            bb = self.blocks[block]
-            dtype.append((block, bb.dtype))
-            if size is None: size = bb.size
-            elif bb.size != size:
-                raise BigFileError('Dataset length is inconsistent on %s' %block)
-
-        self.size = size
-        self.dtype = numpy.dtype(dtype)
-        self.ndim = 1
-        self.shape = (size, )
+        pyxbigfile.Dataset.__init__(self, file, column_names=column_names)
 
     @_enhance_getslice
     def _getslice(self, sl):
@@ -362,12 +349,22 @@ class Dataset:
         start, end, stop = sl.indices(self.size)
         assert stop == 1
         result = numpy.empty(end - start, dtype=self.dtype)
-        for block in self.blocknames:
-            result[block][:] = self.blocks[block][sl]
-        return result
+        return self.read(start, end - start, result)
+
+    @_enhance_setslice
+    def __setitem__(self, sl, value):
+        if not isinstance(sl, slice):
+            raise TypeError('Expecting a slice or a scalar, got a `%s`' %
+                    str(type(sl)))
+        start, end, stop = sl.indices(self.size)
+        assert stop == 1
+        assert value.dtype == self.dtype
+        assert len(value) == end - start
+        return self.write(start, value)
 
     def __getitem__(self, sl):
         if isinstance(sl, tuple):
+            # [columns, slice] or [slice, columns]
             if len(sl) == 2:
                 if isstr(sl[1]) or isstrlist(sl[1]):
                     # swap, sl[0] shall be column name
@@ -379,9 +376,9 @@ class Dataset:
                 return self[sl[0]]
 
         if isstr(sl):
-            return self.blocks[sl]
+            return self.file[sl]
         elif isstrlist(sl):
-            assert all([(col in self.blocks) for col in sl])
+            assert all([(col in self.column_names) for col in sl])
             return type(self)(self.file, sl)
         else:
             return self._getslice(sl)
