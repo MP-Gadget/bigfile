@@ -574,14 +574,7 @@ big_file_mpi_create_records(BigFile * bf,
     int i;
     for(i = 0; i < rtype->nfield; i ++) {
         BigBlock block[1];
-        if (0 != strcmp(mode, "w+")) {
-            RAISEIF(0 != big_file_mpi_open_block(bf, block, rtype->fields[i].name, comm),
-                ex_open,
-                NULL);
-            RAISEIF(0 != big_block_mpi_grow(block, Nfile, fsize, comm),
-                ex_grow,
-                NULL);
-        } else if (0 != strcmp(mode, "a+")) {
+        if (0 == strcmp(mode, "w+")) {
             RAISEIF(0 != _big_file_mpi_create_block(bf, block,
                              rtype->fields[i].name,
                              rtype->fields[i].dtype,
@@ -590,6 +583,13 @@ big_file_mpi_create_records(BigFile * bf,
                              fsize,
                              comm),
                 ex_open,
+                NULL);
+        } else if (0 == strcmp(mode, "a+")) {
+            RAISEIF(0 != big_file_mpi_open_block(bf, block, rtype->fields[i].name, comm),
+                ex_open,
+                NULL);
+            RAISEIF(0 != big_block_mpi_grow(block, Nfile, fsize, comm),
+                ex_grow,
                 NULL);
         } else {
             RAISE(ex_open,

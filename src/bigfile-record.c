@@ -121,7 +121,7 @@ big_file_create_records(BigFile * bf,
     int i;
     for(i = 0; i < rtype->nfield; i ++) {
         BigBlock block[1];
-        if (0 != strcmp(mode, "w+")) {
+        if (0 == strcmp(mode, "w+")) {
             RAISEIF(0 != big_file_create_block(bf, block,
                              rtype->fields[i].name,
                              rtype->fields[i].dtype,
@@ -130,7 +130,7 @@ big_file_create_records(BigFile * bf,
                              fsize),
                 ex_open,
                 NULL);
-        } else if (0 != strcmp(mode, "a+")) {
+        } else if (0 == strcmp(mode, "a+")) {
             RAISEIF(0 != big_file_open_block(bf, block, rtype->fields[i].name),
                 ex_open,
                 NULL);

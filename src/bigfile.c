@@ -710,7 +710,8 @@ big_block_seek(BigBlock * bb, BigBlockPtr * ptr, ptrdiff_t offset)
             ex_eof,
         /* over the end of file */
         /* note that we allow seeking at the end of file */
-            "Over the end of file");
+            "Over the end of file %td of %td",
+            offset, bb->size);
     {
         int left = 0;
         int right = bb->Nfile;
