@@ -100,8 +100,8 @@ cdef extern from "bigfile.h":
         ptrdiff_t offset, size_t size, void * buf) nogil
     int big_file_read_records(CBigFile * bf, CBigRecordType * rtype,
         ptrdiff_t offset, size_t size, void * buf) nogil
-    int big_file_grow_records(CBigFile * bf, CBigRecordType * rtype,
-        size_t Nfile, size_t * size_per_file) nogil
+    int big_file_create_records(CBigFile * bf, CBigRecordType * rtype,
+        char * mode, size_t Nfile, size_t * size_per_file) nogil
 
 cdef extern from "bigfile-internal.h":
     pass
@@ -593,26 +593,20 @@ cdef class Dataset:
     cdef readonly tuple shape
     cdef readonly numpy.dtype dtype
 
-    def __init__(self, file, column_names):
-        cdef ColumnLowLevelAPI column
+    def __init__(self, file, dtype, size):
         self.file = file
-        self.column_names = column_names
         self.rtype.nfield = 0
         big_record_type_clear(&self.rtype)
         fields = []
 
-        size = None
-        for i, name in enumerate(column_names):
-            column = file.open(name)
-            if size is None:
-                size = column.size
-            elif column.size != size:
-                raise Error("Dataset length is inconsistent on %s" % name)
+        for i, name in enumerate(dtype.names):
+            basedtype = dtype[name].base.str.encode()
+            nmemb = int(numpy.prod(dtype[name].shape))
 
             big_record_type_set(&self.rtype, i,
                 name.encode(),
-                column.bb.dtype,
-                column.bb.nmemb,
+                basedtype,
+                nmemb,
             )
         big_record_type_complete(&self.rtype)
 
@@ -645,9 +639,9 @@ cdef class Dataset:
             raise Error()
         return out
 
-    def append(self, numpy.ndarray buf, numpy.intp_t Nfile=1):
+    def _create_records(self, numpy.intp_t size, numpy.intp_t Nfile=1, char * mode=b"w+"):
+        """ mode can be a+ or w+."""
         cdef numpy.ndarray fsize
-        cdef numpy.intp_t size = len(buf)
 
         if Nfile < 0:
             raise ValueError("Cannot create negative number of files.")
@@ -658,16 +652,18 @@ cdef class Dataset:
         fsize[:] = (numpy.arange(Nfile) + 1) * size // Nfile \
                  - (numpy.arange(Nfile)) * size // Nfile
 
-        # tail is the old end
-        tail = self.size
-
         with nogil:
-            rt = big_file_grow_records(&self.file.bf, &self.rtype, Nfile, <size_t*>fsize.data)
+            rt = big_file_create_records(&self.file.bf, &self.rtype, mode, Nfile, <size_t*>fsize.data)
         if rt != 0:
             raise Error()
+        self.size = self.size + size
 
+    def append(self, numpy.ndarray buf, numpy.intp_t Nfile=1):
+        assert buf.dtype == self.dtype
+        assert buf.ndim == 1
+        tail = self.size
+        self._create_records(len(buf), Nfile=Nfile, mode=b"a+")
         self.write(tail, buf)
-        self.size = tail + len(buf)
 
     def write(self, numpy.intp_t start, numpy.ndarray buf):
         assert buf.dtype == self.dtype

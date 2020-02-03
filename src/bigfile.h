@@ -278,12 +278,12 @@ void big_record_type_set(BigRecordType * rtype,
 void big_record_type_complete(BigRecordType * rtype);
 
 /*
- * Get the value of i from a RecordType buffer to data.
+ * Get/Set the value of i-th row and c-th field from a RecordType buffer.
  * */
-void big_record_set(const BigRecordType * rtype, void * buf, int i, const void * data);
-void big_record_get(const BigRecordType * rtype, const void * buf, int i, void * data);
+void big_record_set(const BigRecordType * rtype, void * buf, ptrdiff_t i, int c, const void * data);
+void big_record_get(const BigRecordType * rtype, const void * buf, ptrdiff_t i, int c, void * data);
 
-/* View a field in a BigRecordType buffer as a BigArray. */
+/* View i-th field in a BigRecordType buffer as a BigArray. */
 int
 big_record_view_field(const BigRecordType * rtype,
     int i,
@@ -299,11 +299,16 @@ big_file_write_records(BigFile * bf,
     size_t size,
     const void * buf);
 
+/* create or append empty records.
+ * mode == "a+": append
+ * mode == "w+": create
+ * */
 int
-big_file_grow_records(BigFile * bf,
+big_file_create_records(BigFile * bf,
     const BigRecordType * rtype,
-    int Nfile_grow,
-    const size_t fsize_grow[]);
+    const char * mode,
+    int Nfile,
+    const size_t fsize[]);
 
 int
 big_file_read_records(BigFile * bf,
