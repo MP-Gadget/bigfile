@@ -37,7 +37,7 @@ main(int argc, char * argv[])
         float bhmass = i;
         big_record_set(rtype, bufout, i, 0, &pos);
         big_record_set(rtype, bufout, i, 1, &vel);
-        big_record_set(rtype, bufout, i, 1, &bhmass);
+        big_record_set(rtype, bufout, i, 2, &bhmass);
     }
 
     big_file_mpi_write_records(file, rtype, 0, nmemb, bufout, nrank, MPI_COMM_WORLD);
