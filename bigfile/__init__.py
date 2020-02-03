@@ -330,6 +330,11 @@ class Dataset(pyxbigfile.Dataset):
             a list of blocks to use. If None is given, all blocks are used.
 
     """
+    @classmethod
+    def create(kls, file, dtype, size):
+        self = object.__new__(kls)
+        pyxbigfile.Dataset.__init__(self, dtype=dtype, size=size)
+
     def __init__(self, file, column_names=None, blocks=None):
         if blocks is not None:
             warnings.warn('blocks deprecated, use column_names instead',
@@ -339,7 +344,18 @@ class Dataset(pyxbigfile.Dataset):
         if column_names is None:
             column_names = sorted(file.blocks)
 
-        pyxbigfile.Dataset.__init__(self, file, column_names=column_names)
+        size = None
+        dtype = []
+        for name in column_names:
+            column = file.open(name)
+            if size is None:
+                size = column.size
+            elif column.size != size:
+                raise Error("Dataset length is inconsistent on %s" % name)
+            dtype.append((name, column.dtype))
+
+        dtype = numpy.dtype(dtype)
+        return pyxbigfile.Dataset.__init__(self, file, dtype=dtype, size=size)
 
     @_enhance_getslice
     def _getslice(self, sl):
@@ -378,7 +394,7 @@ class Dataset(pyxbigfile.Dataset):
         if isstr(sl):
             return self.file[sl]
         elif isstrlist(sl):
-            assert all([(col in self.column_names) for col in sl])
+            assert all([(col in self.dtype.names) for col in sl])
             return type(self)(self.file, sl)
         else:
             return self._getslice(sl)

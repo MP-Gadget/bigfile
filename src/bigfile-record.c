@@ -12,7 +12,6 @@ void
 big_record_type_clear(BigRecordType * rtype)
 {
     int i;
-    int offset = 0;
     for(i = 0; i < rtype->nfield; i ++) {
         free(rtype->fields[i].name);
     }
@@ -65,22 +64,24 @@ big_record_type_complete(BigRecordType * rtype)
 void
 big_record_set(const BigRecordType * rtype,
     void * buf,
-    int i,
+    ptrdiff_t i,
+    int c,
     const void * data)
 {
     char * p = buf;
-    memcpy(&p[rtype->fields[i].offset], data,
-           rtype->fields[i].elsize * rtype->fields[i].nmemb);
+    memcpy(&p[i * rtype->itemsize + rtype->fields[c].offset], data,
+           rtype->fields[c].elsize * rtype->fields[c].nmemb);
 }
 
 void
 big_record_get(const BigRecordType * rtype,
     const void * buf,
-    int i,
+    ptrdiff_t i,
+    int c,
     void * data) {
     const char * p = buf;
-    memcpy(data, &p[rtype->fields[i].offset],
-           rtype->fields[i].elsize * rtype->fields[i].nmemb);
+    memcpy(data, &p[i * rtype->itemsize + rtype->fields[c].offset],
+           rtype->fields[c].elsize * rtype->fields[c].nmemb);
 }
 
 int
@@ -100,29 +101,44 @@ big_record_view_field(const BigRecordType * rtype,
 }
 
 int
-big_file_grow_records(BigFile * bf,
+big_file_create_records(BigFile * bf,
     const BigRecordType * rtype,
-    int Nfile_grow,
-    const size_t fsize_grow[])
+    const char * mode,
+    int Nfile,
+    const size_t fsize[])
 {
     int i;
     for(i = 0; i < rtype->nfield; i ++) {
         BigBlock block[1];
-        RAISEIF(0 != big_file_open_block(bf, block, rtype->fields[i].name),
-            ex_open,
-            NULL);
-        RAISEIF(0 != big_block_grow(block, Nfile_grow, fsize_grow),
-            ex_grow,
-            NULL);
+        if (0 != strcmp(mode, "w+")) {
+            RAISEIF(0 != big_file_create_block(bf, block,
+                             rtype->fields[i].name,
+                             rtype->fields[i].dtype,
+                             rtype->fields[i].nmemb,
+                             Nfile,
+                             fsize),
+                ex_open,
+                NULL);
+        } else if (0 != strcmp(mode, "a+")) {
+            RAISEIF(0 != big_file_open_block(bf, block, rtype->fields[i].name),
+                ex_open,
+                NULL);
+            RAISEIF(0 != big_block_grow(block, Nfile, fsize),
+                ex_grow,
+                NULL);
+        } else {
+            RAISE(ex_open,
+                "Mode string must be `a+` or `w+`, `%s` provided",
+                mode);
+        }
         RAISEIF(0 != big_block_close(block),
             ex_close,
             NULL);
         continue;
         ex_grow:
             RAISEIF(0 != big_block_close(block),
-            ex_close,
-            NULL);
-            return -1;
+                ex_close,
+                NULL);
         ex_open:
         ex_close:
             return -1;
