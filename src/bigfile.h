@@ -270,6 +270,10 @@ typedef struct BigRecordType {
 } BigRecordType;
 
 void big_record_type_clear(BigRecordType * rtype);
+int big_record_type_add(BigRecordType * rtype,
+    const char * name,
+    const char * dtype,
+    int nmemb);
 void big_record_type_set(BigRecordType * rtype,
     int i,
     const char * name,
