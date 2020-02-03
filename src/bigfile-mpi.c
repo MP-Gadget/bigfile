@@ -73,7 +73,14 @@ int big_file_mpi_create(BigFile * bf, const char * basename, MPI_Comm comm) {
 }
 
 /**Helper function for big_file_mpi_create_block, above*/
-static int _big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, size_t fsize[], MPI_Comm comm);
+static int
+_big_block_mpi_create(BigBlock * bb,
+        const char * basename,
+        const char * dtype,
+        int nmemb,
+        int Nfile,
+        const size_t fsize[],
+        MPI_Comm comm);
 
 /** Helper function for big_file_mpi_open_block, above*/
 static int _big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm);
@@ -86,15 +93,37 @@ int big_file_mpi_open_block(BigFile * bf, BigBlock * block, const char * blockna
     return _big_block_mpi_open(block, basename, comm);
 }
 
-int big_file_mpi_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, size_t size, MPI_Comm comm) {
-    if(comm == MPI_COMM_NULL) return 0;
-
+int
+big_file_mpi_create_block(BigFile * bf,
+        BigBlock * block,
+        const char * blockname,
+        const char * dtype,
+        int nmemb,
+        int Nfile,
+        size_t size,
+        MPI_Comm comm)
+{
     size_t fsize[Nfile];
     int i;
     for(i = 0; i < Nfile; i ++) {
         fsize[i] = size * (i + 1) / Nfile 
                  - size * (i) / Nfile;
     }
+    return _big_file_mpi_create_block(bf, block, blockname, dtype,
+        nmemb, Nfile, fsize, comm);
+}
+
+int
+_big_file_mpi_create_block(BigFile * bf,
+        BigBlock * block,
+        const char * blockname,
+        const char * dtype,
+        int nmemb,
+        int Nfile,
+        const size_t fsize[],
+        MPI_Comm comm)
+{
+    if(comm == MPI_COMM_NULL) return 0;
     int rank;
     MPI_Comm_rank(comm, &rank);
 
@@ -139,7 +168,13 @@ _big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm comm)
 }
 
 static int
-_big_block_mpi_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, size_t fsize[], MPI_Comm comm)
+_big_block_mpi_create(BigBlock * bb,
+        const char * basename,
+        const char * dtype,
+        int nmemb,
+        int Nfile,
+        const size_t fsize[],
+        MPI_Comm comm)
 {
     int rank;
     int NTask;
@@ -366,7 +401,6 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
     int (*action)(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 )
 {
-    int i;
     int ThisTask, NTask;
 
     MPI_Comm_size(comm, &NTask);
@@ -530,21 +564,38 @@ big_block_mpi_read(BigBlock * block, BigBlockPtr * ptr, BigArray * array, int co
 
 
 int
-big_file_mpi_grow_records(BigFile * bf,
+big_file_mpi_create_records(BigFile * bf,
     const BigRecordType * rtype,
-    int Nfile_grow,
-    const size_t fsize_grow[],
+    const char * mode,
+    int Nfile,
+    const size_t fsize[],
     MPI_Comm comm)
 {
     int i;
     for(i = 0; i < rtype->nfield; i ++) {
         BigBlock block[1];
-        RAISEIF(0 != big_file_mpi_open_block(bf, block, rtype->fields[i].name, comm),
-            ex_open,
-            NULL);
-        RAISEIF(0 != big_block_mpi_grow(block, Nfile_grow, fsize_grow, comm),
-            ex_grow,
-            NULL);
+        if (0 != strcmp(mode, "w+")) {
+            RAISEIF(0 != big_file_mpi_open_block(bf, block, rtype->fields[i].name, comm),
+                ex_open,
+                NULL);
+            RAISEIF(0 != big_block_mpi_grow(block, Nfile, fsize, comm),
+                ex_grow,
+                NULL);
+        } else if (0 != strcmp(mode, "a+")) {
+            RAISEIF(0 != _big_file_mpi_create_block(bf, block,
+                             rtype->fields[i].name,
+                             rtype->fields[i].dtype,
+                             rtype->fields[i].nmemb,
+                             Nfile,
+                             fsize,
+                             comm),
+                ex_open,
+                NULL);
+        } else {
+            RAISE(ex_open,
+                "Mode string must be `a+` or `w+`, `%s` provided",
+                mode);
+        }
         RAISEIF(0 != big_block_mpi_close(block, comm),
             ex_close,
             NULL);
