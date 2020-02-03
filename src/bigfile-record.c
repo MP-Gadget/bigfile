@@ -43,6 +43,17 @@ big_record_type_set(BigRecordType * rtype,
     rtype->fields[i].nmemb = nmemb;
 }
 
+int
+big_record_type_add(BigRecordType * rtype,
+    const char * name,
+    const char * dtype,
+    int nmemb)
+{
+    int i = rtype->nfield;
+    big_record_type_set(rtype, i, name, dtype, nmemb);
+    return i;
+}
+
 void
 big_record_type_complete(BigRecordType * rtype)
 {
