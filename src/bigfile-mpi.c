@@ -206,12 +206,12 @@ _big_block_mpi_create(BigBlock * bb,
 
     int i;
     for(i = (size_t) bb->Nfile * rank / NTask; i < (size_t) bb->Nfile * (rank + 1) / NTask; i ++) {
-        FILE * fp = _big_file_open_a_file(bb->methods, bb->basename, i, "w", 1);
+        BigFileStream fp = _big_file_open_a_file(bb->methods, bb->basename, i, "w", 1);
         if(fp == NULL) {
             rt = -1;
             break;
         }
-        fclose(fp);
+        bb->methods->fclose(fp);
     }
 
     BCAST_AND_RAISEIF(rt, comm);
@@ -251,12 +251,12 @@ int big_block_mpi_grow(BigBlock * bb,
 
     int i;
     for(i = (size_t) Nfile_grow * rank / NTask; i < (size_t) Nfile_grow * (rank + 1) / NTask; i ++) {
-        FILE * fp = _big_file_open_a_file(bb->methods, bb->basename, i + oldNfile, "w", 1);
+        BigFileStream fp = _big_file_open_a_file(bb->methods, bb->basename, i + oldNfile, "w", 1);
         if(fp == NULL) {
             rt = -1;
             break;
         }
-        fclose(fp);
+        bb->methods->fclose(fp);
     }
 
     BCAST_AND_RAISEIF(rt, comm);

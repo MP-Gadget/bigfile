@@ -395,7 +395,7 @@ def test_mpi_attr(comm):
 
 def test_version():
     import bigfile
-    assert hasattr(File, '__version__')
+    assert hasattr(bigfile, '__version__')
 
 @MPITest(commsize=[1, 4])
 def test_mpi_large(comm):

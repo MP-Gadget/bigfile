@@ -5,6 +5,8 @@ from .pyxbigfile import BigFileBackend
 from .pyxbigfile import ColumnLowLevelAPI
 from .pyxbigfile import FileLowLevelAPI
 from .pyxbigfile import set_buffer_size
+from . import pyxbigfile
+from functools import wraps
 
 import os
 import numpy
@@ -243,6 +245,10 @@ class ColumnMPI(Column):
             super(ColumnMPI, self).close()
         return self.open(f, blockname)
 
+    @_enhance_getslice
+    def __getitem__(self, index):
+        return Column.__getitem__(self, index)
+
     def open(self, f, blockname):
         if not check_unique(blockname, self.comm):
             raise BigFileError("blockname is inconsistent between ranks")
@@ -429,9 +435,6 @@ class Dataset(pyxbigfile.Dataset):
         elif isstrlist(sl):
             assert all([(col in self.dtype.names) for col in sl])
             return type(self)(self.file, sl)
-        elif numpy.isscalar(sl):
-            sl = slice(sl, sl + 1)
-            return self[sl][0]
         else:
             return self._getslice(sl)
 

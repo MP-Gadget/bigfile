@@ -636,6 +636,7 @@ _big_block_grow_internal(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[
     bb->fchecksum = fchecksum;
     bb->Nfile = Nfile;
     bb->size = bb->foffset[Nfile];
+    bb->dirty = 1;
 
     return 0;
 }
