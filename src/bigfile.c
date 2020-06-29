@@ -258,7 +258,7 @@ _freadall_posix(BigFileStream fp, char ** buffer, char ** error)
         return 0;
     }
     fseek(fp, 0, SEEK_SET);
-    if(size != fread(buffer, 1, size, fp)) {
+    if(size != fread(*buffer, 1, size, fp)) {
         *error = _strdup(strerror(errno));
         free(*buffer);
         *buffer = NULL;
