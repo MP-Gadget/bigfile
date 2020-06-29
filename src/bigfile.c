@@ -239,32 +239,33 @@ _fread_posix(BigFileStream fp, void * ptr, size_t size, char ** error)
     return r;
 }
 
-static char *
-_freadall_posix(BigFileStream fp, char ** error)
+static size_t
+_freadall_posix(BigFileStream fp, char ** buffer, char ** error)
 {
-    char * buffer = NULL;
+    *buffer = NULL;
 
     fseek(fp, 0, SEEK_END);
     long size = ftell(fp);
     /*ftell may fail*/
     if (size < 0) {
         *error = _strdup(strerror(errno));
-        return NULL;
+        return 0;
     }
 
-    buffer = (char*) malloc(size + 1);
-    if(!buffer) {
+    *buffer = (char*) malloc(size + 1);
+    if(!*buffer) {
         *error = _strdup(strerror(errno));
-        return NULL;
+        return 0;
     }
     fseek(fp, 0, SEEK_SET);
     if(size != fread(buffer, 1, size, fp)) {
         *error = _strdup(strerror(errno));
-        free(buffer);
-        return NULL;
+        free(*buffer);
+        *buffer = NULL;
+        return 0;
     }
-    buffer[size] = 0;
-    return buffer;
+    (*buffer)[size] = 0;
+    return size;
 }
 
 static size_t
@@ -331,23 +332,37 @@ int _mkdir_posix(void * backend, const char * dirname, char ** error)
     return 0;
 }
 
+static void
+_big_file_set_posix(BigFileMethods * methods) {
+    /* POSIX backend */
+    methods->backend = NULL;
+    methods->dscan = _dscan_posix;
+    methods->mkdir = _mkdir_posix;
+    methods->fopen = _fopen_posix;
+    methods->fclose = (void*) fclose;
+    methods->fread = _fread_posix;
+    methods->freadall = _freadall_posix;
+    methods->fseek = _fseek_posix;
+    methods->fwrite = _fwrite_posix;
+}
 
 void
 big_file_set_methods(BigFile * bf, const BigFileMethods * methods)
 {
     if(methods == NULL) {
-        /* POSIX backend */
-        bf->methods->backend = NULL;
-        bf->methods->dscan = _dscan_posix;
-        bf->methods->mkdir = _mkdir_posix;
-        bf->methods->fopen = _fopen_posix;
-        bf->methods->fclose = (void*) fclose;
-        bf->methods->fread = _fread_posix;
-        bf->methods->freadall = _freadall_posix;
-        bf->methods->fseek = _fseek_posix;
-        bf->methods->fwrite = _fwrite_posix;
+        _big_file_set_posix(bf->methods);
     } else {
         memcpy(&bf->methods, methods, sizeof(methods[0]));
+    }
+}
+
+void
+big_block_set_methods(BigBlock * bb, const BigFileMethods * methods)
+{
+    if(methods == NULL) {
+        _big_file_set_posix(bb->methods);
+    } else {
+        memcpy(&bb->methods, methods, sizeof(methods[0]));
     }
 }
 
@@ -370,7 +385,7 @@ bblist * listbigfile_r(const BigFileMethods * methods,
     current = _path_join(basename, blockname);
     char * error = NULL;
 
-    n = methods->dscan(methods->backend, current, &namelist, error);
+    n = methods->dscan(methods->backend, current, &namelist, &error);
     free(current);
     if (n < 0)
         return bblist;
@@ -485,17 +500,36 @@ _big_block_open(BigBlock * bb,
             NULL);
 
     if (!endswith(bb->basename, "/.") && 0 != strcmp(bb->basename, ".")) {
+        char * buffer = NULL;
+        char * error = NULL;
         BigFileStream fheader = _big_file_open_a_file(bb->methods, bb->basename, FILEID_HEADER, "r", 1);
         RAISEIF (!fheader,
                 ex_open,
                 NULL);
 
-        RAISEIF(
-               (1 != fscanf(fheader, " DTYPE: %s", bb->dtype)) ||
-               (1 != fscanf(fheader, " NMEMB: %d", &(bb->nmemb))) ||
-               (1 != fscanf(fheader, " NFILE: %d", &(bb->Nfile))),
+        size_t size = bb->methods->freadall(fheader, &buffer, &error);
+        RAISEIF(buffer == NULL,
+            ex_read,
+            "Failed to read header: %s", error);
+
+        char * q = buffer;
+        char * p;
+
+        for(p = q; *q != '\n' && *q; q++) continue; if(*q) { *q = 0; q++; }
+        RAISEIF(1 != sscanf(p, "DTYPE: %s", bb->dtype),
                ex_fscanf,
-               "Failed to read header of block `%s' (%s)", bb->basename, strerror(errno));
+               "Failed to parse header of block `%s' (%s) %s", bb->basename, strerror(errno), p);
+
+        printf("data type ======= `%s`", bb->dtype);
+        for(p = q; *q != '\n' && *q; q++) continue; if(*q) { *q = 0; q++; }
+        RAISEIF(1 != sscanf(p, "NMEMB: %d", &(bb->nmemb)),
+               ex_fscanf,
+               "Failed to parse header of block `%s' (%s) %s", bb->basename, strerror(errno), p);
+
+        for(p = q; *q != '\n' && *q; q++) continue; if(*q) { *q = 0; q++; }
+        RAISEIF(1 != sscanf(p, "NFILE: %d", &(bb->Nfile)),
+               ex_fscanf,
+               "Failed to parse header of block `%s' (%s) %s", bb->basename, strerror(errno), p);
 
         RAISEIF(bb->Nfile < 0 || bb->Nfile >= INT_MAX-1, ex_fscanf, 
                 "Unreasonable value for Nfile in header of block `%s' (%d)",bb->basename,bb->Nfile);
@@ -517,14 +551,17 @@ _big_block_open(BigBlock * bb,
                 "Failed to alloc memory `%s'", bb->basename);
         int i;
         for(i = 0; i < bb->Nfile; i ++) {
-            int fid; 
+            int fid;
             size_t size;
             unsigned int cksum;
             unsigned int sysv;
-            RAISEIF(4 != fscanf(fheader, " " EXT_DATA ": %td : %u : %u", &fid, &size, &cksum, &sysv),
+
+            for(p = q; *q != '\n' && *q; q++) continue; if(*q) { *q = 0; q++; }
+            RAISEIF(4 != sscanf(p, "" EXT_DATA ": %td : %u : %u", &fid, &size, &cksum, &sysv),
                     ex_fscanf1,
                     "Failed to readin physical file layout `%s' %d (%s)", bb->basename, fid,
                     strerror(errno));
+
             RAISEIF(fid < 0 || fid >= bb->Nfile, ex_fscanf1,
                     "Non-existent file referenced: `%s' (%d)", bb->basename, fid);
             bb->fsize[fid] = size;
@@ -537,7 +574,7 @@ _big_block_open(BigBlock * bb,
         bb->size = bb->foffset[bb->Nfile];
 
         bb->methods->fclose(fheader);
-
+        free(buffer);
         return 0;
 
 ex_fscanf1:
@@ -549,7 +586,10 @@ ex_foffset:
 ex_fsize:
 ex_fscanf:
         bb->methods->fclose(fheader);
+        free(buffer);
+ex_read:
 ex_open:
+        if(error) free(error);
         return -1;
     } else {
         /* The meta block of a big file, has on extra files. */
@@ -753,23 +793,35 @@ int
 big_block_flush(BigBlock * block)
 {
     BigFileStream fheader = NULL;
+    char * error = NULL;
+    char * buffer = NULL;
     if(block->dirty) {
+        /* Big enough buffer for all fields*/
+        buffer = malloc(block->Nfile * 128 + 512);
+        RAISEIF(buffer == NULL, ex_buffer, "Not enough memory for buffer");
+
         int i;
         fheader = _big_file_open_a_file(block->methods, block->basename, FILEID_HEADER, "w+", 1);
         RAISEIF(fheader == NULL, ex_fileio, NULL);
-        RAISEIF(
-            (0 > fprintf(fheader, "DTYPE: %s\n", block->dtype)) ||
-            (0 > fprintf(fheader, "NMEMB: %d\n", block->nmemb)) ||
-            (0 > fprintf(fheader, "NFILE: %d\n", block->Nfile)),
-                ex_fprintf,
-                "Writing file header");
+
+        char * p = buffer;
+        sprintf(p, "DTYPE: %s\n"
+                   "NMEMB: %d\n"
+                   "NFILE: %d\n",
+                block->dtype, block->nmemb, block->Nfile);
+
+        p = buffer + strlen(buffer);
         for(i = 0; i < block->Nfile; i ++) {
             unsigned int s = block->fchecksum[i];
             unsigned int r = (s & 0xffff) + ((s & 0xffffffff) >> 16);
             unsigned int checksum = (r & 0xffff) + (r >> 16);
-            RAISEIF(0 > fprintf(fheader, EXT_DATA ": %td : %u : %u\n", i, block->fsize[i], block->fchecksum[i], checksum),
-                ex_fprintf, "Writing file information to header");
+            sprintf(p, EXT_DATA ": %td : %u : %u\n", i, block->fsize[i], block->fchecksum[i], checksum);
+            p = buffer + strlen(buffer);
         }
+        RAISEIF(strlen(buffer) != block->methods->fwrite(fheader, buffer, strlen(buffer), &error),
+            ex_write_header, "Writing file information to header failed with %s", error);
+
+        free(buffer);
         block->methods->fclose(fheader);
         block->dirty = 0;
     }
@@ -781,10 +833,15 @@ big_block_flush(BigBlock * block)
     }
     return 0;
 
-ex_fprintf:
+ex_write_header:
     block->methods->fclose(fheader);
+    free(buffer);
+ex_buffer:
 ex_write_attr:
 ex_fileio:
+    if(error) {
+        free(error);
+    }
     return -1;
 }
 
@@ -1487,7 +1544,7 @@ byte_swap(BigArrayIter * iter, size_t nmemb)
 
 #define CAST(d1, t1, d2, t2) \
 if((0 == strcmp(d1, dst->array->dtype + 1)) && (0 == strcmp(d2, src->array->dtype + 1))) { \
-    for(i = 0; i < nmemb; i ++) { \
+    for(i = 0; i < (signed) nmemb; i ++) { \
         t1 * p1 = dst->dataptr; t2 * p2 = src->dataptr; \
         * p1 = * p2; \
         big_array_iter_advance(dst); big_array_iter_advance(src); \
@@ -1496,7 +1553,7 @@ if((0 == strcmp(d1, dst->array->dtype + 1)) && (0 == strcmp(d2, src->array->dtyp
 }
 #define CAST2(d1, t1, d2, t2) \
 if((0 == strcmp(d1, dst->array->dtype + 1)) && (0 == strcmp(d2, src->array->dtype + 1))) { \
-    for(i = 0; i < nmemb; i ++) { \
+    for(i = 0; i < (signed) nmemb; i ++) { \
         t1 * p1 = dst->dataptr; t2 * p2 = src->dataptr; \
         p1->r = p2->r; p1->i = p2->i; \
         big_array_iter_advance(dst); big_array_iter_advance(src); \
@@ -1669,12 +1726,12 @@ attrset_read_attr_set_v2(const BigFileMethods * methods,
     if(fattr == NULL) {
         return 0;
     }
-    char * buffer = methods->freadall(fattr,  &error);
-    RAISEIF(NULL == buffer,
-        ex_read_file,
+    char * buffer = NULL;
+    size_t size = methods->freadall(fattr, &buffer, &error);
+    RAISEIF(buffer == NULL,
+        ex_data,
         "Failed to read attribute file: %s\n", error
     );
-    size_t size = strlen(buffer);
     unsigned char * data = (unsigned char * ) malloc(size + 1);
     RAISEIF(!data, ex_data, "Could not allocate memory for data: %ld bytes", size + 1);
 
@@ -1695,7 +1752,7 @@ attrset_read_attr_set_v2(const BigFileMethods * methods,
         int nmemb = atoi(rawlength);
         int itemsize = big_file_dtype_itemsize(dtype);
 
-        RAISEIF(nmemb * itemsize * 2!= strlen(rawdata),
+        RAISEIF(nmemb * itemsize * 2 != strlen(rawdata),
             ex_parse_attr,
             "NMEMB and data mismiatch: %d x %d (%s) * 2 != %d",
             nmemb, itemsize, dtype, strlen(rawdata));
@@ -1719,7 +1776,6 @@ attrset_read_attr_set_v2(const BigFileMethods * methods,
     attrset->dirty = 0;
     return 0;
 
-ex_read_file:
 ex_parse_attr:
 ex_set_attr:
     attrset->dirty = 0;
@@ -2138,9 +2194,6 @@ _big_file_open_a_file(const BigFileMethods * methods,
         ex_fopen,
         "Failed to open physical file `%s' with mode `%s' (%s)",
         filename, mode, error);
-    if(unbuffered) {
-        setbuf(fp, NULL);
-    }
 ex_fopen:
     if(error) free(error);
     free(filename);

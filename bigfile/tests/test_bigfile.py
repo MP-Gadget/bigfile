@@ -281,6 +281,7 @@ def test_attr_objects(comm):
 def test_attr(comm):
     fname = tempfile.mkdtemp()
     x = File(fname, create=True)
+
     with x.create('.', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
@@ -503,13 +504,18 @@ def test_blank_attr(comm):
 
 @MPITest(commsize=[1])
 def test_pickle(comm):
+    import pickle
     fname = tempfile.mkdtemp()
     x = File(fname, create=True)
+    str = pickle.dumps(x.backend)
+    backend1= pickle.loads(str)
+
+    str = pickle.dumps(x)
+    x1= pickle.loads(str)
 
     # test creating
     column = x.create("abc", dtype='f8', size=128)
     
-    import pickle
     str = pickle.dumps(column)
     column1 = pickle.loads(str)
 
@@ -586,5 +592,39 @@ def test_slicing(comm):
 
         with x['data'] as b:
             assert_equal(b[3], data[3])
+
+    shutil.rmtree(fname)
+
+@MPITest([1])
+def test_backend(comm):
+    fname = tempfile.mkdtemp()
+    x = File(fname, create=True)
+    with x.create('.', dtype=None) as b:
+        b.attrs['int'] = 128
+        b.attrs['float'] = [128.0, 3, 4]
+        b.attrs['string'] = 'abcdefg'
+        b.attrs['complex'] = 128 + 128J
+        b.attrs['bool'] = True
+        b.attrs['arrayustring'] = numpy.array(u'unicode')
+        b.attrs['arraysstring'] = numpy.array('str')
+
+    with x.open('.') as b:
+        assert_equal(b.attrs['int'], 128)
+        assert_equal(b.attrs['float'], [128.0, 3, 4])
+        assert_equal(b.attrs['string'],  'abcdefg')
+        assert_equal(b.attrs['complex'],  128 + 128J)
+        assert_equal(b.attrs['bool'],  True)
+        b.attrs['int'] = 30
+        b.attrs['float'] = [3, 4]
+        b.attrs['string'] = 'defg'
+        b.attrs['complex'] = 32 + 32J
+        b.attrs['bool'] = False
+
+    with x.open('.') as b:
+        assert_equal(b.attrs['int'], 30)
+        assert_equal(b.attrs['float'], [3, 4])
+        assert_equal(b.attrs['string'],  'defg')
+        assert_equal(b.attrs['complex'],  32 + 32J)
+        assert_equal(b.attrs['bool'],  False)
 
     shutil.rmtree(fname)

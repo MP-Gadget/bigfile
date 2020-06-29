@@ -17,7 +17,7 @@ typedef struct BigFileMethods {
                     char ** error);
     int (*fseek)(BigFileStream stream, long offset, int whence, char ** error);
     size_t (*fread)(BigFileStream stream, void *ptr, size_t size, char ** error);
-    char * (*freadall)(BigFileStream stream, char ** error);
+    size_t (*freadall)(BigFileStream stream, char **buffer, char ** error);
     size_t (*fwrite)(BigFileStream stream, const void *ptr, size_t size, char ** error);
     int (*fclose)(BigFileStream handle);
 } BigFileMethods;
@@ -109,6 +109,7 @@ int big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname);
 int big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, const size_t fsize[]); /* raises */
 int big_file_close(BigFile * bf); /* raises */
 
+void big_block_set_methods(BigBlock * block, const BigFileMethods * methods);
 int big_block_close(BigBlock * block); /* raises */
 int big_block_grow(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[]); /* raises */
 int big_block_flush(BigBlock * block); /* raises */

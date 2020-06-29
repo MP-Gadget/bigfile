@@ -1,6 +1,7 @@
 from .version import __version__
 
 from .pyxbigfile import Error, FileClosedError, ColumnClosedError
+from .pyxbigfile import BigFileBackend
 from .pyxbigfile import ColumnLowLevelAPI
 from .pyxbigfile import FileLowLevelAPI
 from .pyxbigfile import set_buffer_size
@@ -53,8 +54,8 @@ def _enhance_setslice(getitem):
 
 class Column(ColumnLowLevelAPI):
 
-#    def __init__(self):
-#        ColumeLowLevelAPI.__init__(self)
+    def __init__(self, backend):
+        ColumnLowLevelAPI.__init__(self, backend=backend)
 
     def flush(self):
         self._flush()
@@ -88,8 +89,8 @@ class Column(ColumnLowLevelAPI):
 
 
 class FileBase(FileLowLevelAPI):
-    def __init__(self, filename, create=False):
-        FileLowLevelAPI.__init__(self, filename, create)
+    def __init__(self, filename, create, backend):
+        FileLowLevelAPI.__init__(self, filename, create=create, backend=backend)
         self._blocks = []
         self.comm = None
 
@@ -125,8 +126,8 @@ class FileBase(FileLowLevelAPI):
         FileLowLevelAPI.__setstate__(self, basestate)
 
 class File(FileBase):
-    def __init__(self, filename, create=False):
-        FileBase.__init__(self, filename, create)
+    def __init__(self, filename, create=False, backend=None):
+        FileBase.__init__(self, filename, create=create, backend=backend)
         del self._blocks
 
     @property
@@ -138,12 +139,12 @@ class File(FileBase):
             return self._blocks
 
     def open(self, blockname):
-        block = Column()
+        block = Column(backend=self.backend)
         block.open(self, blockname)
         return block
 
     def create(self, blockname, dtype=None, size=None, Nfile=1):
-        block = Column()
+        block = Column(backend=self.backend)
         block.create(self, blockname, dtype, size, Nfile)
         self._blocks = self.list_blocks()
         return block
@@ -193,9 +194,9 @@ class File(FileBase):
         return File(os.path.join(self.basename, key.lstrip('/')))
 
 class ColumnMPI(Column):
-    def __init__(self, comm):
+    def __init__(self, comm, backend):
         self.comm = comm
-        Column.__init__(self)
+        Column.__init__(self, backend=backend)
 
     def create(self, f, blockname, dtype=None, size=None, Nfile=1):
         if not check_unique(blockname, self.comm):
@@ -233,7 +234,7 @@ class ColumnMPI(Column):
 
 class FileMPI(FileBase):
 
-    def __init__(self, comm, filename, create=False):
+    def __init__(self, comm, filename, create=False, backend=None):
         if not check_unique(filename, comm):
             raise BigFileError("filename is inconsistent between ranks")
 
@@ -247,7 +248,7 @@ class FileMPI(FileBase):
             # if create failed, the next open will fail, collectively
 
         comm.barrier()
-        FileBase.__init__(self, filename, create=False)
+        FileBase.__init__(self, filename, create=False, backend=backend)
         self.comm = comm
         self.refresh()
 
@@ -264,7 +265,7 @@ class FileMPI(FileBase):
         self._blocks = self.comm.bcast(self._blocks)
 
     def open(self, blockname):
-        block = ColumnMPI(self.comm)
+        block = ColumnMPI(self.comm, backend=self.backend)
         block.open(self, blockname)
         return block
 
@@ -272,7 +273,7 @@ class FileMPI(FileBase):
         return FileMPI(self.comm, os.path.join(self.basename, key))
 
     def create(self, blockname, dtype=None, size=None, Nfile=1):
-        block = ColumnMPI(self.comm)
+        block = ColumnMPI(self.comm, backend=self.backend)
         block.create(self, blockname, dtype, size, Nfile)
         self.refresh()
         return block
