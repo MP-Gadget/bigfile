@@ -5,6 +5,7 @@ from bigfile import FileMPI
 from bigfile import BigFileClosedError
 from bigfile import BigBlockClosedError
 from bigfile import BigFileError
+from bigfile import URLBackend
 
 import tempfile
 import numpy
@@ -596,9 +597,12 @@ def test_slicing(comm):
     shutil.rmtree(fname)
 
 @MPITest([1])
-def test_backend(comm):
+def test_url_backend(comm):
+    from urllib import request
+
     fname = tempfile.mkdtemp()
     x = File(fname, create=True)
+
     with x.create('.', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
@@ -608,23 +612,20 @@ def test_backend(comm):
         b.attrs['arrayustring'] = numpy.array(u'unicode')
         b.attrs['arraysstring'] = numpy.array('str')
 
-    with x.open('.') as b:
+    with x.create('data', dtype='f8', size=128) as b:
+        b[:] = numpy.arange(128)
+
+    y = File("file://" + request.pathname2url(fname), create=True, backend=URLBackend())
+
+    assert len(y.blocks) == 0
+    with y.open('.') as b:
         assert_equal(b.attrs['int'], 128)
         assert_equal(b.attrs['float'], [128.0, 3, 4])
         assert_equal(b.attrs['string'],  'abcdefg')
         assert_equal(b.attrs['complex'],  128 + 128J)
         assert_equal(b.attrs['bool'],  True)
-        b.attrs['int'] = 30
-        b.attrs['float'] = [3, 4]
-        b.attrs['string'] = 'defg'
-        b.attrs['complex'] = 32 + 32J
-        b.attrs['bool'] = False
 
-    with x.open('.') as b:
-        assert_equal(b.attrs['int'], 30)
-        assert_equal(b.attrs['float'], [3, 4])
-        assert_equal(b.attrs['string'],  'defg')
-        assert_equal(b.attrs['complex'],  32 + 32J)
-        assert_equal(b.attrs['bool'],  False)
-
+    with y.open('data') as b:
+        assert_equal(b[:],  numpy.arange(128))
+        
     shutil.rmtree(fname)

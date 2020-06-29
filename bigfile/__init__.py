@@ -5,11 +5,9 @@ from .pyxbigfile import BigFileBackend
 from .pyxbigfile import ColumnLowLevelAPI
 from .pyxbigfile import FileLowLevelAPI
 from .pyxbigfile import set_buffer_size
-from . import pyxbigfile
 
 import os
 import numpy
-from functools import wraps
 
 try:
     basestring  # attempt to evaluate basestring
@@ -52,6 +50,41 @@ def _enhance_getslice(getitem):
 def _enhance_setslice(getitem):
     return _enhance_slicefunc(getitem, returns_none=True)
 
+
+class PyBackend(BigFileBackend):
+    """ Access bigfile via Python File object.
+
+        Read and Write are both supported.
+    """
+    def open(self, filename, mode, buffering):
+        return open(filename, mode + "b", buffering)
+
+    def mkdir(self, dirname):
+        os.mkdir(dirname)
+
+    def scandir(self, dirname):
+        r = []
+        with os.scandir(dirname) as it:
+            for entry in it:
+                if not entry.name.startswith(b"."):
+                    r.append(entry.name)
+        return sorted(r)
+
+class URLBackend(BigFileBackend):
+    """ Access bigfile via urllib.request.
+
+        This is Read-Only. Column discovery is not supported.
+    """
+    def open(self, filename, mode, buffering):
+        from urllib import request
+        return request.urlopen(filename)
+
+    def mkdir(self, dirname):
+        return
+
+    def scandir(self, dirname):
+        return []
+ 
 class Column(ColumnLowLevelAPI):
 
     def __init__(self, backend):
@@ -90,6 +123,9 @@ class Column(ColumnLowLevelAPI):
 
 class FileBase(FileLowLevelAPI):
     def __init__(self, filename, create, backend):
+        if backend is None:
+            backend = PyBackend()
+
         FileLowLevelAPI.__init__(self, filename, create=create, backend=backend)
         self._blocks = []
         self.comm = None
@@ -206,10 +242,6 @@ class ColumnMPI(Column):
             super(ColumnMPI, self).create(f, blockname, dtype, size, Nfile)
             super(ColumnMPI, self).close()
         return self.open(f, blockname)
-
-    @_enhance_getslice
-    def __getitem__(self, index):
-        return Column.__getitem__(self, index)
 
     def open(self, f, blockname):
         if not check_unique(blockname, self.comm):
@@ -397,6 +429,9 @@ class Dataset(pyxbigfile.Dataset):
         elif isstrlist(sl):
             assert all([(col in self.dtype.names) for col in sl])
             return type(self)(self.file, sl)
+        elif numpy.isscalar(sl):
+            sl = slice(sl, sl + 1)
+            return self[sl][0]
         else:
             return self._getslice(sl)
 

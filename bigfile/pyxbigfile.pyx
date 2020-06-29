@@ -248,10 +248,13 @@ cdef class BigFileBackend:
         pass
 
     def open(self, filename, mode, buffering):
-        return open(filename, mode + "b", buffering)
+        raise NotImplementedError
 
     def mkdir(self, dirname):
-        os.mkdir(dirname)
+        raise NotImplementedError
+
+    def scandir(self, dirname):
+        raise NotImplementedError
 
     @staticmethod
     cdef CBigFileStream _fopen(void * backend,
@@ -293,14 +296,10 @@ cdef class BigFileBackend:
     @staticmethod
     cdef int _dscan(void * backend, const char * dirname, char *** names, char **error) with gil:
         cdef BigFileBackend self = <BigFileBackend>backend
-        r = []
-        with os.scandir(dirname) as it:
-            for entry in it:
-                if not entry.name.startswith(b"."):
-                    r.append(entry.name)
+        r = self.scandir(dirname)
 
         names[0] = <char**>malloc(sizeof(char*) * len(r))
-        for i, name in enumerate(sorted(r)):
+        for i, name in enumerate(r):
             names[0][i] = strdup(name)
         return len(r)
 
@@ -325,9 +324,6 @@ cdef class FileLowLevelAPI:
                 rt = big_file_open(&self.bf, filenameptr)
         if rt != 0:
             raise Error()
-
-        if backend is None:
-            backend = BigFileBackend()
 
         self.backend = backend
 
