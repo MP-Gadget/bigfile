@@ -52,11 +52,11 @@ static BigAttrSet *
 attrset_create(void);
 static void attrset_free(BigAttrSet * attrset);
 static int
-attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename);
+attrset_read_attr_set_v1(const BigFileMethods * methods, BigAttrSet * attrset, const char * basename);
 static int
-attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename);
+attrset_read_attr_set_v2(const BigFileMethods * methods, BigAttrSet * attrset, const char * basename);
 static int
-attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename);
+attrset_write_attr_set_v2(const BigFileMethods * methods, BigAttrSet * attrset, const char * basename);
 static BigAttr *
 attrset_lookup_attr(BigAttrSet * attrset, const char * attrname);
 static int
@@ -142,9 +142,9 @@ static char * _path_join(const char * part1, const char * part2)
 }
 
 static int
-_big_file_path_is_block(const char * basename)
+_big_file_path_is_block(const BigFileMethods * methods, const char * basename)
 {
-    FILE * fheader = _big_file_open_a_file(basename, FILEID_HEADER, "r", 0);
+    FILE * fheader = _big_file_open_a_file(methods, basename, FILEID_HEADER, "r", 0);
     if(fheader == NULL) {
         return 0;
     }
@@ -184,6 +184,7 @@ int
 big_file_open(BigFile * bf, const char * basename)
 {
     struct stat st;
+    big_file_set_methods(bf, NULL);
     RAISEIF(0 != stat(basename, &st),
             ex_stat,
             "Big File `%s' does not exist (%s)", basename,
@@ -196,12 +197,27 @@ ex_stat:
 
 int big_file_create(BigFile * bf, const char * basename) {
     bf->basename = _strdup(basename);
+    big_file_set_methods(bf, NULL);
     RAISEIF(0 != _big_file_mksubdir_r(NULL, basename),
         ex_subdir,
         NULL);
     return 0;
 ex_subdir:
     return -1;
+}
+
+void
+big_file_set_methods(BigFile * bf, const BigFileMethods * methods)
+{
+    if(methods == NULL) {
+        bf->methods->fopen = (void*) fopen;
+        bf->methods->fclose= (void*) fclose;
+        bf->methods->fread = (void*) fread;
+        bf->methods->fwrite = (void*) fwrite;
+        bf->methods->fflush = (void*) fflush;
+    } else {
+        memcpy(&bf->methods, methods, sizeof(methods[0]));
+    }
 }
 
 struct bblist {
@@ -221,7 +237,11 @@ _alphasort (const struct dirent **a, const struct dirent **b)
 }
 
 static struct
-bblist * listbigfile_r(const char * basename, char * blockname, struct bblist * bblist) {
+bblist * listbigfile_r(const BigFileMethods * methods,
+    const char * basename,
+    char * blockname,
+    struct bblist * bblist)
+{
     struct dirent **namelist;
     int n;
     int i;
@@ -237,14 +257,14 @@ bblist * listbigfile_r(const char * basename, char * blockname, struct bblist * 
     for(i = 0; i < n ; i ++) {
         char * blockname1 = _path_join(blockname, namelist[i]->d_name);
         char * fullpath1 = _path_join(basename, blockname1);
-        if(_big_file_path_is_block(fullpath1)) {
+        if(_big_file_path_is_block(methods, fullpath1)) {
             struct bblist * n = malloc(sizeof(struct bblist) + strlen(blockname1) + 1);
             n->next = bblist;
             n->blockname = (char*) &n[1];
             strcpy(n->blockname, blockname1);
             bblist = n;
         } else {
-            bblist = listbigfile_r(basename, blockname1, bblist);
+            bblist = listbigfile_r(methods, basename, blockname1, bblist);
         }
         free(fullpath1);
         free(blockname1);
@@ -257,7 +277,7 @@ bblist * listbigfile_r(const char * basename, char * blockname, struct bblist * 
 int
 big_file_list(BigFile * bf, char *** blocknames, int * Nblocks)
 {
-    struct bblist * bblist = listbigfile_r(bf->basename, "", NULL);
+    struct bblist * bblist = listbigfile_r(bf->methods, bf->basename, "", NULL);
     struct bblist * p;
     int N = 0;
     int i;
@@ -279,19 +299,25 @@ int
 big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname)
 {
     char * basename = _path_join(bf->basename, blockname);
-    int rt = _big_block_open(block, basename);
+    int rt = _big_block_open(block, bf->methods, basename);
     free(basename);
     return rt;
 }
 
 int
-big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
+big_file_create_block(BigFile * bf,
+    BigBlock * block,
+    const char * blockname,
+    const char * dtype,
+    int nmemb,
+    int Nfile,
+    const size_t fsize[])
 {
     RAISEIF(0 != _big_file_mksubdir_r(bf->basename, blockname),
             ex_subdir,
             NULL);
     char * basename = _path_join(bf->basename, blockname);
-    int rt = _big_block_create(block, basename, dtype, nmemb, Nfile, fsize);
+    int rt = _big_block_create(block, bf->methods, basename, dtype, nmemb, Nfile, fsize);
     free(basename);
     return rt;
 ex_subdir:
@@ -312,9 +338,13 @@ sysvsum(unsigned int * sum, void * buf, size_t size);
 /* Bigblock */
 
 int
-_big_block_open(BigBlock * bb, const char * basename)
+_big_block_open(BigBlock * bb,
+    const BigFileMethods * methods,
+    const char * basename)
 {
     memset(bb, 0, sizeof(bb[0]));
+    memcpy(bb->methods, methods, sizeof(methods[0]));
+
     if(basename == NULL) basename = "/.";
     bb->basename = _strdup(basename);
     bb->dirty = 0;
@@ -322,16 +352,16 @@ _big_block_open(BigBlock * bb, const char * basename)
     bb->attrset = attrset_create();
 
     /* COMPATIBLE WITH V1 ATTR FILES */
-    RAISEIF(0 != attrset_read_attr_set_v1(bb->attrset, bb->basename),
+    RAISEIF(0 != attrset_read_attr_set_v1(bb->methods, bb->attrset, bb->basename),
             ex_readattr,
             NULL);
 
-    RAISEIF(0 != attrset_read_attr_set_v2(bb->attrset, bb->basename),
+    RAISEIF(0 != attrset_read_attr_set_v2(bb->methods, bb->attrset, bb->basename),
             ex_readattr,
             NULL);
 
     if (!endswith(bb->basename, "/.") && 0 != strcmp(bb->basename, ".")) {
-        FILE * fheader = _big_file_open_a_file(bb->basename, FILEID_HEADER, "r", 1);
+        FILE * fheader = _big_file_open_a_file(bb->methods, bb->basename, FILEID_HEADER, "r", 1);
         RAISEIF (!fheader,
                 ex_open,
                 NULL);
@@ -457,9 +487,9 @@ big_block_grow(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[])
 
     /* now truncate the new files */
     for(i = oldNfile; i < bb->Nfile; i ++) {
-        FILE * fp = _big_file_open_a_file(bb->basename, i, "w", 1);
-        RAISEIF(fp == NULL, 
-                ex_fileio, 
+        FILE * fp = _big_file_open_a_file(bb->methods, bb->basename, i, "w", 1);
+        RAISEIF(fp == NULL,
+                ex_fileio,
                 NULL);
         fclose(fp);
     }
@@ -470,9 +500,16 @@ ex_fileio:
 }
 
 int
-_big_block_create_internal(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
+_big_block_create_internal(BigBlock * bb,
+    const BigFileMethods * methods,
+    const char * basename,
+    const char * dtype,
+    int nmemb,
+    int Nfile,
+    const size_t fsize[])
 {
     memset(bb, 0, sizeof(bb[0]));
+    memcpy(bb->methods, methods, sizeof(methods[0]));
 
     if(basename == NULL) basename = "/.";
 
@@ -553,9 +590,15 @@ ex_name:
 }
 
 int
-_big_block_create(BigBlock * bb, const char * basename, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
+_big_block_create(BigBlock * bb,
+    const BigFileMethods * methods,
+    const char * basename,
+    const char * dtype,
+    int nmemb,
+    int Nfile,
+    const size_t fsize[])
 {
-    int rt = _big_block_create_internal(bb, basename, dtype, nmemb, Nfile, fsize);
+    int rt = _big_block_create_internal(bb, methods, basename, dtype, nmemb, Nfile, fsize);
     int i;
     RAISEIF(rt != 0,
                 ex_internal,
@@ -563,9 +606,9 @@ _big_block_create(BigBlock * bb, const char * basename, const char * dtype, int 
 
     /* now truncate all files */
     for(i = 0; i < bb->Nfile; i ++) {
-        FILE * fp = _big_file_open_a_file(bb->basename, i, "w", 1);
-        RAISEIF(fp == NULL, 
-                ex_fileio, 
+        FILE * fp = _big_file_open_a_file(bb->methods, bb->basename, i, "w", 1);
+        RAISEIF(fp == NULL,
+                ex_fileio,
                 NULL);
         fclose(fp);
     }
@@ -588,7 +631,7 @@ big_block_flush(BigBlock * block)
     FILE * fheader = NULL;
     if(block->dirty) {
         int i;
-        fheader = _big_file_open_a_file(block->basename, FILEID_HEADER, "w+", 1);
+        fheader = _big_file_open_a_file(block->methods, block->basename, FILEID_HEADER, "w+", 1);
         RAISEIF(fheader == NULL, ex_fileio, NULL);
         RAISEIF(
             (0 > fprintf(fheader, "DTYPE: %s\n", block->dtype)) ||
@@ -607,7 +650,7 @@ big_block_flush(BigBlock * block)
         block->dirty = 0;
     }
     if(block->attrset->dirty) {
-        RAISEIF(0 != attrset_write_attr_set_v2(block->attrset, block->basename),
+        RAISEIF(0 != attrset_write_attr_set_v2(block->methods, block->attrset, block->basename),
             ex_write_attr,
             NULL);
         block->attrset->dirty = 0;
@@ -847,7 +890,7 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         /* read to the beginning of chunk */
         big_array_iter_init(&chunk_iter, &chunk_array);
 
-        fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r", 1);
+        fp = _big_file_open_a_file(bb->methods, bb->basename, ptr->fileid, "r", 1);
         RAISEIF(fp == NULL,
                 ex_open,
                 NULL);
@@ -942,7 +985,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 
         sysvsum(&bb->fchecksum[ptr->fileid], chunkbuf, chunk_size * felsize);
 
-        fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r+", 1);
+        fp = _big_file_open_a_file(bb->methods, bb->basename, ptr->fileid, "r+", 1);
         RAISEIF(fp == NULL,
                 ex_open,
                 NULL);
@@ -1432,11 +1475,13 @@ sysvsum(unsigned int * sum, void * buf, size_t size)
  * */
 
 static int
-attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
+attrset_read_attr_set_v1(const BigFileMethods * methods,
+    BigAttrSet * attrset,
+    const char * basename)
 {
     attrset->dirty = 0;
 
-    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR, "r", 0);
+    FILE * fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR, "r", 0);
     if(fattr == NULL) {
         return 0;
     }
@@ -1483,11 +1528,13 @@ static int _isblank(int ch) {
 }
 
 static int
-attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
+attrset_read_attr_set_v2(const BigFileMethods * methods,
+    BigAttrSet * attrset,
+    const char * basename)
 {
     attrset->dirty = 0;
 
-    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR_V2, "r", 0);
+    FILE * fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR_V2, "r", 0);
     if(fattr == NULL) {
         return 0;
     }
@@ -1558,12 +1605,14 @@ ex_init:
     return -1;
 }
 static int
-attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
+attrset_write_attr_set_v2(const BigFileMethods * methods,
+    BigAttrSet * attrset,
+    const char * basename)
 {
     static char conv[] = "0123456789ABCDEF";
     attrset->dirty = 0;
 
-    FILE * fattr = _big_file_open_a_file(basename, FILEID_ATTR_V2, "w", 1);
+    FILE * fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR_V2, "w", 1);
     RAISEIF(fattr == NULL,
             ex_open,
             NULL);
@@ -1835,6 +1884,8 @@ _big_attrset_unpack(void * p)
     return attrset;
 }
 
+/** Packing a BigBlock for communication over the network.
+ */
 void *
 _big_block_pack(BigBlock * block, size_t * bytes)
 {
@@ -1852,7 +1903,6 @@ _big_block_pack(BigBlock * block, size_t * bytes)
     void * buf = malloc(*bytes);
 
     char * ptr = (char *) buf;
-
 
     memcpy(ptr, block, sizeof(block[0]));
     ptr += sizeof(block[0]);
@@ -1874,12 +1924,26 @@ _big_block_pack(BigBlock * block, size_t * bytes)
     return buf;
 }
 
+ /** Unpacking a BigBlock from communication
+ *
+ * Note that the original methods member of block is preserved after unpacking.
+ * Because the function pointers received from buf is not a valid address in
+ * the current processes's address space.
+ *
+ * A different mechanism is needed to synchronize the methods member, e.g. by
+ * ensuring all BigBlocks are constructed from identically initialized BigFile objects.
+ */
 void
 _big_block_unpack(BigBlock * block, void * buf)
 {
     char * ptr = (char*)buf;
 
+    BigFileMethods methods[1];
+
+    memcpy(methods, block->methods, sizeof(methods[0]));
     memcpy(block, ptr, sizeof(block[0]));
+    memcpy(block->methods, methods, sizeof(methods[0]));
+
     ptr += sizeof(block[0]);
     int Nfile = block->Nfile;
 
@@ -1905,7 +1969,11 @@ _big_block_unpack(BigBlock * block, void * buf)
 /* File Path */
 
 FILE *
-_big_file_open_a_file(const char * basename, int fileid, char * mode, int raise)
+_big_file_open_a_file(const BigFileMethods * methods,
+    const char * basename,
+    int fileid,
+    char * mode,
+    int raise)
 {
     char * filename;
     int unbuffered = 0;
@@ -1923,7 +1991,7 @@ _big_file_open_a_file(const char * basename, int fileid, char * mode, int raise)
         filename = _path_join(basename, d);
         unbuffered = 1;
     }
-    FILE * fp = fopen(filename, mode);
+    FILE * fp = methods->fopen(filename, mode);
 
     if(!raise && fp == NULL) {
         goto ex_fopen;
@@ -1941,6 +2009,7 @@ ex_fopen:
     free(filename);
     return fp;
 }
+
 static
 int _big_file_mkdir(const char * dirname)
 {

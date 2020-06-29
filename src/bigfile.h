@@ -5,9 +5,21 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+typedef void * BigVFile;
+typedef struct BigFileMethods {
+    BigVFile (*fopen)(const char * filename, const char * mode);
+    size_t (*fread)(void *ptr, size_t size, size_t nmemb, BigVFile *stream);
+
+    size_t (*fwrite)(const void *ptr, size_t size, size_t nmemb,
+                 BigVFile *stream);
+    int (*fclose)(BigVFile handle, const char * mode);
+    int (*fflush)(BigVFile handle);
+} BigFileMethods;
+
 typedef struct BigFile {
     /* All members are readonly. Initialize with big_file_open / big_file_create */
     char * basename;
+    BigFileMethods methods[1];
 } BigFile;
 
 typedef struct BigAttr BigAttr;
@@ -37,6 +49,7 @@ typedef struct BigBlock {
     int Nfile;
     BigAttrSet * attrset;
     int dirty;
+    BigFileMethods methods[1];
 } BigBlock;
 
 typedef struct BigBlockPtr BigBlockPtr;
@@ -82,6 +95,9 @@ int big_file_open(BigFile * bf, const char * basename); /* raises */
  * @param BigFile bf - pointer to uninitialised structure.
  * @param const char * basename - String containing directory to put snapshot in.*/
 int big_file_create(BigFile * bf, const char * basename); /* raises */
+
+void big_file_set_methods(BigFile * bf, const BigFileMethods * methods);
+
 int big_file_list(BigFile * bf, char *** blocknames, int * Nblocks);
 int big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname); /* raises*/
 int big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, const size_t fsize[]); /* raises */
