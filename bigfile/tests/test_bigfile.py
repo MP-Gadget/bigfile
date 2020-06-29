@@ -1,12 +1,10 @@
-from bigfile import BigFile
-from bigfile import BigBlock
-from bigfile import BigFileMPI
-from bigfile import BigData
+from bigfile import File
+from bigfile import Dataset
+from bigfile import Column
+from bigfile import FileMPI
 from bigfile import BigFileClosedError
 from bigfile import BigBlockClosedError
 from bigfile import BigFileError
-
-from bigfile import Dataset
 
 import tempfile
 import numpy
@@ -42,7 +40,7 @@ def sanitized_name(s):
 @MPITest([1])
 def test_create(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
     x.create('.')
 
     for name, d in dtypes:
@@ -88,7 +86,7 @@ def test_create(comm):
     for b in x:
         assert b in x
 
-    bd = BigData(x)
+    bd = Dataset(x)
     assert set(bd.dtype.names) == set(x.blocks)
     d = bd[:]
 
@@ -97,7 +95,7 @@ def test_create(comm):
 @MPITest([1])
 def test_create_odd(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
     x.create('.')
 
 
@@ -123,7 +121,7 @@ def test_create_odd(comm):
 @MPITest([1])
 def test_append(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
 
     name = 'f4'
     d = numpy.dtype(('f4', 3))
@@ -151,7 +149,7 @@ def test_append(comm):
 def test_fileattr(comm):
     import os.path
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
     assert not os.path.exists(os.path.join(fname, 'attr-v2'))
     assert not os.path.exists(os.path.join(fname, '000000'))
     with x['.'] as bb:
@@ -166,7 +164,7 @@ def test_fileattr(comm):
 def test_file_large_attr(comm):
     import os.path
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
     data = numpy.ones(1024 * 128 * 8, dtype='f8')
 
     with x['.'] as bb:
@@ -180,7 +178,7 @@ def test_file_large_attr(comm):
 @MPITest([1])
 def test_casts(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
 
     with x.create('block', Nfile=1, dtype='f8', size=128) as b:
         assert_raises(BigFileError, b.write, 0, numpy.array('aaaaaa'))
@@ -189,7 +187,7 @@ def test_casts(comm):
 @MPITest([1])
 def test_passby(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
 
     # half floats are pass-through types, no casting is supported
     data = numpy.array([3.0, 5.0], dtype='f2')
@@ -201,7 +199,7 @@ def test_passby(comm):
 @MPITest([1])
 def test_dataset(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
     x.create('.')
 
     for name, d in dtypes:
@@ -216,10 +214,10 @@ def test_dataset(comm):
     bd = Dataset(x)
     assert set(bd.dtype.names) == set(x.blocks)
     assert isinstance(bd[:], numpy.ndarray)
-    assert isinstance(bd['f8'], BigBlock)
+    assert isinstance(bd['f8'], Column)
     assert_equal(len(bd['f8'].dtype), 0)
     # tuple of one item is the same as non-tuple
-    assert isinstance(bd[('f8',)], BigBlock)
+    assert isinstance(bd[('f8',)], Column)
     assert_equal(len(bd[('f8',)].dtype), 0)
 
     assert isinstance(bd['f8', :10], numpy.ndarray)
@@ -230,7 +228,7 @@ def test_dataset(comm):
     # tuple of one item is the same as non-tuple
     assert_equal(len(bd[('f8',), :10].dtype), 0)
     assert isinstance(bd[:10, 'f8'], numpy.ndarray)
-    assert isinstance(bd['f8'], BigBlock)
+    assert isinstance(bd['f8'], Column)
     assert isinstance(bd[['f8', 'f4'],], Dataset)
     assert_equal(len(bd[['f8', 'f4'],].dtype), 2)
     assert isinstance(bd[['f8', 'f4'], :10], numpy.ndarray)
@@ -257,7 +255,7 @@ def test_dataset(comm):
 @MPITest([1])
 def test_closed(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
     x.create('.')
     x.close()
     assert x.blocks == []
@@ -269,7 +267,7 @@ def test_closed(comm):
 @MPITest([1])
 def test_attr_objects(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
     with x.create('block', dtype=None) as b:
         def set_obj1():
             b.attrs['objects'] = numpy.array([object()])
@@ -282,7 +280,7 @@ def test_attr_objects(comm):
 @MPITest([1])
 def test_attr(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
     with x.create('.', dtype=None) as b:
         b.attrs['int'] = 128
         b.attrs['float'] = [128.0, 3, 4]
@@ -320,7 +318,7 @@ def test_mpi_create(comm):
         fname = comm.bcast(fname)
     else:
         fname = comm.bcast(None)
-    x = BigFileMPI(comm, fname, create=True)
+    x = FileMPI(comm, fname, create=True)
     for name, d in dtypes:
         d = numpy.dtype(d)
         numpy.random.seed(1234)
@@ -354,7 +352,7 @@ def test_mpi_create(comm):
     for b in x:
         assert b in x
 
-    bd = BigData(x)
+    bd = Dataset(x)
     assert set(bd.dtype.names) == set(x.blocks)
     d = bd[:]
 
@@ -369,7 +367,7 @@ def test_mpi_attr(comm):
         fname = comm.bcast(fname)
     else:
         fname = comm.bcast(None)
-    x = BigFileMPI(comm, fname, create=True)
+    x = FileMPI(comm, fname, create=True)
 
     with x.create('.', dtype=None) as b:
         b.attrs['int'] = 128
@@ -395,7 +393,7 @@ def test_mpi_attr(comm):
 
 def test_version():
     import bigfile
-    assert hasattr(bigfile, '__version__')
+    assert hasattr(File, '__version__')
 
 @MPITest(commsize=[1, 4])
 def test_mpi_large(comm):
@@ -404,7 +402,7 @@ def test_mpi_large(comm):
         fname = comm.bcast(fname)
     else:
         fname = comm.bcast(None)
-    x = BigFileMPI(comm, fname, create=True)
+    x = FileMPI(comm, fname, create=True)
 
     size= 1024 * 1024
     for name, d in dtypes:
@@ -429,7 +427,7 @@ def test_mpi_large(comm):
 def test_mpi_badfilenames(comm):
     fname = tempfile.mkdtemp()
     fname = fname + '%d' % comm.rank
-    assert_raises(BigFileError, BigFileMPI, comm, fname, create=True)
+    assert_raises(BigFileError, FileMPI, comm, fname, create=True)
 
 @MPITest(commsize=[1])
 def test_threads(comm):
@@ -439,7 +437,7 @@ def test_threads(comm):
     from threading import Thread, Event
     import gc
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
 
     b = x.create("Threading", Nfile=1, dtype='i8', size=128)
 
@@ -481,7 +479,7 @@ def test_threads(comm):
 @MPITest(commsize=[1])
 def test_blank_attr(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
 
     with x.create("Header", Nfile=1, dtype=None, size=128) as b:
         with pytest.raises(BigFileError):
@@ -506,7 +504,7 @@ def test_blank_attr(comm):
 @MPITest(commsize=[1])
 def test_pickle(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
 
     # test creating
     column = x.create("abc", dtype='f8', size=128)
@@ -539,7 +537,7 @@ def test_pickle(comm):
 @MPITest(commsize=[1])
 def test_string(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
 
     # test creating
     with x.create("Header", Nfile=1, dtype=None, size=128) as b:
@@ -562,7 +560,7 @@ def test_string(comm):
 @MPITest([1])
 def test_slicing(comm):
     fname = tempfile.mkdtemp()
-    x = BigFile(fname, create=True)
+    x = File(fname, create=True)
     x.create('.')
 
     numpy.random.seed(1234)

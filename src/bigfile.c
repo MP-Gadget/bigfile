@@ -1083,8 +1083,8 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     ptrdiff_t abs = bb->foffset[ptr->fileid] + ptr->roffset + towrite;
     RAISEIF(abs > bb->size,
                 ex_eof,
-                "Writing beyond the block `%s` at (%d:%td)",
-                bb->basename, ptr->fileid, ptr->roffset * felsize);
+                "Writing beyond the block `%s` at (%d:%td) %td > %td",
+                bb->basename, ptr->fileid, ptr->roffset * felsize, abs, bb->size);
 
     while(towrite > 0 && ! big_block_eof(bb, ptr)) {
         size_t chunk_size = CHUNK_SIZE;
