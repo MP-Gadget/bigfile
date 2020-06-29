@@ -66,10 +66,9 @@ class PyBackend(BigFileBackend):
 
     def scandir(self, dirname):
         r = []
-        with os.scandir(dirname) as it:
-            for entry in it:
-                if not entry.name.startswith(b"."):
-                    r.append(entry.name)
+        for entry in os.listdir(dirname):
+            if not entry.startswith(b"."):
+                r.append(entry)
         return sorted(r)
 
 class URLBackend(BigFileBackend):
