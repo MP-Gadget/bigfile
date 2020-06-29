@@ -353,6 +353,7 @@ int main(int argc, char * argv[]) {
     for(mode = 0; mode < 4; mode ++) {
         if(0 == strcmp(MODES[mode], smode)) break;
     }
+    free(smode);
     if(mode == 4) {
         usage(); goto byebye;
     }
