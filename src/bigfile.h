@@ -7,13 +7,18 @@ extern "C" {
 #endif
 typedef void * BigVFile;
 typedef struct BigFileMethods {
-    BigVFile (*fopen)(const char * filename, const char * mode);
-    size_t (*fread)(void *ptr, size_t size, size_t nmemb, BigVFile *stream);
+    int (*mkdir)(const char * dirname, char ** error);
+    int (*dscan)(const char * dirname, char *** names);
 
-    size_t (*fwrite)(const void *ptr, size_t size, size_t nmemb,
-                 BigVFile *stream);
-    int (*fclose)(BigVFile handle, const char * mode);
-    int (*fflush)(BigVFile handle);
+    BigVFile (*fopen)(const char * filename,
+                    const char * mode,
+                    int buffered,
+                    char ** error);
+    int (*fseek)(BigVFile stream, long offset, int whence, char ** error);
+    size_t (*fread)(BigVFile stream, void *ptr, size_t size, char ** error);
+    char * (*freadall)(BigVFile stream, char ** error);
+    size_t (*fwrite)(BigVFile stream, const void *ptr, size_t size, char ** error);
+    int (*fclose)(BigVFile handle);
 } BigFileMethods;
 
 typedef struct BigFile {

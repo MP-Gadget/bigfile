@@ -1,5 +1,5 @@
 
-int _big_file_mksubdir_r(const char * pathname, const char * subdir);
+int _big_file_mksubdir_r(const BigFileMethods * methods, const char * pathname, const char * subdir);
 
 int _dtype_convert(BigArrayIter * dst, BigArrayIter * src, size_t nmemb);
 
@@ -13,7 +13,7 @@ void _big_block_close_internal(BigBlock * block);
 int _big_block_grow_internal(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[]);
 
 /* The internal routine to open a physical file */
-FILE * _big_file_open_a_file(const BigFileMethods * methods, const char * basename, int fileid, char * mode, int raise);
+BigVFile _big_file_open_a_file(const BigFileMethods * methods, const char * basename, int fileid, char * mode, int raise);
 
 /* Internal routine to serialize/deserialize a block. */
 

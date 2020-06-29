@@ -126,7 +126,7 @@ _big_file_mpi_create_block(BigFile * bf,
 
     int rt = 0;
     if (rank == 0) {
-        rt = _big_file_mksubdir_r(bf->basename, blockname);
+        rt = _big_file_mksubdir_r(bf->methods, bf->basename, blockname);
     } else {
         rt = 0;
     }
