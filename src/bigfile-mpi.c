@@ -49,7 +49,7 @@ int big_file_mpi_open(BigFile * bf, const char * basename, MPI_Comm comm) {
         bf->basename = _strdup(basename);
         rt = 0;
     }
-
+    big_file_mpi_set_methods(bf, NULL, comm);
     BCAST_AND_RAISEIF(rt, comm);
 
     return rt;
@@ -67,9 +67,14 @@ int big_file_mpi_create(BigFile * bf, const char * basename, MPI_Comm comm) {
         bf->basename = _strdup(basename);
         rt = 0;
     }
+    big_file_mpi_set_methods(bf, NULL, comm);
     BCAST_AND_RAISEIF(rt, comm);
-
     return rt;
+}
+
+void big_file_mpi_set_methods(BigFile * bf, const BigFileMethods * methods, MPI_Comm comm)
+{
+    big_file_set_methods(bf, methods);
 }
 
 /**Helper function for big_file_mpi_create_block, above*/

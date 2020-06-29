@@ -32,10 +32,7 @@ int big_file_mpi_create(BigFile * bf, const char * basename, MPI_Comm comm);
  * @param const BigFileMethods * methods - pointer to an initialized methods structure or, NULL to use stdio.
  * @param MPI_Comm comm - MPI communicator. Unused.
  */
-inline void big_file_mpi_set_methods(BigFile * bf, const BigFileMethods * methods, MPI_Comm comm)
-{
-    big_file_set_methods(bf, methods);
-}
+void big_file_mpi_set_methods(BigFile * bf, const BigFileMethods * methods, MPI_Comm comm);
 
 /** Open a BigBlock:
  * A BigBlock stores a two dimesional table of nmemb columns and size rows. Numerical typed columns are supported.
