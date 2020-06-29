@@ -13,7 +13,7 @@ void _big_block_close_internal(BigBlock * block);
 int _big_block_grow_internal(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[]);
 
 /* The internal routine to open a physical file */
-BigVFile _big_file_open_a_file(const BigFileMethods * methods, const char * basename, int fileid, char * mode, int raise);
+BigFileStream _big_file_open_a_file(const BigFileMethods * methods, const char * basename, int fileid, char * mode, int raise);
 
 /* Internal routine to serialize/deserialize a block. */
 

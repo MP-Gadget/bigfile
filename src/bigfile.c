@@ -143,7 +143,7 @@ static char * _path_join(const char * part1, const char * part2)
 static int
 _big_file_path_is_block(const BigFileMethods * methods, const char * basename)
 {
-    BigVFile fheader = _big_file_open_a_file(methods, basename, FILEID_HEADER, "r", 0);
+    BigFileStream fheader = _big_file_open_a_file(methods, basename, FILEID_HEADER, "r", 0);
     if(fheader == NULL) {
         return 0;
     }
@@ -205,10 +205,10 @@ ex_subdir:
     return -1;
 }
 
-static BigVFile
-_fopen_posix(const char * filename, const char * mode, int buffered, char ** error)
+static BigFileStream
+_fopen_posix(void * backend, const char * filename, const char * mode, int buffered, char ** error)
 {
-    BigVFile fp = fopen(filename, mode);
+    BigFileStream fp = fopen(filename, mode);
     if(fp == NULL) {
         *error = _strdup(strerror(errno));
         return NULL;
@@ -220,7 +220,7 @@ _fopen_posix(const char * filename, const char * mode, int buffered, char ** err
 }
 
 static int
-_fseek_posix(BigVFile fp, long offset, int whence, char ** error)
+_fseek_posix(BigFileStream fp, long offset, int whence, char ** error)
 {
     int r = fseek(fp, offset, whence);
     if(r < 0) {
@@ -230,7 +230,7 @@ _fseek_posix(BigVFile fp, long offset, int whence, char ** error)
 }
 
 static size_t
-_fread_posix(BigVFile fp, void * ptr, size_t size, char ** error)
+_fread_posix(BigFileStream fp, void * ptr, size_t size, char ** error)
 {
     size_t r = fread(ptr, 1, size, fp);
     if(r != size) {
@@ -240,7 +240,7 @@ _fread_posix(BigVFile fp, void * ptr, size_t size, char ** error)
 }
 
 static char *
-_freadall_posix(BigVFile fp, char ** error)
+_freadall_posix(BigFileStream fp, char ** error)
 {
     char * buffer = NULL;
 
@@ -268,7 +268,7 @@ _freadall_posix(BigVFile fp, char ** error)
 }
 
 static size_t
-_fwrite_posix(BigVFile fp, const void * ptr, size_t size, char ** error)
+_fwrite_posix(BigFileStream fp, const void * ptr, size_t size, char ** error)
 {
     size_t r = fwrite(ptr, 1, size, fp);
     if(r != size) {
@@ -289,7 +289,8 @@ _alphasort (const struct dirent **a, const struct dirent **b)
     return strcoll ((*a)->d_name, (*b)->d_name);
 }
 
-static int _dscan_posix(const char * dirname, char *** names)
+/* FIXME: forward os errors */
+static int _dscan_posix(void * backend, const char * dirname, char *** names, char ** error)
 {
     struct dirent **namelist;
     int n = scandir(dirname, &namelist, filter, _alphasort);
@@ -305,7 +306,7 @@ static int _dscan_posix(const char * dirname, char *** names)
 }
 
 static
-int _mkdir_posix(const char * dirname, char ** error)
+int _mkdir_posix(void * backend, const char * dirname, char ** error)
 {
     struct stat buf;
     int mkdirret;
@@ -335,6 +336,8 @@ void
 big_file_set_methods(BigFile * bf, const BigFileMethods * methods)
 {
     if(methods == NULL) {
+        /* POSIX backend */
+        bf->methods->backend = NULL;
         bf->methods->dscan = _dscan_posix;
         bf->methods->mkdir = _mkdir_posix;
         bf->methods->fopen = _fopen_posix;
@@ -365,8 +368,9 @@ bblist * listbigfile_r(const BigFileMethods * methods,
     char ** namelist = NULL;
     char * current;
     current = _path_join(basename, blockname);
+    char * error = NULL;
 
-    n = methods->dscan(current, &namelist);
+    n = methods->dscan(methods->backend, current, &namelist, error);
     free(current);
     if (n < 0)
         return bblist;
@@ -388,6 +392,9 @@ bblist * listbigfile_r(const BigFileMethods * methods,
         free(namelist[i]);
     }
     free(namelist);
+    if(error) {
+        free(error);
+    }
     return bblist;
 }
 
@@ -478,7 +485,7 @@ _big_block_open(BigBlock * bb,
             NULL);
 
     if (!endswith(bb->basename, "/.") && 0 != strcmp(bb->basename, ".")) {
-        BigVFile fheader = _big_file_open_a_file(bb->methods, bb->basename, FILEID_HEADER, "r", 1);
+        BigFileStream fheader = _big_file_open_a_file(bb->methods, bb->basename, FILEID_HEADER, "r", 1);
         RAISEIF (!fheader,
                 ex_open,
                 NULL);
@@ -604,7 +611,7 @@ big_block_grow(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[])
 
     /* now truncate the new files */
     for(i = oldNfile; i < bb->Nfile; i ++) {
-        BigVFile fp = _big_file_open_a_file(bb->methods, bb->basename, i, "w", 1);
+        BigFileStream fp = _big_file_open_a_file(bb->methods, bb->basename, i, "w", 1);
         RAISEIF(fp == NULL,
                 ex_fileio,
                 NULL);
@@ -723,7 +730,7 @@ _big_block_create(BigBlock * bb,
 
     /* now truncate all files */
     for(i = 0; i < bb->Nfile; i ++) {
-        BigVFile fp = _big_file_open_a_file(bb->methods, bb->basename, i, "w", 1);
+        BigFileStream fp = _big_file_open_a_file(bb->methods, bb->basename, i, "w", 1);
         RAISEIF(fp == NULL,
                 ex_fileio,
                 NULL);
@@ -745,7 +752,7 @@ big_block_set_dirty(BigBlock * block, int value)
 int
 big_block_flush(BigBlock * block)
 {
-    BigVFile fheader = NULL;
+    BigFileStream fheader = NULL;
     if(block->dirty) {
         int i;
         fheader = _big_file_open_a_file(block->methods, block->basename, FILEID_HEADER, "w+", 1);
@@ -970,7 +977,7 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     BigArrayIter chunk_iter;
     BigArrayIter array_iter;
 
-    BigVFile fp = NULL;
+    BigFileStream fp = NULL;
     ptrdiff_t toread = 0;
 
     RAISEIF(chunkbuf == NULL,
@@ -1069,7 +1076,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     BigArrayIter chunk_iter;
     BigArrayIter array_iter;
     ptrdiff_t towrite = 0;
-    BigVFile fp;
+    BigFileStream fp;
 
     RAISEIF(chunkbuf == NULL,
             ex_malloc,
@@ -1604,7 +1611,7 @@ attrset_read_attr_set_v1(const BigFileMethods * methods,
 {
     attrset->dirty = 0;
 
-    BigVFile fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR, "r", 0);
+    BigFileStream fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR, "r", 0);
     if(fattr == NULL) {
         return 0;
     }
@@ -1658,7 +1665,7 @@ attrset_read_attr_set_v2(const BigFileMethods * methods,
     attrset->dirty = 0;
     char * error = NULL;
 
-    BigVFile fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR_V2, "r", 0);
+    BigFileStream fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR_V2, "r", 0);
     if(fattr == NULL) {
         return 0;
     }
@@ -1735,7 +1742,7 @@ attrset_write_attr_set_v2(const BigFileMethods * methods,
 
     char * error = NULL;
 
-    BigVFile fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR_V2, "w", 1);
+    BigFileStream fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR_V2, "w", 1);
     RAISEIF(fattr == NULL,
             ex_open,
             NULL);
@@ -2097,7 +2104,7 @@ _big_block_unpack(BigBlock * block, void * buf)
 
 /* File Path */
 
-BigVFile
+BigFileStream
 _big_file_open_a_file(const BigFileMethods * methods,
     const char * basename,
     int fileid,
@@ -2121,7 +2128,7 @@ _big_file_open_a_file(const BigFileMethods * methods,
         unbuffered = 1;
     }
     char * error = NULL;
-    BigVFile fp = methods->fopen(filename, mode, !unbuffered, &error);
+    BigFileStream fp = methods->fopen(methods->backend, filename, mode, !unbuffered, &error);
 
     if(!raise && fp == NULL) {
         goto ex_fopen;
@@ -2156,14 +2163,14 @@ _big_file_mksubdir_r(const BigFileMethods * methods,
         *p = 0;
         mydirname = _path_join(pathname, subdirname);
         if(strlen(mydirname) != 0) {
-            RAISEIF(0 != methods->mkdir(mydirname, &error),
+            RAISEIF(0 != methods->mkdir(methods->backend, mydirname, &error),
                 ex_mkdir, "%s", error);
         }
         free(mydirname);
         *p = '/';
     }
     mydirname = _path_join(pathname, subdirname);
-    RAISEIF(0 != methods->mkdir(mydirname, &error),
+    RAISEIF(0 != methods->mkdir(methods->backend, mydirname, &error),
         ex_mkdir, "%s", error);
 
     free(subdirname);

@@ -1,9 +1,13 @@
 #cython: embedsignature=True
+
+from cpython.ref cimport Py_INCREF, Py_DECREF
 cimport numpy
 from libc.stddef cimport ptrdiff_t
-from libc.string cimport strcpy, memcpy
-from libc.stdlib cimport free
+from libc.string cimport strcpy, memcpy, strdup
+from libc.stdlib cimport free, malloc
+
 import numpy
+import os
 
 numpy.import_array()
 
@@ -15,7 +19,25 @@ except NameError:
     def isstr(s):
         return isinstance(s, str)
 
-cdef extern from "bigfile.h":
+
+cdef extern from "bigfile.c":
+    ctypedef void * CBigFileStream "BigFileStream"
+
+    struct CBigFileMethods "BigFileMethods":
+      int (*mkdir)(void * backend, const char * dirname, char ** error)
+      int (*dscan)(void * backend, const char * dirname, char *** names, char ** error)
+
+      CBigFileStream (*fopen)(void * backend, const char * filename,
+                    const char * mode,
+                    int buffered,
+                    char ** error)
+      int (*fseek)(CBigFileStream stream, long offset, int whence, char ** error)
+      size_t (*fread)(CBigFileStream stream, void *ptr, size_t size, char ** error)
+      char * (*freadall)(CBigFileStream stream, char ** error)
+      size_t (*fwrite)(CBigFileStream stream, const void *ptr, size_t size, char ** error)
+      int (*fclose)(CBigFileStream handle)
+        
+
     struct CBigFile "BigFile":
         char * basename
 
@@ -133,6 +155,117 @@ def _unpickle_file(kls, state):
     obj = FileLowLevelAPI.__new__(kls)
     obj.__setstate__(state)
     return obj
+
+cdef class BigFilePyStream:
+    def __init__(self, fobj):
+        self.fobj = fobj
+
+    @staticmethod
+    cdef int _fclose(CBigFileStream stream) with gil:
+        cdef self = <BigFilePyStream>stream
+        self.fobj.close()
+        return 0
+ 
+    @staticmethod
+    cdef size_t _fread(CBigFileStream stream, void * buf, size_t size, char ** error) with gil:
+        cdef self = <BigFilePyStream>stream
+        cdef numpy.ndarray data
+        try:
+            data = numpy.fromfile(self.fobj, size, dtype='u1')
+        except Exception as e:
+            error[0] = strdup(str(e))
+            return 0
+        memcpy(buf, data.data, size)
+        return size
+
+    @staticmethod
+    cdef size_t _fwrite(CBigFileStream stream, const void * buf, size_t size, char ** error) with gil:
+        cdef self = <BigFilePyStream>stream
+        try:
+            numpy.tofile(self.fobj, <const char [:size:1]>buf)
+        except Exception as e:
+            error[0] = strdup(str(e))
+            return 0
+        return size
+
+    @staticmethod
+    cdef char * _freadall(CBigFileStream stream, char ** error) with gil:
+        cdef self = <BigFilePyStream>stream
+        try:
+            return self.fobj.read()
+        except Exception as e:
+            error[0] = strdup(str(e))
+            return NULL
+
+    @staticmethod
+    cdef int _fseek(CBigFileStream stream, long offset, int whence, char ** error) with gil:
+        cdef self = <BigFilePyStream>stream
+        try:
+            self.fobj.seek(offset, whence)
+            return 0   
+        except Exception as e:
+            error[0] = strdup(str(e))
+            return -1
+
+cdef class BigFileBackend:
+    cdef CBigFileMethods methods
+
+    def __cinit__(self):
+        self.methods.fopen = BigFileBackend._fopen
+        self.methods.mkdir = BigFileBackend._mkdir
+        self.methods.dscan = BigFileBackend._dscan
+        self.methods.fclose = BigFilePyStream._fclose
+        self.methods.fread = BigFilePyStream._fread
+        self.methods.fwrite = BigFilePyStream._fwrite
+        self.methods.freadall = BigFilePyStream._freadall
+        self.methods.fseek = BigFilePyStream._fseek
+
+    def open(self, filename, mode):
+        return open(filename, mode)
+
+    def mkdir(self, dirname):
+        os.mkdir(dirname)
+
+    @staticmethod
+    cdef CBigFileStream _fopen(void * backend,
+        const char * filename,
+        const char * mode,
+        int buffered,
+        char ** error) with gil:
+        cdef BigFileBackend self = <BigFileBackend>backend
+        try:
+            stream = BigFilePyStream(self.open(filename, mode))
+        except Exception as e:
+            error[0] = strdup(str(e))
+            return NULL
+
+        Py_INCREF(stream)
+        return <void*>stream
+
+    @staticmethod
+    cdef int _mkdir(void * backend, const char * dirname, char ** error) with gil:
+        cdef BigFileBackend self = <BigFileBackend>backend
+        try:
+            self.mkdir(dirname)
+        except Exception as e:
+            error[0] = strdup(str(e))
+            return -1
+        return 0 
+
+    # FIXME: forward errors
+    @staticmethod
+    cdef int _dscan(void * backend, const char * dirname, char *** names, char **error) with gil:
+        cdef BigFileBackend self = <BigFileBackend>backend
+        r = []
+        with os.scandir(dirname) as it:
+            for entry in it:
+                if not entry.name.startswith("."):
+                    r.append(entry.name)
+
+        names[0] = <char**>malloc(sizeof(char*) * len(r))
+        for i, name in enumerate(sorted(r)):
+            names[0][i] = strdup(name.encode())
+        return len(r)
 
 cdef class FileLowLevelAPI:
     cdef CBigFile bf
@@ -585,93 +718,3 @@ cdef class ColumnLowLevelAPI:
 
         return "<CBigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
                 self.dtype, self.size)
-
-cdef class Dataset:
-    cdef CBigRecordType rtype
-    cdef readonly FileLowLevelAPI file
-    cdef readonly size_t size
-    cdef readonly tuple shape
-    cdef readonly numpy.dtype dtype
-
-    def __init__(self, file, dtype, size):
-        self.file = file
-        self.rtype.nfield = 0
-        big_record_type_clear(&self.rtype)
-        fields = []
-
-        for i, name in enumerate(dtype.names):
-            basedtype = dtype[name].base.str.encode()
-            nmemb = int(numpy.prod(dtype[name].shape))
-
-            big_record_type_set(&self.rtype, i,
-                name.encode(),
-                basedtype,
-                nmemb,
-            )
-        big_record_type_complete(&self.rtype)
-
-        self.size = size
-        self.ndim = 1
-        self.shape = (size, )
-
-        dtype = []
-        # No need to use offset, because numpy is also
-        # compactly packed
-        for i in range(self.rtype.nfield):
-            if self.rtype.fields[i].nmemb == 1:
-                shape = 1
-            else:
-                shape = (self.rtype.fields[i].nmemb, )
-            dtype.append((
-                self.rtype.fields[i].name.decode(),
-                self.rtype.fields[i].dtype,
-                shape)
-            )
-        self.dtype = numpy.dtype(dtype, align=False)
-        assert self.dtype.itemsize == self.rtype.itemsize
-
-    def read(self, numpy.intp_t start, numpy.intp_t length, numpy.ndarray out=None):
-        if out is None:
-            out = numpy.empty(length, self.dtype)
-        with nogil:
-            rt = big_file_read_records(&self.file.bf, &self.rtype, start, length, out.data)
-        if rt != 0:
-            raise Error()
-        return out
-
-    def _create_records(self, numpy.intp_t size, numpy.intp_t Nfile=1, char * mode=b"w+"):
-        """ mode can be a+ or w+."""
-        cdef numpy.ndarray fsize
-
-        if Nfile < 0:
-            raise ValueError("Cannot create negative number of files.")
-        if Nfile == 0 and size != 0:
-            raise ValueError("Cannot create zero files for non-zero number of items.")
-
-        fsize = numpy.empty(dtype='intp', shape=Nfile)
-        fsize[:] = (numpy.arange(Nfile) + 1) * size // Nfile \
-                 - (numpy.arange(Nfile)) * size // Nfile
-
-        with nogil:
-            rt = big_file_create_records(&self.file.bf, &self.rtype, mode, Nfile, <size_t*>fsize.data)
-        if rt != 0:
-            raise Error()
-        self.size = self.size + size
-
-    def append(self, numpy.ndarray buf, numpy.intp_t Nfile=1):
-        assert buf.dtype == self.dtype
-        assert buf.ndim == 1
-        tail = self.size
-        self._create_records(len(buf), Nfile=Nfile, mode=b"a+")
-        self.write(tail, buf)
-
-    def write(self, numpy.intp_t start, numpy.ndarray buf):
-        assert buf.dtype == self.dtype
-        assert buf.ndim == 1
-        with nogil:
-            rt = big_file_write_records(&self.file.bf, &self.rtype, start, buf.shape[0], buf.data)
-        if rt != 0:
-            raise Error()
-
-    def __dealloc__(self):
-        big_record_type_clear(&self.rtype)

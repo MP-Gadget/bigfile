@@ -5,20 +5,21 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-typedef void * BigVFile;
+typedef void * BigFileStream;
 typedef struct BigFileMethods {
-    int (*mkdir)(const char * dirname, char ** error);
-    int (*dscan)(const char * dirname, char *** names);
+    void * backend;
+    int (*mkdir)(void * backend, const char * dirname, char ** error);
+    int (*dscan)(void * backend, const char * dirname, char *** names, char **error);
 
-    BigVFile (*fopen)(const char * filename,
+    BigFileStream (*fopen)(void* backend, const char * filename,
                     const char * mode,
                     int buffered,
                     char ** error);
-    int (*fseek)(BigVFile stream, long offset, int whence, char ** error);
-    size_t (*fread)(BigVFile stream, void *ptr, size_t size, char ** error);
-    char * (*freadall)(BigVFile stream, char ** error);
-    size_t (*fwrite)(BigVFile stream, const void *ptr, size_t size, char ** error);
-    int (*fclose)(BigVFile handle);
+    int (*fseek)(BigFileStream stream, long offset, int whence, char ** error);
+    size_t (*fread)(BigFileStream stream, void *ptr, size_t size, char ** error);
+    char * (*freadall)(BigFileStream stream, char ** error);
+    size_t (*fwrite)(BigFileStream stream, const void *ptr, size_t size, char ** error);
+    int (*fclose)(BigFileStream handle);
 } BigFileMethods;
 
 typedef struct BigFile {
