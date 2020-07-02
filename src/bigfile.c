@@ -415,9 +415,9 @@ _big_block_grow_internal(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[
 {
     int Nfile = Nfile_grow + bb->Nfile;
 
-    size_t * fsize = calloc(Nfile, sizeof(size_t));
+    size_t * fsize = calloc(Nfile + 1, sizeof(size_t));
     size_t * foffset = calloc(Nfile + 1, sizeof(size_t));
-    unsigned int * fchecksum = calloc(Nfile, sizeof(unsigned int));
+    unsigned int * fchecksum = calloc(Nfile + 1, sizeof(unsigned int));
 
     int i;
     for(i = 0; i < bb->Nfile; i ++) {
