@@ -10,6 +10,7 @@ from bigfile import URLBackend
 import tempfile
 import numpy
 import shutil
+import sys
 
 from numpy.testing import assert_equal
 from numpy.testing import assert_raises
@@ -596,6 +597,7 @@ def test_slicing(comm):
 
     shutil.rmtree(fname)
 
+@pytest.mark.skipif(sys.version_info < (3, 6), reason="urllib not in py2")
 @MPITest([1])
 def test_url_backend(comm):
     from urllib import request

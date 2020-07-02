@@ -153,13 +153,6 @@ class ColumnClosedError(Exception):
     def __init__(self, bigblock):
         Exception.__init__(self, "Block is closed")
 
-# An unpickle function via __reduce__ is needed for Python 2;
-# c.f. https://github.com/cython/cython/issues/2757
-def _unpickle_file(kls, state):
-    obj = FileLowLevelAPI.__new__(kls)
-    obj.__setstate__(state)
-    return obj
-
 cdef class BigFilePyStream:
     cdef readonly object fobj
     def __init__(self, fobj):
@@ -226,6 +219,14 @@ cdef class BigFilePyStream:
             error[0] = strdup(str(e).encode())
             return -1
 
+# An unpickle function via __reduce__ is needed for Python 2;
+# c.f. https://github.com/cython/cython/issues/2757
+def _unpickle_object(kls, basekls, state):
+    obj = basekls.__new__(kls)
+    obj.__setstate__(state)
+    return obj
+
+
 cdef class BigFileBackend:
     cdef CBigFileMethods methods
 
@@ -246,6 +247,9 @@ cdef class BigFileBackend:
 
     def __setstate__(self, state):
         pass
+
+    def __reduce__(self):
+        return _unpickle_object, (type(self), BigFileBackend, self.__getstate__(),)
 
     def open(self, filename, mode, buffering):
         raise NotImplementedError
@@ -339,7 +343,7 @@ cdef class FileLowLevelAPI:
             self._deallocated = True
 
     def __reduce__(self):
-        return _unpickle_file, (type(self), self.__getstate__(),)
+        return _unpickle_object, (type(self), FileLowLevelAPI, self.__getstate__(),)
 
     def __getstate__(self):
         return (self.bf.basename.decode(), self._deallocated, self.backend)
@@ -460,13 +464,6 @@ cdef class AttrSet:
                 for key in self]))
         return t
 
-# An unpickle function via __reduce__ is needed for Python 2;
-# c.f. https://github.com/cython/cython/issues/2757
-def _unpickle_column(kls, state):
-    obj = ColumnLowLevelAPI.__new__(kls)
-    obj.__setstate__(state)
-    return obj
-
 cdef class ColumnLowLevelAPI:
     cdef CBigBlock bb
     cdef public comm
@@ -511,7 +508,7 @@ cdef class ColumnLowLevelAPI:
         self.flush()
 
     def __reduce__(self):
-        return _unpickle_column, (type(self), self.__getstate__())
+        return _unpickle_object, (type(self), ColumnLowLevelAPI, self.__getstate__(),)
 
     def __getstate__(self):
         cdef void * buf
