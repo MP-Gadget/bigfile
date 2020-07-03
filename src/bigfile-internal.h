@@ -1,4 +1,6 @@
 
+void _big_file_set_methods(BigFile * bf, const BigFileMethods * methods);
+
 int _big_file_mksubdir_r(const BigFileMethods * methods, const char * pathname, const char * subdir);
 
 int _dtype_convert(BigArrayIter * dst, BigArrayIter * src, size_t nmemb);

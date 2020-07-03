@@ -5,7 +5,8 @@ from bigfile import FileMPI
 from bigfile import BigFileClosedError
 from bigfile import BigBlockClosedError
 from bigfile import BigFileError
-from bigfile import URLBackend
+from bigfile import HTTPBackend
+from bigfile import PyBackend
 
 import tempfile
 import numpy
@@ -600,10 +601,12 @@ def test_slicing(comm):
 @pytest.mark.skipif(sys.version_info < (3, 6), reason="urllib not in py2")
 @MPITest([1])
 def test_url_backend(comm):
-    from urllib import request
+    import threading
+    from http.server import HTTPServer
+    from .rangehttpserver import RangeRequestHandler
 
     fname = tempfile.mkdtemp()
-    x = File(fname, create=True)
+    x = File(fname, create=True, backend=PyBackend())
 
     with x.create('.', dtype=None) as b:
         b.attrs['int'] = 128
@@ -617,17 +620,31 @@ def test_url_backend(comm):
     with x.create('data', dtype='f8', size=128) as b:
         b[:] = numpy.arange(128)
 
-    y = File("file://" + request.pathname2url(fname), create=True, backend=URLBackend())
+    
+    httpd = HTTPServer(('localhost', 0), lambda *args: RangeRequestHandler(*args, directory=fname))
 
-    assert len(y.blocks) == 0
-    with y.open('.') as b:
-        assert_equal(b.attrs['int'], 128)
-        assert_equal(b.attrs['float'], [128.0, 3, 4])
-        assert_equal(b.attrs['string'],  'abcdefg')
-        assert_equal(b.attrs['complex'],  128 + 128J)
-        assert_equal(b.attrs['bool'],  True)
+    thread = threading.Thread(target=httpd.serve_forever)
 
-    with y.open('data') as b:
-        assert_equal(b[:],  numpy.arange(128))
+    
+    print(httpd.server_address)
+    try:
+        thread.start()
+
+        urlprefix = "http://%s:%d/" % httpd.server_address
+
+        y = File(urlprefix, backend=HTTPBackend())
+        assert len(y.blocks) == 0
+        with y.open('.') as b:
+            assert_equal(b.attrs['int'], 128)
+            assert_equal(b.attrs['float'], [128.0, 3, 4])
+            assert_equal(b.attrs['string'],  'abcdefg')
+            assert_equal(b.attrs['complex'],  128 + 128J)
+            assert_equal(b.attrs['bool'],  True)
+
+        with y.open('data') as b:
+            assert_equal(b[:],  numpy.arange(128))
+    finally:
+        httpd.shutdown()
+        thread.join()
         
     shutil.rmtree(fname)

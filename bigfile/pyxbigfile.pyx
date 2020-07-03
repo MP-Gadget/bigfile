@@ -28,6 +28,7 @@ cdef extern from "bigfile.h":
       void * backend
       int (*mkdir)(void * backend, const char * dirname, char ** error)
       int (*dscan)(void * backend, const char * dirname, char *** names, char ** error)
+      int (*dexists)(void * backend, const char * dirname, char ** error)
 
       CBigFileStream (*fopen)(void * backend, const char * filename,
                     const char * mode,
@@ -42,6 +43,7 @@ cdef extern from "bigfile.h":
 
     struct CBigFile "BigFile":
         char * basename
+        CBigFileMethods * methods
 
     struct CBigBlock "BigBlock":
         char * dtype
@@ -52,6 +54,7 @@ cdef extern from "bigfile.h":
         unsigned int * fchecksum; 
         int dirty
         CBigAttrSet * attrset;
+        CBigFileMethods * methods
 
     struct CBigBlockPtr "BigBlockPtr":
         pass
@@ -85,6 +88,7 @@ cdef extern from "bigfile.h":
         int nfield
         int itemsize
 
+    void big_file_methods_set_posix(CBigFileMethods * methods) nogil
     char * big_file_get_error_message() nogil
     void big_file_set_buffer_size(size_t bytes) nogil
     int big_block_grow(CBigBlock * bb, int Nfilegrow, size_t fsize[]) nogil
@@ -102,17 +106,15 @@ cdef extern from "bigfile.h":
     int big_block_set_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb) nogil
     int big_block_remove_attr(CBigBlock * block, char * attrname) nogil
     int big_block_get_attr(CBigBlock * block, char * attrname, void * data, char * dtype, int nmemb) nogil
-    void big_block_set_methods(CBigBlock * bb, CBigFileMethods * methods) nogil
     CBigAttr * big_block_lookup_attr(CBigBlock * block, char * attrname) nogil
     CBigAttr * big_block_list_attrs(CBigBlock * block, size_t * count) nogil
     int big_array_init(CBigArray * array, void * buf, char * dtype, int ndim, size_t dims[], ptrdiff_t strides[]) nogil
 
     int big_file_open_block(CBigFile * bf, CBigBlock * block, char * blockname) nogil
     int big_file_create_block(CBigFile * bf, CBigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[]) nogil
-    int big_file_open(CBigFile * bf, char * basename) nogil
-    void big_file_set_methods(CBigFile * bf, CBigFileMethods * methods) nogil
+    int big_file_open(CBigFile * bf, char * basename, CBigFileMethods * methods) nogil
     int big_file_list(CBigFile * bf, char *** list, int * N) nogil
-    int big_file_create(CBigFile * bf, char * basename) nogil
+    int big_file_create(CBigFile * bf, char * basename, CBigFileMethods * methods) nogil
     int big_file_close(CBigFile * bf) nogil
 
     void big_record_type_clear(CBigRecordType * rtype) nogil
@@ -169,21 +171,22 @@ cdef class BigFilePyStream:
     cdef size_t _fread(CBigFileStream stream, void * buf, size_t size, char ** error) with gil:
         print("read called")
         cdef self = <BigFilePyStream>stream
-        cdef numpy.ndarray data
+        cdef bytes data
         try:
-            data = numpy.fromfile(self.fobj, count=size, dtype='u1')
+            data = self.fobj.read(size)
         except Exception as e:
             error[0] = strdup(str(e).encode())
             return 0
-        memcpy(buf, data.data, size)
+        memcpy(buf, <char*>data, size)
         return size
 
     @staticmethod
     cdef size_t _fwrite(CBigFileStream stream, const void * buf, size_t size, char ** error) with gil:
-        print("wrtie called")
+        print("write called")
         cdef self = <BigFilePyStream>stream
+        cdef const char [::1] data = <const char [:size:1]>buf
         try:
-            numpy.array(<const char [:size:1]>buf).tofile(self.fobj)
+            self.fobj.write(data)
         except Exception as e:
             error[0] = strdup(str(e).encode())
             return 0
@@ -195,7 +198,6 @@ cdef class BigFilePyStream:
         cdef self = <BigFilePyStream>stream
         cdef char * r
         try:
-            self.fobj.seek(0)
             d = self.fobj.read()
             size = len(d)
             r = <char*>malloc(size + 1)
@@ -210,7 +212,7 @@ cdef class BigFilePyStream:
 
     @staticmethod
     cdef int _fseek(CBigFileStream stream, long offset, int whence, char ** error) with gil:
-        print("fseek called")
+        print("fseek called", offset, whence)
         cdef self = <BigFilePyStream>stream
         try:
             self.fobj.seek(offset, whence)
@@ -234,6 +236,7 @@ cdef class BigFileBackend:
         self.methods.fopen = BigFileBackend._fopen
         self.methods.mkdir = BigFileBackend._mkdir
         self.methods.dscan = BigFileBackend._dscan
+        self.methods.dexists = BigFileBackend._dexists
         self.methods.fclose = BigFilePyStream._fclose
         self.methods.fread = BigFilePyStream._fread
         self.methods.fwrite = BigFilePyStream._fwrite
@@ -241,7 +244,8 @@ cdef class BigFileBackend:
         self.methods.fseek = BigFilePyStream._fseek
         self.methods.backend = <void*> self
         print("backend is ", "%X" % <size_t> self.methods.backend, self)
-
+        print("dexists is ", "%X" % <size_t> self.methods.dexists, self)
+    
     def __getstate__(self):
         return ()
 
@@ -258,6 +262,9 @@ cdef class BigFileBackend:
         raise NotImplementedError
 
     def scandir(self, dirname):
+        raise NotImplementedError
+
+    def dexists(self, dirname):
         raise NotImplementedError
 
     @staticmethod
@@ -285,7 +292,7 @@ cdef class BigFileBackend:
     cdef int _mkdir(void * backend, const char * dirname, char ** error) with gil:
         cdef BigFileBackend self = <BigFileBackend>backend
         try:
-            self.mkdir(dirname)
+            self.mkdir(dirname.decode())
         except (IOError, OSError) as e:
             if e.errno == errno.EEXIST:
                 return 0
@@ -307,6 +314,23 @@ cdef class BigFileBackend:
             names[0][i] = strdup(name)
         return len(r)
 
+    @staticmethod
+    cdef int _dexists(void * backend, const char * dirname, char **error) with gil:
+        cdef BigFileBackend self = <BigFileBackend>backend
+        try:
+            return self.dexists(dirname.decode())
+        except Exception as e:
+            print(e)
+            error[0] = strdup(str(e).encode())
+            print(error[0])
+            return 0
+        return 0
+
+cdef class POSIXBackend(BigFileBackend):
+    def __cinit__(self):
+        big_file_methods_set_posix(&self.methods)
+
+
 cdef class FileLowLevelAPI:
     cdef CBigFile bf
     cdef readonly object backend
@@ -322,19 +346,15 @@ cdef class FileLowLevelAPI:
         cdef char * filenameptr = filename
         if create:
             with nogil:
-                rt = big_file_create(&self.bf, filenameptr)
+                rt = big_file_create(&self.bf, filenameptr, &backend.methods)
         else:
             with nogil:
-                rt = big_file_open(&self.bf, filenameptr)
+                rt = big_file_open(&self.bf, filenameptr, &backend.methods)
         if rt != 0:
             raise Error()
 
         self.backend = backend
 
-        if backend is not None:
-            big_file_set_methods(&self.bf, &backend.methods)
-        else:
-            big_file_set_methods(&self.bf, NULL)
         self._deallocated = False
 
     def __dealloc__(self):
@@ -356,13 +376,10 @@ cdef class FileLowLevelAPI:
 
         self._deallocated = deallocated
         self.backend = backend
-        if backend is not None:
-            big_file_set_methods(&self.bf, &backend.methods)
-        else:
-            big_file_set_methods(&self.bf, NULL)
+
         if not deallocated:
             with nogil:
-                rt = big_file_open(&self.bf, filenameptr)
+                rt = big_file_open(&self.bf, filenameptr, &backend.methods)
 
     property basename:
         def __get__(self):
@@ -434,8 +451,6 @@ cdef class AttrSet:
     def __setitem__(self, name, value):
         name = name.encode()
 
-
-
         if isstr(value):
             dtype = b'a1'
             value = numpy.array(str(value).encode()).ravel().view(dtype='S1').ravel()
@@ -495,11 +510,7 @@ cdef class ColumnLowLevelAPI:
 
     def __init__(self, BigFileBackend backend):
         self.backend = backend
-        if backend is not None:
-            big_block_set_methods(&self.bb, &backend.methods)
-        else:
-            big_block_set_methods(&self.bb, NULL)
-        print("Column created with", self.backend)
+        self.bb.methods[0] = backend.methods
 
     def __enter__(self):
         return self
@@ -534,10 +545,7 @@ cdef class ColumnLowLevelAPI:
         self._deallocated = deallocated
 
         self.backend = backend
-        if backend is not None:
-            big_block_set_methods(&self.bb, &backend.methods)
-        else:
-            big_block_set_methods(&self.bb, NULL)
+        self.bb.methods[0] = backend.methods
 
         if not deallocated:
             _big_block_unpack(&self.bb, container.data)
@@ -568,7 +576,6 @@ cdef class ColumnLowLevelAPI:
                         0, 0, NULL)
             if rt != 0:
                 raise Error()
-            print("CREATE called", self)
         else:
             if Nfile < 0:
                 raise ValueError("Cannot create negative number of files.")

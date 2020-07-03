@@ -2,6 +2,7 @@ from .version import __version__
 
 from .pyxbigfile import Error, FileClosedError, ColumnClosedError
 from .pyxbigfile import BigFileBackend
+from .pyxbigfile import POSIXBackend
 from .pyxbigfile import ColumnLowLevelAPI
 from .pyxbigfile import FileLowLevelAPI
 from .pyxbigfile import set_buffer_size
@@ -64,6 +65,9 @@ class PyBackend(BigFileBackend):
     def mkdir(self, dirname):
         os.mkdir(dirname)
 
+    def dexists(self, dirname):
+        return os.path.exists(dirname)
+
     def scandir(self, dirname):
         r = []
         for entry in os.listdir(dirname):
@@ -71,14 +75,22 @@ class PyBackend(BigFileBackend):
                 r.append(entry)
         return sorted(r)
 
-class URLBackend(BigFileBackend):
-    """ Access bigfile via urllib.request.
+class HTTPBackend(BigFileBackend):
+    """ Access bigfile via HTTP.
 
         This is Read-Only. Column discovery is not supported.
     """
     def open(self, filename, mode, buffering):
-        from urllib import request
-        return request.urlopen(filename)
+        from .httpio import HTTPIOFile
+        return HTTPIOFile(filename)
+
+    def dexists(self, dirname):
+        from .httpio import HTTPIOFile
+        try:
+            HTTPIOFile(dirname)
+            return True
+        except FileNotFoundError:
+            return False 
 
     def mkdir(self, dirname):
         return
@@ -125,8 +137,7 @@ class Column(ColumnLowLevelAPI):
 class FileBase(FileLowLevelAPI):
     def __init__(self, filename, create, backend):
         if backend is None:
-            backend = PyBackend()
-
+            backend = POSIXBackend()
         FileLowLevelAPI.__init__(self, filename, create=create, backend=backend)
         self._blocks = []
         self.comm = None

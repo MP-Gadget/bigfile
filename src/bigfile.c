@@ -180,23 +180,28 @@ _big_file_raise(const char * msg, const char * file, const int line, ...)
 /* BigFile */
 
 int
-big_file_open(BigFile * bf, const char * basename)
+big_file_open(BigFile * bf, const char * basename, const BigFileMethods * methods)
 {
-    struct stat st;
-    big_file_set_methods(bf, NULL);
-    RAISEIF(0 != stat(basename, &st),
+    _big_file_set_methods(bf, methods);
+    char * error = NULL;
+    int exists = bf->methods->dexists(bf->methods->backend, basename, &error);
+    RAISEIF(error,
             ex_stat,
-            "Big File `%s' does not exist (%s)", basename,
-            strerror(errno));
+            "Failure to check existence of `%s': %s", basename, error);
+    RAISEIF(exists == 0,
+        ex_stat,
+        "BigFile `%s` does not exists", basename);
     bf->basename = _strdup(basename);
     return 0;
 ex_stat:
     return -1;
 }
 
-int big_file_create(BigFile * bf, const char * basename) {
+int
+big_file_create(BigFile * bf, const char * basename, const BigFileMethods * methods)
+{
+    _big_file_set_methods(bf, methods);
     bf->basename = _strdup(basename);
-    big_file_set_methods(bf, NULL);
     RAISEIF(0 != _big_file_mksubdir_r(bf->methods, NULL, basename),
         ex_subdir,
         NULL);
@@ -332,8 +337,23 @@ int _mkdir_posix(void * backend, const char * dirname, char ** error)
     return 0;
 }
 
-static void
-_big_file_set_posix(BigFileMethods * methods) {
+static int
+_dexists_posix(void * backend, const char * dirname, char ** error)
+{
+    abort();
+    struct stat st;
+    if(0 != stat(dirname, &st)) {
+        if(errno == ENOENT) {
+            return 0;
+        } else {
+            *error = _strdup(strerror(errno));
+        }
+    }
+    return -1;
+}
+
+void
+big_file_methods_set_posix(BigFileMethods * methods) {
     /* POSIX backend */
     methods->backend = NULL;
     methods->dscan = _dscan_posix;
@@ -344,25 +364,16 @@ _big_file_set_posix(BigFileMethods * methods) {
     methods->freadall = _freadall_posix;
     methods->fseek = _fseek_posix;
     methods->fwrite = _fwrite_posix;
+    methods->dexists = _dexists_posix;
 }
 
 void
-big_file_set_methods(BigFile * bf, const BigFileMethods * methods)
+_big_file_set_methods(BigFile * bf, const BigFileMethods * methods)
 {
     if(methods == NULL) {
-        _big_file_set_posix(bf->methods);
+        big_file_methods_set_posix(bf->methods);
     } else {
-        memcpy(&bf->methods, methods, sizeof(methods[0]));
-    }
-}
-
-void
-big_block_set_methods(BigBlock * bb, const BigFileMethods * methods)
-{
-    if(methods == NULL) {
-        _big_file_set_posix(bb->methods);
-    } else {
-        memcpy(&bb->methods, methods, sizeof(methods[0]));
+        bf->methods[0] = *methods;
     }
 }
 
@@ -1667,6 +1678,7 @@ attrset_read_attr_set_v1(const BigFileMethods * methods,
     BigAttrSet * attrset,
     const char * basename)
 {
+    return 0;
     attrset->dirty = 0;
 
     BigFileStream fattr = _big_file_open_a_file(methods, basename, FILEID_ATTR, "r", 0);

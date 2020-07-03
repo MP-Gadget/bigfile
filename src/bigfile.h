@@ -9,6 +9,7 @@ typedef void * BigFileStream;
 typedef struct BigFileMethods {
     void * backend;
     int (*mkdir)(void * backend, const char * dirname, char ** error);
+    int (*dexists)(void * backend, const char * dirname, char ** error);
     int (*dscan)(void * backend, const char * dirname, char *** names, char **error);
 
     BigFileStream (*fopen)(void* backend, const char * filename,
@@ -89,27 +90,28 @@ int big_file_set_buffer_size(size_t bytes);
 char * big_file_get_error_message(void);
 void big_file_set_error_message(char * msg);
 
+void big_file_methods_set_posix(BigFileMethods * methods);
+
 /** Open a Bigfile: this stats the directory tree, but does not open the file.
  * It initialises the BigFile structure.
  * Arguments:
  * @param BigFile bf - pointer to uninitialised structure.
- * @param const char * basename - String containing directory to put snapshot in.*/
-int big_file_open(BigFile * bf, const char * basename); /* raises */
+ * @param const char * basename - String containing directory to put snapshot in.
+ * @param const BigFileMethods * methods - backend method table.*/
+int big_file_open(BigFile * bf, const char * basename, const BigFileMethods * methods); /* raises */
 
 /** Create a Bigfile: this makes the directory tree and initialises the BigFile structure.
  * Arguments:
  * @param BigFile bf - pointer to uninitialised structure.
- * @param const char * basename - String containing directory to put snapshot in.*/
-int big_file_create(BigFile * bf, const char * basename); /* raises */
-
-void big_file_set_methods(BigFile * bf, const BigFileMethods * methods);
+ * @param const char * basename - String containing directory to put snapshot in.
+ * @param const BigFileMethods * methods - backend method table.*/
+int big_file_create(BigFile * bf, const char * basename, const BigFileMethods * methods); /* raises */
 
 int big_file_list(BigFile * bf, char *** blocknames, int * Nblocks);
 int big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname); /* raises*/
 int big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, const size_t fsize[]); /* raises */
 int big_file_close(BigFile * bf); /* raises */
 
-void big_block_set_methods(BigBlock * block, const BigFileMethods * methods);
 int big_block_close(BigBlock * block); /* raises */
 int big_block_grow(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[]); /* raises */
 int big_block_flush(BigBlock * block); /* raises */
