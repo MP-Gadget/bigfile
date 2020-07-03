@@ -49,7 +49,7 @@ int main(int argc, char * argv[]) {
         usage();
     }
     argv += optind - 1;
-    if(0 != big_file_create(&bf, argv[1])) {
+    if(0 != big_file_create(&bf, argv[1], NULL)) {
         fprintf(stderr, "failed to open: %s: %s\n", argv[1], big_file_get_error_message());
         exit(1);
     }

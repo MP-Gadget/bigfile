@@ -43,14 +43,14 @@ int main(int argc, char * argv[]) {
         usage();
     }
     argv += optind - 1;
-    if(0 != big_file_open(&bf, argv[1])) {
+    if(0 != big_file_open(&bf, argv[1], NULL)) {
         fprintf(stderr, "failed to open: %s\n", big_file_get_error_message());
         exit(1);
     }
     if(newfile == NULL) {
         newfile = argv[1];
     }
-    if(0 != big_file_create(&bfnew, newfile)) {
+    if(0 != big_file_create(&bfnew, newfile, NULL)) {
         fprintf(stderr, "failed to open: %s\n", big_file_get_error_message());
         exit(1);
     }
