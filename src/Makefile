@@ -1,6 +1,7 @@
 MPICC ?= mpicc
 PREFIX ?=/usr
 CFLAGS ?=
+AR ?= ar
 PIC ?= -fPIC
 
 .PHONY: all
@@ -26,10 +27,10 @@ mp-mpiu.o: mp-mpiu.c mp-mpiu.h
 	$(MPICC) $(CFLAGS) $(PIC) -o $@ -c mp-mpiu.c
 
 libbigfile.a: bigfile.o bigfile-record.o
-	ar r $@ $^
-	ranlib $@
+	$(AR) r $@ $^
+	$(AR) s $@
 libbigfile-mpi.a: bigfile-mpi.o mp-mpiu.o
-	ar r $@ $^
-	ranlib $@
+	$(AR) r $@ $^
+	$(AR) s $@
 clean:
 	rm -f *.a *.o
