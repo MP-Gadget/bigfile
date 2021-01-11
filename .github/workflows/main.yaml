@@ -98,6 +98,9 @@ jobs:
         shell: bash -l {0}
 
     steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+
     - name: Check Tags
       run: |
        bash check_tag.sh "${GITHUB_REF##*/}" bigfile/version.py
