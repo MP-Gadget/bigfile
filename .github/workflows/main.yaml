@@ -89,13 +89,20 @@ jobs:
       run: |
         python ./runtests.py
 
+  pypi:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
     - name: Check Tags
-      if: startsWith(github.ref, 'refs/tags')
       run: |
        bash check_tag.sh "${GITHUB_REF##*/}" bigfile/version.py
 
     - name: Publish distribution to PyPI
-      if: startsWith(github.ref, 'refs/tags')
       uses: pypa/gh-action-pypi-publish@master
       with:
         password: ${{ secrets.PYPI_SECRET }}
