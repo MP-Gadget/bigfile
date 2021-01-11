@@ -3,9 +3,11 @@
 name: main
 
 on:
+  schedule:
+    - cron:  '* * * * 5'   # Runs on every Friday.
   push:
     branches: [ '*', $default-branch ]
-    tags: ['[0-9]*']
+    tags: ['[0-9]*']   # anything looks like a version.
   pull_request:
     branches: [ $default-branch ]
 
@@ -21,7 +23,7 @@ jobs:
 
     defaults:
       run:
-        shell: bash -l {0}
+        shell: bash -l {0}   # for conda.
 
     strategy:
       fail-fast: false
@@ -73,10 +75,6 @@ jobs:
         cmake -DCMAKE_INSTALL_PREFIX:PATH=install ..
         make install
 
-    - name: Build Python
-      run: |
-        python setup.py install
-
     - name: C Unit tests
       run: |
         mpirun -n 4 build/utils/bigfile-iosim -n 1 -s 1024000 create test
@@ -90,10 +88,11 @@ jobs:
       run: |
         python ./runtests.py
 
-    - name: Check Tags
+    - name: Build Python sdist
       if: startsWith(github.ref, 'refs/tags') && matrix.deploy
       run: |
-       bash check_tag.sh "${GITHUB_REF##*/}" bigfile/version.py
+        bash check_tag.sh "${GITHUB_REF##*/}" bigfile/version.py
+        python setup.py sdist
 
     - name: Publish distribution to PyPI
       uses: pypa/gh-action-pypi-publish@master
