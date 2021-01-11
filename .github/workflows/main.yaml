@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    runs-on: [ ubuntu-latest, macos-latest ]
+    runs-on: ${{ matrix.os }}
     env:
       OMP_NUM_THREADS: 1
       OMPI_MCA_rmaps_base_no_oversubscribe: 0
@@ -24,6 +24,7 @@ jobs:
 
     strategy:
       matrix:
+        os: [ ubuntu-latest, macos-latest ]
         numpy_version: [ 1.16 ]
         python_version: [2.7, 3.8]
 
