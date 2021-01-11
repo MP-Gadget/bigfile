@@ -55,16 +55,19 @@ jobs:
 
     - name: Setup test env
       run: |
+        conda install -q -y \
+               python=${{ matrix.python-version }} \
+               numpy=${{ matrix.numpy-version }} \
+               nose cython mpi4py \
+               compilers
         conda install -q -y cmake
-        conda install compilers
-        conda install -q -y python=${{ matrix.python-version }} numpy=${{ matrix.numpy-version }} nose cython mpi4py
         conda install -q -y runtests
 
     - name: Build C
       run: |
         mkdir build
         cd build
-        cmake -DCMAKE_INSTALL_PREFIX:PATH=install .. 
+        cmake -DCMAKE_INSTALL_PREFIX:PATH=install ..
         make install
 
     - name: Build Python
