@@ -17,12 +17,15 @@ jobs:
       OMPI_MCA_rmaps_base_oversubscribe: 1
       OMPI_MCA_mpi_yield_when_idle: 1
       OMPI_MCA_mpi_show_mca_params: 1
+
     defaults:
       run:
         shell: bash -l {0}
-    matrix:
-      numpy_version: [ 1.16 ]
-      python_version: [2.7, 3.8]
+
+    strategy:
+      matrix:
+        numpy_version: [ 1.16 ]
+        python_version: [2.7, 3.8]
 
     steps:
 
