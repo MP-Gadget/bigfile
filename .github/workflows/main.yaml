@@ -23,6 +23,7 @@ jobs:
         shell: bash -l {0}
 
     strategy:
+      fail-fast: false
       matrix:
         os: [ ubuntu-latest, macos-latest ]
         numpy-version: [ 1.16 ]
