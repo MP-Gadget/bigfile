@@ -29,7 +29,8 @@ jobs:
         os: [ ubuntu-latest, macos-latest ]
         numpy-version: [ 1.16 ]
         python-version: [ 2.7, 3.8 ]
-        include: {deploy: true, os: ubuntu-latest, numpy-version: 1.16, python-version: 3.8 }
+        include:
+          - {deploy: true, os: ubuntu-latest, numpy-version: 1.16, python-version: 3.8 }
     steps:
 
     - name: Checkout source code
