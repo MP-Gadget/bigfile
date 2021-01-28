@@ -1,9 +1,14 @@
 #cython: embedsignature=True
+
+from cpython.ref cimport Py_INCREF, Py_DECREF
 cimport numpy
 from libc.stddef cimport ptrdiff_t
-from libc.string cimport strcpy, memcpy
-from libc.stdlib cimport free
+from libc.string cimport strcpy, memcpy, strdup
+from libc.stdlib cimport free, malloc
+
 import numpy
+import os
+import errno
 
 numpy.import_array()
 
@@ -15,9 +20,30 @@ except NameError:
     def isstr(s):
         return isinstance(s, str)
 
+
 cdef extern from "bigfile.h":
+    ctypedef void * CBigFileStream "BigFileStream"
+
+    struct CBigFileMethods "BigFileMethods":
+      void * backend
+      int (*mkdir)(void * backend, const char * dirname, char ** error)
+      int (*dscan)(void * backend, const char * dirname, char *** names, char ** error)
+      int (*dexists)(void * backend, const char * dirname, char ** error)
+
+      CBigFileStream (*fopen)(void * backend, const char * filename,
+                    const char * mode,
+                    int buffered,
+                    char ** error)
+      int (*fseek)(CBigFileStream stream, long offset, int whence, char ** error)
+      size_t (*fread)(CBigFileStream stream, void *ptr, size_t size, char ** error)
+      size_t (*freadall)(CBigFileStream stream, char ** buffer, char ** error)
+      size_t (*fwrite)(CBigFileStream stream, const void *ptr, size_t size, char ** error)
+      int (*fclose)(CBigFileStream handle)
+        
+
     struct CBigFile "BigFile":
         char * basename
+        CBigFileMethods * methods
 
     struct CBigBlock "BigBlock":
         char * dtype
@@ -28,6 +54,7 @@ cdef extern from "bigfile.h":
         unsigned int * fchecksum; 
         int dirty
         CBigAttrSet * attrset;
+        CBigFileMethods * methods
 
     struct CBigBlockPtr "BigBlockPtr":
         pass
@@ -61,6 +88,7 @@ cdef extern from "bigfile.h":
         int nfield
         int itemsize
 
+    void big_file_methods_set_posix(CBigFileMethods * methods) nogil
     char * big_file_get_error_message() nogil
     void big_file_set_buffer_size(size_t bytes) nogil
     int big_block_grow(CBigBlock * bb, int Nfilegrow, size_t fsize[]) nogil
@@ -84,9 +112,9 @@ cdef extern from "bigfile.h":
 
     int big_file_open_block(CBigFile * bf, CBigBlock * block, char * blockname) nogil
     int big_file_create_block(CBigFile * bf, CBigBlock * block, char * blockname, char * dtype, int nmemb, int Nfile, size_t fsize[]) nogil
-    int big_file_open(CBigFile * bf, char * basename) nogil
+    int big_file_open(CBigFile * bf, char * basename, CBigFileMethods * methods) nogil
     int big_file_list(CBigFile * bf, char *** list, int * N) nogil
-    int big_file_create(CBigFile * bf, char * basename) nogil
+    int big_file_create(CBigFile * bf, char * basename, CBigFileMethods * methods) nogil
     int big_file_close(CBigFile * bf) nogil
 
     void big_record_type_clear(CBigRecordType * rtype) nogil
@@ -127,33 +155,206 @@ class ColumnClosedError(Exception):
     def __init__(self, bigblock):
         Exception.__init__(self, "Block is closed")
 
+cdef class BigFilePyStream:
+    cdef readonly object fobj
+    def __init__(self, fobj):
+        self.fobj = fobj
+
+    @staticmethod
+    cdef int _fclose(CBigFileStream stream) with gil:
+        print("fclose called")
+        cdef self = <BigFilePyStream>stream
+        self.fobj.close()
+        return 0
+ 
+    @staticmethod
+    cdef size_t _fread(CBigFileStream stream, void * buf, size_t size, char ** error) with gil:
+        print("read called")
+        cdef self = <BigFilePyStream>stream
+        cdef bytes data
+        try:
+            data = self.fobj.read(size)
+        except Exception as e:
+            error[0] = strdup(str(e).encode())
+            return 0
+        memcpy(buf, <char*>data, size)
+        return size
+
+    @staticmethod
+    cdef size_t _fwrite(CBigFileStream stream, const void * buf, size_t size, char ** error) with gil:
+        print("write called")
+        cdef self = <BigFilePyStream>stream
+        cdef const char [::1] data = <const char [:size:1]>buf
+        try:
+            self.fobj.write(data)
+        except Exception as e:
+            error[0] = strdup(str(e).encode())
+            return 0
+        return size
+
+    @staticmethod
+    cdef size_t _freadall(CBigFileStream stream, char ** buffer, char ** error) with gil:
+        print("freadall called")
+        cdef self = <BigFilePyStream>stream
+        cdef char * r
+        try:
+            d = self.fobj.read()
+            size = len(d)
+            r = <char*>malloc(size + 1)
+            memcpy(r, <char*>d, size)
+            r[size] = 0
+            buffer[0] = r
+            return size
+        except Exception as e:
+            buffer[0] = NULL
+            error[0] = strdup(str(e).encode())
+            return 0
+
+    @staticmethod
+    cdef int _fseek(CBigFileStream stream, long offset, int whence, char ** error) with gil:
+        print("fseek called", offset, whence)
+        cdef self = <BigFilePyStream>stream
+        try:
+            self.fobj.seek(offset, whence)
+            return 0   
+        except Exception as e:
+            error[0] = strdup(str(e).encode())
+            return -1
+
 # An unpickle function via __reduce__ is needed for Python 2;
 # c.f. https://github.com/cython/cython/issues/2757
-def _unpickle_file(kls, state):
-    obj = FileLowLevelAPI.__new__(kls)
+def _unpickle_object(kls, basekls, state):
+    obj = basekls.__new__(kls)
     obj.__setstate__(state)
     return obj
 
+
+cdef class BigFileBackend:
+    cdef CBigFileMethods methods
+
+    def __cinit__(self):
+        self.methods.fopen = BigFileBackend._fopen
+        self.methods.mkdir = BigFileBackend._mkdir
+        self.methods.dscan = BigFileBackend._dscan
+        self.methods.dexists = BigFileBackend._dexists
+        self.methods.fclose = BigFilePyStream._fclose
+        self.methods.fread = BigFilePyStream._fread
+        self.methods.fwrite = BigFilePyStream._fwrite
+        self.methods.freadall = BigFilePyStream._freadall
+        self.methods.fseek = BigFilePyStream._fseek
+        self.methods.backend = <void*> self
+        print("backend is ", "%X" % <size_t> self.methods.backend, self)
+        print("dexists is ", "%X" % <size_t> self.methods.dexists, self)
+    
+    def __getstate__(self):
+        return ()
+
+    def __setstate__(self, state):
+        pass
+
+    def __reduce__(self):
+        return _unpickle_object, (type(self), BigFileBackend, self.__getstate__(),)
+
+    def open(self, filename, mode, buffering):
+        raise NotImplementedError
+
+    def mkdir(self, dirname):
+        raise NotImplementedError
+
+    def scandir(self, dirname):
+        raise NotImplementedError
+
+    def dexists(self, dirname):
+        raise NotImplementedError
+
+    @staticmethod
+    cdef CBigFileStream _fopen(void * backend,
+        const char * filename,
+        const char * mode,
+        int buffered,
+        char ** error) with gil:
+        cdef BigFileBackend self = <BigFileBackend> backend
+        print("fopen self",  self)
+        print("fopen filename = ", filename)
+        print("fopen mode = ", mode)
+        print("fopen backend = ",  "%X" % <size_t> backend)
+        print("fopen self",  self)
+        try:
+            stream = BigFilePyStream(self.open(filename.decode(), mode.decode(), -1 if buffered else 0))
+        except Exception as e:
+            error[0] = strdup(str(e).encode())
+            return NULL
+
+        Py_INCREF(stream)
+        return <void*>stream
+
+    @staticmethod
+    cdef int _mkdir(void * backend, const char * dirname, char ** error) with gil:
+        cdef BigFileBackend self = <BigFileBackend>backend
+        try:
+            self.mkdir(dirname.decode())
+        except (IOError, OSError) as e:
+            if e.errno == errno.EEXIST:
+                return 0
+        except Exception as e:
+            print(e)
+            error[0] = strdup(str(e).encode())
+            print(error[0])
+            return -1
+        return 0 
+
+    # FIXME: forward errors
+    @staticmethod
+    cdef int _dscan(void * backend, const char * dirname, char *** names, char **error) with gil:
+        cdef BigFileBackend self = <BigFileBackend>backend
+        r = self.scandir(dirname)
+
+        names[0] = <char**>malloc(sizeof(char*) * len(r))
+        for i, name in enumerate(r):
+            names[0][i] = strdup(name)
+        return len(r)
+
+    @staticmethod
+    cdef int _dexists(void * backend, const char * dirname, char **error) with gil:
+        cdef BigFileBackend self = <BigFileBackend>backend
+        try:
+            return self.dexists(dirname.decode())
+        except Exception as e:
+            print(e)
+            error[0] = strdup(str(e).encode())
+            print(error[0])
+            return 0
+        return 0
+
+cdef class POSIXBackend(BigFileBackend):
+    def __cinit__(self):
+        big_file_methods_set_posix(&self.methods)
+
+
 cdef class FileLowLevelAPI:
     cdef CBigFile bf
+    cdef readonly object backend
     cdef int _deallocated
 
     def __cinit__(self):
         self._deallocated = True
         pass
 
-    def __init__(self, filename, create=False):
+    def __init__(self, filename, BigFileBackend backend, create=False):
         """ if create is True, create the file if it is nonexisting"""
         filename = filename.encode()
         cdef char * filenameptr = filename
         if create:
             with nogil:
-                rt = big_file_create(&self.bf, filenameptr)
+                rt = big_file_create(&self.bf, filenameptr, &backend.methods)
         else:
             with nogil:
-                rt = big_file_open(&self.bf, filenameptr)
+                rt = big_file_open(&self.bf, filenameptr, &backend.methods)
         if rt != 0:
             raise Error()
+
+        self.backend = backend
+
         self._deallocated = False
 
     def __dealloc__(self):
@@ -162,21 +363,23 @@ cdef class FileLowLevelAPI:
             self._deallocated = True
 
     def __reduce__(self):
-        return _unpickle_file, (type(self), self.__getstate__(),)
+        return _unpickle_object, (type(self), FileLowLevelAPI, self.__getstate__(),)
 
     def __getstate__(self):
-        return (self.bf.basename.decode(), self._deallocated)
+        return (self.bf.basename.decode(), self._deallocated, self.backend)
 
     def __setstate__(self, state):
-        filename, deallocated = state
+        cdef BigFileBackend backend
+        filename, deallocated, backend = state
         filename = filename.encode()
         cdef char * filenameptr = filename
 
         self._deallocated = deallocated
+        self.backend = backend
 
         if not deallocated:
             with nogil:
-                rt = big_file_open(&self.bf, filenameptr)
+                rt = big_file_open(&self.bf, filenameptr, &backend.methods)
 
     property basename:
         def __get__(self):
@@ -248,8 +451,6 @@ cdef class AttrSet:
     def __setitem__(self, name, value):
         name = name.encode()
 
-
-
         if isstr(value):
             dtype = b'a1'
             value = numpy.array(str(value).encode()).ravel().view(dtype='S1').ravel()
@@ -278,17 +479,11 @@ cdef class AttrSet:
                 for key in self]))
         return t
 
-# An unpickle function via __reduce__ is needed for Python 2;
-# c.f. https://github.com/cython/cython/issues/2757
-def _unpickle_column(kls, state):
-    obj = ColumnLowLevelAPI.__new__(kls)
-    obj.__setstate__(state)
-    return obj
-
 cdef class ColumnLowLevelAPI:
     cdef CBigBlock bb
     cdef public comm
     cdef int _deallocated
+    cdef readonly object backend
 
     property size:
         def __get__(self):
@@ -313,8 +508,9 @@ cdef class ColumnLowLevelAPI:
         self.comm = None
         self._deallocated = True
 
-    def __init__(self):
-        pass
+    def __init__(self, BigFileBackend backend):
+        self.backend = backend
+        self.bb.methods[0] = backend.methods
 
     def __enter__(self):
         return self
@@ -323,7 +519,7 @@ cdef class ColumnLowLevelAPI:
         self.flush()
 
     def __reduce__(self):
-        return _unpickle_column, (type(self), self.__getstate__())
+        return _unpickle_object, (type(self), ColumnLowLevelAPI, self.__getstate__(),)
 
     def __getstate__(self):
         cdef void * buf
@@ -338,14 +534,18 @@ cdef class ColumnLowLevelAPI:
         else:
             container = None
 
-        return (container, self.comm, self._deallocated)
+        return (container, self.comm, self._deallocated, self.backend)
 
     def __setstate__(self, state):
-        buf, comm, deallocated = state
+        cdef BigFileBackend backend
+        buf, comm, deallocated, backend = state
         cdef numpy.ndarray container = buf
 
         self.comm = comm
         self._deallocated = deallocated
+
+        self.backend = backend
+        self.bb.methods[0] = backend.methods
 
         if not deallocated:
             _big_block_unpack(&self.bb, container.data)
@@ -376,7 +576,6 @@ cdef class ColumnLowLevelAPI:
                         0, 0, NULL)
             if rt != 0:
                 raise Error()
-
         else:
             if Nfile < 0:
                 raise ValueError("Cannot create negative number of files.")
@@ -581,10 +780,14 @@ cdef class ColumnLowLevelAPI:
 
     def __repr__(self):
         if self.bb.dtype == b'####':
-            return "<CBigBlock: %s>" % self.bb.basename
+            return "<CBigBlock: %s>" % (self.bb.basename or "<NULL>")
 
-        return "<CBigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
+        try:
+            return "<CBigBlock: %s dtype=%s, size=%d>" % (self.bb.basename,
                 self.dtype, self.size)
+        except:
+            return "<CBigBlock is invalid>"
+        
 
 cdef class Dataset:
     cdef CBigRecordType rtype

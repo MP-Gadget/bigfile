@@ -5,9 +5,28 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+typedef void * BigFileStream;
+typedef struct BigFileMethods {
+    void * backend;
+    int (*mkdir)(void * backend, const char * dirname, char ** error);
+    int (*dexists)(void * backend, const char * dirname, char ** error);
+    int (*dscan)(void * backend, const char * dirname, char *** names, char **error);
+
+    BigFileStream (*fopen)(void* backend, const char * filename,
+                    const char * mode,
+                    int buffered,
+                    char ** error);
+    int (*fseek)(BigFileStream stream, long offset, int whence, char ** error);
+    size_t (*fread)(BigFileStream stream, void *ptr, size_t size, char ** error);
+    size_t (*freadall)(BigFileStream stream, char **buffer, char ** error);
+    size_t (*fwrite)(BigFileStream stream, const void *ptr, size_t size, char ** error);
+    int (*fclose)(BigFileStream handle);
+} BigFileMethods;
+
 typedef struct BigFile {
     /* All members are readonly. Initialize with big_file_open / big_file_create */
     char * basename;
+    BigFileMethods methods[1];
 } BigFile;
 
 typedef struct BigAttr BigAttr;
@@ -37,6 +56,7 @@ typedef struct BigBlock {
     int Nfile;
     BigAttrSet * attrset;
     int dirty;
+    BigFileMethods methods[1];
 } BigBlock;
 
 typedef struct BigBlockPtr BigBlockPtr;
@@ -70,18 +90,23 @@ int big_file_set_buffer_size(size_t bytes);
 char * big_file_get_error_message(void);
 void big_file_set_error_message(char * msg);
 
+void big_file_methods_set_posix(BigFileMethods * methods);
+
 /** Open a Bigfile: this stats the directory tree, but does not open the file.
  * It initialises the BigFile structure.
  * Arguments:
  * @param BigFile bf - pointer to uninitialised structure.
- * @param const char * basename - String containing directory to put snapshot in.*/
-int big_file_open(BigFile * bf, const char * basename); /* raises */
+ * @param const char * basename - String containing directory to put snapshot in.
+ * @param const BigFileMethods * methods - backend method table.*/
+int big_file_open(BigFile * bf, const char * basename, const BigFileMethods * methods); /* raises */
 
 /** Create a Bigfile: this makes the directory tree and initialises the BigFile structure.
  * Arguments:
  * @param BigFile bf - pointer to uninitialised structure.
- * @param const char * basename - String containing directory to put snapshot in.*/
-int big_file_create(BigFile * bf, const char * basename); /* raises */
+ * @param const char * basename - String containing directory to put snapshot in.
+ * @param const BigFileMethods * methods - backend method table.*/
+int big_file_create(BigFile * bf, const char * basename, const BigFileMethods * methods); /* raises */
+
 int big_file_list(BigFile * bf, char *** blocknames, int * Nblocks);
 int big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname); /* raises*/
 int big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, const size_t fsize[]); /* raises */

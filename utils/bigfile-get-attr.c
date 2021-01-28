@@ -57,7 +57,7 @@ int main(int argc, char * argv[]) {
         usage();
     }
 
-    if(0 != big_file_open(&bf, argv[1])) {
+    if(0 != big_file_open(&bf, argv[1], NULL)) {
         fprintf(stderr, "failed to open file : %s %s\n", argv[1], big_file_get_error_message());
         exit(1);
     }
