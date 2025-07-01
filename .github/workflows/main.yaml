@@ -47,7 +47,7 @@ jobs:
           ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}
 
     - name: Setup Conda Environment
-      uses: conda-incubator/setup-miniconda@v2.0.1
+      uses: conda-incubator/setup-miniconda@v3.2.0
       with:
         activate-environment: test
         channels: bccp,conda-forge
