@@ -34,10 +34,10 @@ jobs:
     steps:
 
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Cache conda
-      uses: actions/cache@v1
+      uses: actions/cache@v4
       env:
         # Increase this value to reset cache.
         CACHE_NUMBER: 0
@@ -47,7 +47,7 @@ jobs:
           ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}
 
     - name: Setup Conda Environment
-      uses: conda-incubator/setup-miniconda@v2.0.1
+      uses: conda-incubator/setup-miniconda@v3.2.0
       with:
         activate-environment: test
         channels: bccp,conda-forge
