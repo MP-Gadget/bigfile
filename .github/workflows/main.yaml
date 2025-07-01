@@ -27,10 +27,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, macos-latest ]
-        numpy-version: [ 1.16 ]
         python-version: [ 3.8 ]
         include:
-          - {deploy: true, os: ubuntu-latest, numpy-version: 1.16, python-version: 3.8 }
+          - {deploy: true, os: ubuntu-latest, python-version: 3.8 }
     steps:
 
     - name: Checkout source code
@@ -60,7 +59,7 @@ jobs:
       run: |
         conda install -q -y \
                python=${{ matrix.python-version }} \
-               numpy=${{ matrix.numpy-version }} \
+               numpy \
                nose cython mpi4py \
                compilers
         conda install -q -y cmake gsl
