@@ -16,6 +16,7 @@ from numpy.testing import assert_equal
 from numpy.testing import assert_raises
 from numpy.testing import assert_array_equal
 
+from mpi4py import MPI
 import pytest
 
 dtypes = [
@@ -26,20 +27,20 @@ dtypes = [
     ('f4', 'f4'),
     ('f8', 'f8'),
 #   ('f4v', ('f4', (1,))),  # This case is not well defined. Bigfile will treat it as 'f4', thus automated tests will not work.
-    ('f4s', ('f4', 1)),  # This case will start to fail when numpy starts to ('f4', 1) as ('f4').
+ #   ('f4s', ('f4', 1)),  # This case will fail for numpy > 2.0, when numpy treats ('f4', 1) as ('f4').
     ('f4_2', ('f4', (2,))),
     ('c8', ('complex64')),
     ('c16', ('complex128')),
     ('c16_2', ('complex128', (2, ))),
 ]
 
-from runtests.mpi import MPITest
 import re
 
 def sanitized_name(s):
     return re.sub("[^a-z0-9]", '_', s)
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_create(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -94,7 +95,8 @@ def test_create(comm):
 
     shutil.rmtree(fname)
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_create_odd(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -120,7 +122,8 @@ def test_create_odd(comm):
 
     shutil.rmtree(fname)
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_append(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -147,7 +150,8 @@ def test_append(comm):
 
     shutil.rmtree(fname)
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_fileattr(comm):
     import os.path
     fname = tempfile.mkdtemp()
@@ -162,7 +166,8 @@ def test_fileattr(comm):
 
     shutil.rmtree(fname)
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_file_large_attr(comm):
     import os.path
     fname = tempfile.mkdtemp()
@@ -177,7 +182,8 @@ def test_file_large_attr(comm):
 
     shutil.rmtree(fname)
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_casts(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -186,7 +192,8 @@ def test_casts(comm):
         assert_raises(BigFileError, b.write, 0, numpy.array('aaaaaa'))
         b.write(0, numpy.array(True, dtype='?'))
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_passby(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -198,7 +205,8 @@ def test_passby(comm):
         assert_equal(b[:2], data)
         assert_raises(BigFileError, b.write, 0, numpy.array((30, 20.)))
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_dataset(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -209,7 +217,7 @@ def test_dataset(comm):
         numpy.random.seed(1234)
         # test creating
         with x.create(name, Nfile=1, dtype=dt, size=128) as b:
-            data = numpy.random.uniform(100000, size=128*128).view(dtype=b.dtype.base).reshape([-1] 
+            data = numpy.random.uniform(100000, size=128*128).view(dtype=b.dtype.base).reshape([-1]
                     + list(dt.shape))[:b.size]
             b.write(0, data)
 
@@ -254,7 +262,8 @@ def test_dataset(comm):
 
     shutil.rmtree(fname)
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_closed(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -266,7 +275,8 @@ def test_closed(comm):
     except BigFileClosedError:
         pass
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_attr_objects(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -279,7 +289,8 @@ def test_attr_objects(comm):
         assert_raises(ValueError, set_obj_scalar);
     shutil.rmtree(fname)
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_attr(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -313,7 +324,8 @@ def test_attr(comm):
 
     shutil.rmtree(fname)
 
-@MPITest([1, 4])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_mpi_create(comm):
     if comm.rank == 0:
         fname = tempfile.mkdtemp()
@@ -362,7 +374,8 @@ def test_mpi_create(comm):
     if comm.rank == 0:
         shutil.rmtree(fname)
 
-@MPITest([1, 4])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_mpi_attr(comm):
     if comm.rank == 0:
         fname = tempfile.mkdtemp()
@@ -397,7 +410,8 @@ def test_version():
     import bigfile
     assert hasattr(bigfile, '__version__')
 
-@MPITest(commsize=[1, 4])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_mpi_large(comm):
     if comm.rank == 0:
         fname = tempfile.mkdtemp()
@@ -425,13 +439,15 @@ def test_mpi_large(comm):
     if comm.rank == 0:
         shutil.rmtree(fname)
 
-@MPITest(commsize=[4])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi(min_size=2)
 def test_mpi_badfilenames(comm):
     fname = tempfile.mkdtemp()
     fname = fname + '%d' % comm.rank
     assert_raises(BigFileError, BigFileMPI, comm, fname, create=True)
 
-@MPITest(commsize=[1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_threads(comm):
     # This test shall not core dump
     # raise many errors here and there on many threads
@@ -477,8 +493,8 @@ def test_threads(comm):
     gc.set_threshold(*old)
     shutil.rmtree(fname)
 
-
-@MPITest(commsize=[1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_blank_attr(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -503,14 +519,15 @@ def test_blank_attr(comm):
         x.create("\n", Nfile=1, dtype=None, size=128)
     shutil.rmtree(fname)
 
-@MPITest(commsize=[1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_pickle(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
 
     # test creating
     column = x.create("abc", dtype='f8', size=128)
-    
+
     import pickle
     str = pickle.dumps(column)
     column1 = pickle.loads(str)
@@ -536,7 +553,8 @@ def test_pickle(comm):
     assert tuple(sorted(x1.blocks)) == tuple(sorted(x.blocks))
     shutil.rmtree(fname)
 
-@MPITest(commsize=[1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_string(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
@@ -559,7 +577,8 @@ def test_string(comm):
 
     shutil.rmtree(fname)
 
-@MPITest([1])
+@pytest.mark.parametrize("comm", [MPI.COMM_WORLD,])
+@pytest.mark.mpi
 def test_slicing(comm):
     fname = tempfile.mkdtemp()
     x = BigFile(fname, create=True)
