@@ -25,7 +25,7 @@ cdef extern from "bigfile.h":
         char * basename
         size_t size
         int Nfile
-        unsigned int * fchecksum; 
+        unsigned int * fchecksum;
         int dirty
         CBigAttrSet * attrset;
 
@@ -232,9 +232,9 @@ cdef class AttrSet:
             attr[0].nmemb)):
             raise Error()
         if attr[0].dtype[1] == 'S':
-            return [i.tostring().decode() for i in result]
+            return [i.tobytes().decode() for i in result]
         if attr[0].dtype[1] == 'a':
-            return result.tostring().decode()
+            return result.tobytes().decode()
         return result
 
     def __delitem__(self, name):
@@ -266,7 +266,7 @@ cdef class AttrSet:
 
         cdef numpy.ndarray buf = value
 
-        if(0 != big_block_set_attr(&self.bb.bb, name, buf.data, 
+        if(0 != big_block_set_attr(&self.bb.bb, name, buf.data,
                 dtype,
                 buf.shape[0])):
             raise Error();
@@ -410,8 +410,8 @@ cdef class ColumnLowLevelAPI:
         cdef CBigArray array
         cdef CBigBlockPtr ptr
 
-        big_array_init(&array, buf.data, buf.dtype.str.encode(), 
-                buf.ndim, 
+        big_array_init(&array, buf.data, buf.dtype.str.encode(),
+                buf.ndim,
                 <size_t *> buf.shape,
                 <ptrdiff_t *> buf.strides)
         with nogil:
@@ -464,14 +464,14 @@ cdef class ColumnLowLevelAPI:
         return self.write(tail, buf)
 
     def read(self, numpy.intp_t start, numpy.intp_t length, out=None):
-        """ read from offset `start' a chunk of data of length `length', 
+        """ read from offset `start' a chunk of data of length `length',
             into array `out'.
 
             out shall match length and self.dtype
 
             returns out, or a newly allocated array of out is None.
         """
-        cdef numpy.ndarray result 
+        cdef numpy.ndarray result
         cdef CBigArray array
         cdef CBigBlockPtr ptr
         cdef int i
@@ -488,8 +488,8 @@ cdef class ColumnLowLevelAPI:
             if result.dtype.base.itemsize != self.dtype.base.itemsize:
                 raise ValueError("output array type mismatches with the block")
 
-        big_array_init(&array, result.data, self.bb.dtype, 
-                result.ndim, 
+        big_array_init(&array, result.data, self.bb.dtype,
+                result.ndim,
                 <size_t *> result.shape,
                 <ptrdiff_t *> result.strides)
 
