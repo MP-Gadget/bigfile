@@ -3,8 +3,6 @@
 name: main
 
 on:
-  schedule:
-    - cron:  '* * * * 5'   # Runs on every Friday.
   push:
     branches: [ '*', $default-branch ]
     tags: ['[0-9]*']   # anything looks like a version.
@@ -24,22 +22,24 @@ jobs:
     defaults:
       run:
         shell: bash -l {0}   # for conda.
-
     strategy:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, macos-latest ]
-        numpy-version: [ 1.16 ]
-        python-version: [ 3.8 ]
-        include:
-          - {deploy: true, os: ubuntu-latest, numpy-version: 1.16, python-version: 3.8 }
+        python-version: [ '3.8', '3.10', '3.13' ]
+        #Something seems wrong with the conda packages for these python versions.
+        #pip --upgrade fails for 3.13 and for 3.10 there is an import error.
+        exclude:
+          - os: macos-latest
+            python-version: '3.10'
+          - os: macos-latest
+            python-version: '3.13'
     steps:
-
     - name: Checkout source code
-      uses: actions/checkout@v2
-
+      uses: actions/checkout@v4
     - name: Cache conda
-      uses: actions/cache@v1
+      if: matrix.os == 'macos-latest'
+      uses: actions/cache@v4
       env:
         # Increase this value to reset cache.
         CACHE_NUMBER: 0
@@ -47,9 +47,9 @@ jobs:
         path: ~/conda_pkgs_dir
         key:
           ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}
-
     - name: Setup Conda Environment
-      uses: conda-incubator/setup-miniconda@v2.0.1
+      if: matrix.os == 'macos-latest'
+      uses: conda-incubator/setup-miniconda@v3.2.0
       with:
         activate-environment: test
         channels: bccp,conda-forge
@@ -57,45 +57,75 @@ jobs:
         use-only-tar-bz2: true
         auto-update-conda: true
         python-version: ${{ matrix.python-version }}
-
-    - name: Setup test env
+    - name: Setup mac test env
+      if: matrix.os == 'macos-latest'
       run: |
         conda install -q -y \
                python=${{ matrix.python-version }} \
-               numpy=${{ matrix.numpy-version }} \
-               nose cython mpi4py \
-               compilers
-        conda install -q -y cmake gsl
-        conda install -q -y runtests
-
+               numpy cython mpi4py compilers
+        conda install -q -y cmake gsl pytest pytest-mpi python-build
+    - name: Setup linux test env
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential libopenmpi-dev openmpi-bin python3-numpy cython3 python3-mpi4py cmake libgsl-dev
+        python -m pip install --upgrade pip
+        pip install build pytest pytest-mpi
+    - name: Build
+      run: |
+        python -m build
+    - name: Install
+      run: |
+        python -m pip install --user dist/bigfile*whl
+    - name: Build in place for tests
+      run: |
+        python setup.py build_ext --inplace
     - name: Build C
       run: |
-        mkdir build
-        cd build
+        mkdir Cbuild
+        cd Cbuild
         cmake -DCMAKE_INSTALL_PREFIX:PATH=install ..
         make install
-
     - name: C Unit tests
       run: |
-        mpirun -n 4 build/utils/bigfile-iosim -n 1 -s 1024000 create test
-        mpirun -n 4 build/utils/bigfile-iosim -n 1 -s 1024000 read test
-        mpirun -n 4 build/utils/bigfile-iosim -n 4 -s 1024000 read test
-        mpirun -n 4 build/utils/bigfile-iosim -A -n 1 -s 1024000 read test
-        mpirun -n 4 build/utils/bigfile-iosim -A -n 4 -s 1024000 read test
-        mpirun -n 8 build/utils/bigfile-iosim -A -n 2 -s 1024000 read test
-
+        mpirun -n 4 Cbuild/utils/bigfile-iosim -n 1 -s 1024000 create test
+        mpirun -n 4 Cbuild/utils/bigfile-iosim -n 1 -s 1024000 read test
+        mpirun -n 4 Cbuild/utils/bigfile-iosim -n 4 -s 1024000 read test
+        mpirun -n 4 Cbuild/utils/bigfile-iosim -A -n 1 -s 1024000 read test
+        mpirun -n 4 Cbuild/utils/bigfile-iosim -A -n 4 -s 1024000 read test
+        mpirun -n 8 Cbuild/utils/bigfile-iosim -A -n 2 -s 1024000 read test
     - name: Python Unit tests
       run: |
-        python ./runtests.py
-
-    - name: Build Python sdist
-      if: startsWith(github.ref, 'refs/tags') && matrix.deploy
+        python -m pytest --with-mpi
+        mpirun -n 2 python -m pytest --with-mpi
+        mpirun -n 4 --oversubscribe python -m pytest --with-mpi
+    - name: Build Python dist
+      if: matrix.os == 'ubuntu-latest' && startsWith(github.ref, 'refs/tags')
       run: |
         bash check_tag.sh "${GITHUB_REF##*/}" bigfile/version.py
-        python setup.py sdist
-
-    - name: Publish distribution to PyPI
-      uses: pypa/gh-action-pypi-publish@master
-      if: startsWith(github.ref, 'refs/tags') && matrix.deploy
+    - name: Store the distribution packages
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10' #Only do this once!
+      uses: actions/upload-artifact@v4
       with:
-        password: ${{ secrets.PYPI_SECRET }}
+        name: python-package-distributions
+        path: dist/bigfile*.tar.gz
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
+    needs:
+    - build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/bigfile
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+    steps:
+    - name: Download the source dist
+      uses: actions/download-artifact@v4
+      with:
+        name: python-package-distributions
+        path: dist/
+    - name: Publish distribution to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1

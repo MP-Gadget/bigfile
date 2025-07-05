@@ -1,6 +1,5 @@
-from setuptools import setup
+from setuptools import setup, Extension
 from Cython.Build import cythonize
-from distutils.extension import Extension
 import numpy
 
 extensions = [
@@ -29,9 +28,9 @@ def find_version(path):
 setup(
     name="bigfile",
     version=find_version("bigfile/version.py"),
-    author="Yu Feng",
+    author="Yu Feng, Simeon Bird",
     author_email="rainwoodman@gmail.com",
-    url="http://github.com/rainwoodman/bigfile",
+    url="http://github.com/MP-Gadget/bigfile",
     description="python binding of BigFile, a peta scale IO format",
     zip_safe = False,
     package_dir = {'bigfile': 'bigfile'},

@@ -115,7 +115,7 @@ class FileBase(FileLowLevelAPI):
         return self.open(key)
 
     def __getstate__(self):
-        return (self.comm, getattr(self, 'blocks', None), FileLowLevelAPI.__getstate__(self)) 
+        return (self.comm, getattr(self, 'blocks', None), FileLowLevelAPI.__getstate__(self))
 
     def __setstate__(self, state):
         comm, blocks, basestate = state
@@ -155,7 +155,7 @@ class File(FileBase):
             Parameters
             ----------
             array : array_like,
-                array shall have a scalar dtype. 
+                array shall have a scalar dtype.
             blockname : string
                 name of the block
             Nfile : int or None
@@ -284,7 +284,7 @@ class FileMPI(FileBase):
             Parameters
             ----------
             array : array_like,
-                array shall have a scalar dtype. 
+                array shall have a scalar dtype.
             blockname : string
                 name of the block
             Nfile : int or None
@@ -413,7 +413,7 @@ import warnings
 
 def _make_alias(name, origin):
     def __init__(self, *args, **kwargs):
-        warnings.warn('%s deprecated, use %s instead' % (name, origin), DeprecationWarning)
+        # warnings.warn('%s deprecated, use %s instead' % (name, origin), DeprecationWarning)
         origin.__init__(self, *args, **kwargs)
 
     newtype = type(name, (origin,object), {
