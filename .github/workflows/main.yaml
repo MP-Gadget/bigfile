@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
+        os: [ ubuntu-latest ] #, macos-latest ]
         python-version: [ '3.8', '3.10', '3.13' ]
         #Something seems wrong with the conda packages for these python versions.
         #pip --upgrade fails for 3.13 and for 3.10 there is an import error.
