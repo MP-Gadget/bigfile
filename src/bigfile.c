@@ -287,15 +287,14 @@ big_file_open_block(BigFile * bf, BigBlock * block, const char * blockname)
 int
 big_file_create_block(BigFile * bf, BigBlock * block, const char * blockname, const char * dtype, int nmemb, int Nfile, const size_t fsize[])
 {
-    RAISEIF(0 != _big_file_mksubdir_r(bf->basename, blockname),
-            ex_subdir,
-            NULL);
+    if(0 != _big_file_mksubdir_r(bf->basename, blockname)) {
+        _big_file_raise(NULL, __FILE__, __LINE__);
+        return -1;
+    }
     char * basename = _path_join(bf->basename, blockname);
     int rt = _big_block_create(block, basename, dtype, nmemb, Nfile, fsize);
     free(basename);
     return rt;
-ex_subdir:
-    return -1;
 }
 
 int
@@ -814,9 +813,10 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     FILE * fp = NULL;
     ptrdiff_t toread = 0;
 
-    RAISEIF(chunkbuf == NULL,
-            ex_malloc,
-            "Not enough memory for chunkbuf");
+    if(chunkbuf == NULL) {
+        _big_file_raise("Not enough memory for chunkbuf", __FILE__, __LINE__);
+        return -1;
+    }
 
     big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
     big_array_iter_init(&array_iter, array);
@@ -883,7 +883,6 @@ ex_blockseek:
 ex_open:
 ex_eof:
     free(chunkbuf);
-ex_malloc:
     return -1;
 }
 
@@ -908,9 +907,10 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     ptrdiff_t towrite = 0;
     FILE * fp;
 
-    RAISEIF(chunkbuf == NULL,
-            ex_malloc,
-            "not enough memory for chunkbuf of size %d bytes", CHUNK_BYTES);
+    if(chunkbuf == NULL) {
+        _big_file_raise("not enough memory for chunkbuf of size %d bytes", __FILE__, __LINE__,  CHUNK_BYTES);
+        return -1;
+    }
 
     big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
     big_array_iter_init(&array_iter, array);
@@ -1494,17 +1494,30 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
     fseek(fattr, 0, SEEK_END);
     long size = ftell(fattr);
     /*ftell may fail*/
-    RAISEIF(size < 0, ex_init, "ftell error: %s",strerror(errno));
+    if(size < 0) {
+        _big_file_raise("ftell error: %s", __FILE__, __LINE__, strerror(errno));
+        fclose(fattr);
+        return -1;
+    }
     char * buffer = (char*) malloc(size + 1);
-    RAISEIF(!buffer, ex_init, "Could not allocate memory for buffer: %ld bytes",size+1);
     unsigned char * data = (unsigned char * ) malloc(size + 1);
+    RAISEIF(!buffer, ex_init, "Could not allocate memory for buffer: %ld bytes",size+1);
     RAISEIF(!data, ex_data, "Could not allocate memory for data: %ld bytes",size+1);
     fseek(fattr, 0, SEEK_SET);
     RAISEIF(size != fread(buffer, 1, size, fattr),
             ex_read_file,
             "Failed to read attribute file\n");
     buffer[size] = 0;
-
+    if(0) { /* Just here for the error cleanups*/
+ex_read_file:
+        attrset->dirty = 0;
+        free(data);
+ex_data:
+        free(buffer);
+ex_init:
+        fclose(fattr);
+        return -1;
+    }
     /* now parse the v2 attr file.*/
     long i = 0;
     #define ATTRV2_EXPECT(variable) while(_isblank(buffer[i])) i++; \
@@ -1522,11 +1535,15 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
         int nmemb = atoi(rawlength);
         int itemsize = big_file_dtype_itemsize(dtype);
 
-        RAISEIF(nmemb * itemsize * 2!= strlen(rawdata),
-            ex_parse_attr,
-            "NMEMB and data mismiatch: %d x %d (%s) * 2 != %d",
-            nmemb, itemsize, dtype, strlen(rawdata));
-
+        if(nmemb * itemsize * 2 != strlen(rawdata)){
+            _big_file_raise("NMEMB and data mismatch: %d x %d (%s) * 2 != %d",
+                    __FILE__, __LINE__, nmemb, itemsize, dtype, strlen(rawdata));
+            attrset->dirty = 0;
+            free(data);
+            free(buffer);
+            fclose(fattr);
+            return -1;
+        }
         int j, k;
         for(k = 0, j = 0; k < nmemb * itemsize; k ++, j += 2) {
             char buf[3];
@@ -1536,26 +1553,19 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
             unsigned int byte = strtoll(buf, NULL, 16);
             data[k] = byte;
         }
-        RAISEIF(0 != attrset_set_attr(attrset, name, data, dtype, nmemb),
-            ex_set_attr,
-            NULL);
+        if(0 != attrset_set_attr(attrset, name, data, dtype, nmemb)) {
+            attrset->dirty = 0;
+            free(data);
+            free(buffer);
+            fclose(fattr);
+            return -1;
+        }
     }
     fclose(fattr);
     free(data);
     free(buffer);
     attrset->dirty = 0;
     return 0;
-
-ex_read_file:
-ex_parse_attr:
-ex_set_attr:
-    attrset->dirty = 0;
-    free(data);
-ex_data:
-    free(buffer);
-ex_init:
-    fclose(fattr);
-    return -1;
 }
 static int
 attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
@@ -1575,7 +1585,7 @@ attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
         int ldata = itemsize * a->nmemb;
 
         char * rawdata = (char *) malloc(ldata * 2 + 1);
-        unsigned char * adata = (unsigned char*) a->data;
+        char * adata = (char*) a->data;
         int j, k;
         for(j = 0, k = 0; k < ldata; k ++, j+=2) {
             rawdata[j] = conv[adata[k] / 16];
@@ -1695,19 +1705,16 @@ static int
 attrset_remove_attr(BigAttrSet * attrset, const char * attrname)
 {
     BigAttr *attr = attrset_lookup_attr(attrset, attrname);
-    RAISEIF(attr == NULL,
-      ex_notfound,
-      "Attribute name '%s' is not found.", attrname
-    )
+    if(attr == NULL) {
+        _big_file_raise("Attribute name '%s' is not found.", __FILE__, __LINE__, attrname);
+        return -1;
+    }
     ptrdiff_t ind = attr - attrset->attrlist;
     memmove(&attrset->attrlist[ind], &attrset->attrlist[ind + 1],
         (attrset->listused - ind - 1) * sizeof(BigAttr));
     attrset->listused -= 1;
 
     return 0;
-
-ex_notfound:
-    return -1;
 }
 
 static BigAttr *
