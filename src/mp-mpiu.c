@@ -91,7 +91,7 @@ int MPIU_Alltoallv(void *sendbuf, int *sendcnts, int *sdispls,
         }
     }
     if(recvcnts == NULL) {
-        a_recvcnts = malloc(sizeof(int) * NTask);
+        a_recvcnts = (int *) malloc(sizeof(int) * NTask);
         recvcnts = a_recvcnts;
         MPI_Alltoall(sendcnts, 1, MPI_INT,
                      recvcnts, 1, MPI_INT, comm);
@@ -106,7 +106,7 @@ int MPIU_Alltoallv(void *sendbuf, int *sendcnts, int *sdispls,
         return totalrecv;
     }
     if(sdispls == NULL) {
-        a_sdispls = malloc(sizeof(int) * NTask);
+        a_sdispls = (int *) malloc(sizeof(int) * NTask);
         sdispls = a_sdispls;
         sdispls[0] = 0;
         for (i = 1; i < NTask; i++) {
@@ -114,7 +114,7 @@ int MPIU_Alltoallv(void *sendbuf, int *sendcnts, int *sdispls,
         }
     }
     if(rdispls == NULL) {
-        a_rdispls = malloc(sizeof(int) * NTask);
+        a_rdispls = (int *) malloc(sizeof(int) * NTask);
         rdispls = a_rdispls;
         rdispls[0] = 0;
         for (i = 1; i < NTask; i++) {
@@ -177,7 +177,7 @@ static int MPI_Alltoallv_sparse(void *sendbuf, int *sendcnts, int *sdispls,
 
 #ifndef NO_ISEND_IRECV_IN_DOMAIN
     int n_requests;
-    MPI_Request *requests = malloc(NTask * 2 * sizeof(MPI_Request));
+    MPI_Request *requests = (MPI_Request *) malloc(NTask * 2 * sizeof(MPI_Request));
     n_requests = 0;
 
 

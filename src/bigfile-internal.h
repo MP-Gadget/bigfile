@@ -36,7 +36,7 @@ _strdup(const char * s)
     while(l < 8192 && s[l]) {
         l++;
     }
-    char * r = malloc(l + 1);
+    char * r = (char *) malloc(l + 1);
     strncpy(r, s, l);
     r[l] = '\0';
     return r;

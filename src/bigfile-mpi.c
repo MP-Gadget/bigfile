@@ -136,7 +136,7 @@ _big_file_mpi_create_block(BigFile * bf,
 
     BCAST_AND_RAISEIF(rt, comm);
 
-    char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
+    char * basename = (char *) alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return _big_block_mpi_create(block, basename, dtype, nmemb, Nfile, fsize, comm);
 }

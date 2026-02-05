@@ -797,7 +797,7 @@ ex_seek:
 int
 big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 {
-    char * chunkbuf = malloc(CHUNK_BYTES);
+    char * chunkbuf = (char *) malloc(CHUNK_BYTES);
 
     int nmemb = bb->nmemb ? bb->nmemb : 1;
     int felsize = big_file_dtype_itemsize(bb->dtype) * nmemb;
@@ -893,7 +893,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     if(array->size == 0) return 0;
     /* the file header is modified */
     bb->dirty = 1;
-    char * chunkbuf = malloc(CHUNK_BYTES);
+    char * chunkbuf = (char *) malloc(CHUNK_BYTES);
     int nmemb = bb->nmemb ? bb->nmemb : 1;
     int felsize = big_file_dtype_itemsize(bb->dtype) * nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
