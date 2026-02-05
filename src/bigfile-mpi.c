@@ -88,7 +88,7 @@ static int _big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm co
 int big_file_mpi_open_block(BigFile * bf, BigBlock * block, const char * blockname, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     if(!bf || !bf->basename || !blockname) return 1;
-    char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
+    char * basename = (char *) alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return _big_block_mpi_open(block, basename, comm);
 }
@@ -279,7 +279,7 @@ big_block_mpi_flush(BigBlock * block, MPI_Comm comm)
     int rank;
     MPI_Comm_rank(comm, &rank);
 
-    unsigned int * checksum = alloca(sizeof(int) * block->Nfile);
+    unsigned int * checksum = (unsigned int *) alloca(sizeof(int) * block->Nfile);
     MPI_Reduce(block->fchecksum, checksum, block->Nfile, MPI_UNSIGNED, MPI_SUM, 0, comm);
     int dirty;
     MPI_Reduce(&block->dirty, &dirty, 1, MPI_INT, MPI_LOR, 0, comm);
@@ -512,14 +512,14 @@ _aggregated(
     MPI_Type_contiguous(elsize, MPI_BYTE, &mpidtype);
     MPI_Type_commit(&mpidtype);
 
-    big_array_init(larray, lbuf, block->dtype, 2, (size_t[]){localsize, block->nmemb}, NULL);
+    big_array_init(larray, lbuf, block->dtype, 2, (size_t[]){localsize, (size_t) block->nmemb}, NULL);
 
     big_array_iter_init(iarray, array);
     big_array_iter_init(ilarray, larray);
 
     if(rank == root) {
         gbuf = malloc(grouptotalsize * elsize);
-        big_array_init(garray, gbuf, block->dtype, 2, (size_t[]){grouptotalsize, block->nmemb}, NULL);
+        big_array_init(garray, gbuf, block->dtype, 2, (size_t[]){(size_t) grouptotalsize, (size_t) block->nmemb}, NULL);
     }
 
     if(action == big_block_write) {
