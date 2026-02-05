@@ -221,7 +221,7 @@ _alphasort (const struct dirent **a, const struct dirent **b)
 }
 
 static struct
-bblist * listbigfile_r(const char * basename, char * blockname, struct bblist * bblist) {
+bblist * listbigfile_r(const char * basename, const char * blockname, struct bblist * bblist) {
     struct dirent **namelist;
     int n;
     int i;
@@ -1315,7 +1315,7 @@ byte_swap(BigArrayIter * iter, size_t nmemb)
 #define CAST(d1, t1, d2, t2) \
 if((0 == strcmp(d1, dst->array->dtype + 1)) && (0 == strcmp(d2, src->array->dtype + 1))) { \
     for(i = 0; i < nmemb; i ++) { \
-        t1 * p1 = dst->dataptr; t2 * p2 = src->dataptr; \
+        t1 * p1 = (t1 *) dst->dataptr; t2 * p2 = (t2 *) src->dataptr; \
         * p1 = * p2; \
         big_array_iter_advance(dst); big_array_iter_advance(src); \
     } \
@@ -1630,8 +1630,8 @@ ex_open:
 }
 
 static int attr_cmp(const void * p1, const void * p2) {
-    const BigAttr * c1 = p1;
-    const BigAttr * c2 = p2;
+    const BigAttr * c1 = (const BigAttr *) p1;
+    const BigAttr * c2 = (const BigAttr *) p2;
     return strcmp(c1->name, c2->name);
 }
 
