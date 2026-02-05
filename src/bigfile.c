@@ -1302,7 +1302,7 @@ byte_swap(BigArrayIter * iter, size_t nmemb)
     int half = elsize >> 1;
     for(i = 0; i < nmemb; i ++) {
         int j;
-        char * ptr = iter->dataptr;
+        char * ptr = (char *) iter->dataptr;
         for(j = 0; j < half; j ++) {
             char tmp = ptr[j];
             ptr[j] = ptr[elsize - j - 1];
@@ -1324,7 +1324,7 @@ if((0 == strcmp(d1, dst->array->dtype + 1)) && (0 == strcmp(d2, src->array->dtyp
 #define CAST2(d1, t1, d2, t2) \
 if((0 == strcmp(d1, dst->array->dtype + 1)) && (0 == strcmp(d2, src->array->dtype + 1))) { \
     for(i = 0; i < nmemb; i ++) { \
-        t1 * p1 = dst->dataptr; t2 * p2 = src->dataptr; \
+        t1 * p1 = (t1 *) dst->dataptr; t2 * p2 = (t2 *) src->dataptr; \
         p1->r = p2->r; p1->i = p2->i; \
         big_array_iter_advance(dst); big_array_iter_advance(src); \
     } \
@@ -1421,7 +1421,7 @@ static void
 sysvsum(unsigned int * sum, void * buf, size_t size)
 {
     unsigned int thisrun = *sum;
-    unsigned char * cp = buf;
+    unsigned char * cp = (unsigned char *) buf;
     while(size --)
         thisrun += *(cp++);
     *sum = thisrun;
@@ -1455,8 +1455,8 @@ attrset_read_attr_set_v1(BigAttrSet * attrset, const char * basename)
             "Failed to read from file"
                 )
         int ldata = big_file_dtype_itemsize(dtype) * nmemb;
-        data = alloca(ldata);
-        name = alloca(lname + 1);
+        data = (char *) alloca(ldata);
+        name = (char *) alloca(lname + 1);
         RAISEIF(
             (1 != fread(name, lname, 1, fattr)) ||
             (1 != fread(data, ldata, 1, fattr)),
@@ -1687,7 +1687,7 @@ attrset_lookup_attr(BigAttrSet * attrset, const char * attrname)
 {
     BigAttr lookup = {0};
     lookup.name = (char*) attrname;
-    BigAttr * found = bsearch(&lookup, attrset->attrlist, attrset->listused, sizeof(BigAttr), attr_cmp);
+    BigAttr * found = (BigAttr *) bsearch(&lookup, attrset->attrlist, attrset->listused, sizeof(BigAttr), attr_cmp);
     return found;
 }
 
@@ -1817,8 +1817,9 @@ _big_attrset_pack(BigAttrSet * attrset, size_t * bytes)
 }
 
 static BigAttrSet *
-_big_attrset_unpack(void * p)
+_big_attrset_unpack(void * pp)
 {
+    char * p = (char *) pp;
     BigAttrSet * attrset = (BigAttrSet *) calloc(1, sizeof(attrset[0]));
     memcpy(attrset, p, sizeof(BigAttrSet));
     p += sizeof(BigAttrSet);
