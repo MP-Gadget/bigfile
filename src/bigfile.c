@@ -1585,7 +1585,7 @@ attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
         int ldata = itemsize * a->nmemb;
 
         char * rawdata = (char *) malloc(ldata * 2 + 1);
-        char * adata = (char*) a->data;
+        unsigned char * adata = (unsigned char*) a->data;
         int j, k;
         for(j = 0, k = 0; k < ldata; k ++, j+=2) {
             rawdata[j] = conv[adata[k] / 16];
