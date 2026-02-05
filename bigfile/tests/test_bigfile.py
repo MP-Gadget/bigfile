@@ -244,7 +244,10 @@ def test_dataset(comm):
     assert isinstance(bd[['f8', 'f4'], :10], numpy.ndarray)
 
     for name, d in dtypes:
-        assert_array_equal(x[name][:], bd[:][name])
+        if len(numpy.shape(x[name][:])) == 1:
+            assert_array_equal(x[name][:], numpy.ravel(bd[:][name]))
+        else:
+            assert_array_equal(x[name][:], bd[:][name])
 
     data1 = bd[:10]
     data2 = bd[10:20]
