@@ -340,7 +340,7 @@ big_file_mpi_broadcast_anyerror(int rt, MPI_Comm comm)
     MPI_Bcast(&errorlen, 1, MPI_INT, root, comm);
 
     if(rank != root) {
-        error = malloc(errorlen + 1);
+        error = (char *) malloc(errorlen + 1);
     }
 
     MPI_Bcast(error, errorlen + 1, MPI_BYTE, root, comm);
@@ -414,7 +414,7 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
     size_t avgsegsize;
     size_t localsize = array->dims[0];
     size_t myoffset;
-    size_t * sizes = malloc(sizeof(sizes[0]) * NTask);
+    size_t * sizes = (size_t *) malloc(sizeof(sizes[0]) * NTask);
 
     size_t totalsize = MPIU_Segmenter_collect_sizes(localsize, sizes, &myoffset, comm);
 
