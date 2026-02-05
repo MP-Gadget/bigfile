@@ -107,7 +107,7 @@ big_record_view_field(const BigRecordType * rtype,
     size_t dims[2];
     dims[0] = size;
     dims[1] = rtype->fields[i].nmemb;
-    ptrdiff_t strides[2] = { (size_t) rtype->itemsize, (size_t) rtype->fields[i].elsize };
+    ptrdiff_t strides[2] = { (ptrdiff_t) rtype->itemsize, (ptrdiff_t) rtype->fields[i].elsize };
     return big_array_init(array, &p[rtype->fields[i].offset],
                           rtype->fields[i].dtype,
                           2, dims, strides);
