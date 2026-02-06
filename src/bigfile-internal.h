@@ -13,7 +13,7 @@ void _big_block_close_internal(BigBlock * block);
 int _big_block_grow_internal(BigBlock * bb, int Nfile_grow, const size_t fsize_grow[]);
 
 /* The internal routine to open a physical file */
-FILE * _big_file_open_a_file(const char * basename, int fileid, char * mode, int raise);
+FILE * _big_file_open_a_file(const char * basename, int fileid, const char * mode, const int raise);
 
 /* Internal routine to serialize/deserialize a block. */
 
@@ -36,7 +36,7 @@ _strdup(const char * s)
     while(l < 8192 && s[l]) {
         l++;
     }
-    char * r = malloc(l + 1);
+    char * r = (char *) malloc(l + 1);
     strncpy(r, s, l);
     r[l] = '\0';
     return r;

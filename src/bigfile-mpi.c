@@ -88,7 +88,7 @@ static int _big_block_mpi_open(BigBlock * bb, const char * basename, MPI_Comm co
 int big_file_mpi_open_block(BigFile * bf, BigBlock * block, const char * blockname, MPI_Comm comm) {
     if(comm == MPI_COMM_NULL) return 0;
     if(!bf || !bf->basename || !blockname) return 1;
-    char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
+    char * basename = (char *) alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return _big_block_mpi_open(block, basename, comm);
 }
@@ -136,7 +136,7 @@ _big_file_mpi_create_block(BigFile * bf,
 
     BCAST_AND_RAISEIF(rt, comm);
 
-    char * basename = alloca(strlen(bf->basename) + strlen(blockname) + 128);
+    char * basename = (char *) alloca(strlen(bf->basename) + strlen(blockname) + 128);
     sprintf(basename, "%s/%s/", bf->basename, blockname);
     return _big_block_mpi_create(block, basename, dtype, nmemb, Nfile, fsize, comm);
 }
@@ -279,7 +279,7 @@ big_block_mpi_flush(BigBlock * block, MPI_Comm comm)
     int rank;
     MPI_Comm_rank(comm, &rank);
 
-    unsigned int * checksum = alloca(sizeof(int) * block->Nfile);
+    unsigned int * checksum = (unsigned int *) alloca(sizeof(int) * block->Nfile);
     MPI_Reduce(block->fchecksum, checksum, block->Nfile, MPI_UNSIGNED, MPI_SUM, 0, comm);
     int dirty;
     MPI_Reduce(&block->dirty, &dirty, 1, MPI_INT, MPI_LOR, 0, comm);
@@ -340,7 +340,7 @@ big_file_mpi_broadcast_anyerror(int rt, MPI_Comm comm)
     MPI_Bcast(&errorlen, 1, MPI_INT, root, comm);
 
     if(rank != root) {
-        error = malloc(errorlen + 1);
+        error = (char *) malloc(errorlen + 1);
     }
 
     MPI_Bcast(error, errorlen + 1, MPI_BYTE, root, comm);
@@ -414,7 +414,7 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
     size_t avgsegsize;
     size_t localsize = array->dims[0];
     size_t myoffset;
-    size_t * sizes = malloc(sizeof(sizes[0]) * NTask);
+    size_t * sizes = (size_t *) malloc(sizeof(sizes[0]) * NTask);
 
     size_t totalsize = MPIU_Segmenter_collect_sizes(localsize, sizes, &myoffset, comm);
 
@@ -512,14 +512,14 @@ _aggregated(
     MPI_Type_contiguous(elsize, MPI_BYTE, &mpidtype);
     MPI_Type_commit(&mpidtype);
 
-    big_array_init(larray, lbuf, block->dtype, 2, (size_t[]){localsize, block->nmemb}, NULL);
+    big_array_init(larray, lbuf, block->dtype, 2, (size_t[]){localsize, (size_t) block->nmemb}, NULL);
 
     big_array_iter_init(iarray, array);
     big_array_iter_init(ilarray, larray);
 
     if(rank == root) {
         gbuf = malloc(grouptotalsize * elsize);
-        big_array_init(garray, gbuf, block->dtype, 2, (size_t[]){grouptotalsize, block->nmemb}, NULL);
+        big_array_init(garray, gbuf, block->dtype, 2, (size_t[]){(size_t) grouptotalsize, (size_t) block->nmemb}, NULL);
     }
 
     if(action == big_block_write) {

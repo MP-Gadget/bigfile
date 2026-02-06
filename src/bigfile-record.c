@@ -28,7 +28,7 @@ big_record_type_set(BigRecordType * rtype,
     int nmemb)
 {
     if(i >= rtype->nfield) {
-        rtype->fields = realloc(rtype->fields,
+        rtype->fields = (BigRecordField *) realloc(rtype->fields,
             (i + 1) * sizeof(rtype->fields[0]));
         memset(&rtype->fields[rtype->nfield], 0,
             (i + 1 - rtype->nfield) * sizeof(rtype->fields[0]));
@@ -79,7 +79,7 @@ big_record_set(const BigRecordType * rtype,
     int c,
     const void * data)
 {
-    char * p = buf;
+    char * p = (char *) buf;
     memcpy(&p[i * rtype->itemsize + rtype->fields[c].offset], data,
            rtype->fields[c].elsize * rtype->fields[c].nmemb);
 }
@@ -90,7 +90,7 @@ big_record_get(const BigRecordType * rtype,
     ptrdiff_t i,
     int c,
     void * data) {
-    const char * p = buf;
+    const char * p = (char *) buf;
     memcpy(data, &p[i * rtype->itemsize + rtype->fields[c].offset],
            rtype->fields[c].elsize * rtype->fields[c].nmemb);
 }
@@ -103,9 +103,11 @@ big_record_view_field(const BigRecordType * rtype,
     void * buf
 )
 {
-    char * p = buf;
-    size_t dims[2] = { size, rtype->fields[i].nmemb };
-    ptrdiff_t strides[2] = { rtype->itemsize, rtype->fields[i].elsize };
+    char * p = (char *) buf;
+    size_t dims[2];
+    dims[0] = size;
+    dims[1] = rtype->fields[i].nmemb;
+    ptrdiff_t strides[2] = { (ptrdiff_t) rtype->itemsize, (ptrdiff_t) rtype->fields[i].elsize };
     return big_array_init(array, &p[rtype->fields[i].offset],
                           rtype->fields[i].dtype,
                           2, dims, strides);
