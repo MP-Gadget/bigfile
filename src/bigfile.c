@@ -1611,7 +1611,8 @@ attrset_write_attr_set_v2(BigAttrSet * attrset, const char * basename)
                         strcat(textual, " ");
                     }
                 } else { /* pretty print string encoded as a1 or S1. */
-                    unsigned char buf[] = {adata[j], 0};
+                    char buf[2] = {0};
+                    buf[0] = adata[j];
                     if(buf[0] == '\n') {
                         strcat(textual, "...");
                         break;
