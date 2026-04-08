@@ -9,7 +9,6 @@
 
 /* disable aggregation by default */
 static size_t _BigFileAggThreshold = 0;
-static int _big_file_mpi_verbose = 0;
 
 static int big_block_mpi_broadcast(BigBlock * bb, int root, MPI_Comm comm);
 static int big_file_mpi_broadcast_anyerror(int rt, MPI_Comm comm);
@@ -22,7 +21,6 @@ static int big_file_mpi_broadcast_anyerror(int rt, MPI_Comm comm);
 void
 big_file_mpi_set_verbose(int verbose)
 {
-    _big_file_mpi_verbose = verbose;
 }
 
 void
