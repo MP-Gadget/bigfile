@@ -1501,8 +1501,7 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
     }
     char * buffer = (char*) malloc(size + 1);
     unsigned char * data = (unsigned char * ) malloc(size + 1);
-    RAISEIF(!buffer, ex_init, "Could not allocate memory for buffer: %ld bytes",size+1);
-    RAISEIF(!data, ex_data, "Could not allocate memory for data: %ld bytes",size+1);
+    RAISEIF((!buffer) || (!data), ex_init, "Could not allocate memory for data or buffer: %ld bytes",2 * (size+1));
     fseek(fattr, 0, SEEK_SET);
     RAISEIF(size != fread(buffer, 1, size, fattr),
             ex_read_file,
@@ -1511,10 +1510,11 @@ attrset_read_attr_set_v2(BigAttrSet * attrset, const char * basename)
     if(0) { /* Just here for the error cleanups*/
 ex_read_file:
         attrset->dirty = 0;
-        free(data);
-ex_data:
-        free(buffer);
 ex_init:
+        if(data)
+            free(data);
+        if(buffer)
+            free(buffer);
         fclose(fattr);
         return -1;
     }
