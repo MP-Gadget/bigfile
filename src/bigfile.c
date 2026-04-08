@@ -917,7 +917,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     FILE * fp;
 
     if(chunkbuf == NULL) {
-        _big_file_raise("not enough memory for chunkbuf of size %d bytes", __FILE__, __LINE__,  CHUNK_BYTES);
+        _big_file_raise("not enough memory for chunkbuf of size %zu bytes", __FILE__, __LINE__,  CHUNK_BYTES);
         return -1;
     }
 
@@ -958,12 +958,11 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         RAISEIF(0 != _dtype_convert(&chunk_iter, &array_iter, chunk_size * bb->nmemb),
             ex_convert, NULL);
 
-        sysvsum(&bb->fchecksum[ptr->fileid], chunkbuf, chunk_size * felsize);
-
         RAISEIF(chunk_size != fwrite(chunkbuf, felsize, chunk_size, fp),
                 ex_write,
                 "Failed to write in block `%s' at (%d:%td) (%s)",
                 bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
+        sysvsum(&bb->fchecksum[ptr->fileid], chunkbuf, chunk_size * felsize);
 
         towrite -= chunk_size;
         /* big_block_seek may change the fileid (because the physical file is full up)
