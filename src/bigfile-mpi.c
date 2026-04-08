@@ -497,13 +497,11 @@ _aggregated(
     recvcounts[rank] = localsize;
     MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, recvcounts, 1, MPI_INT, comm);
 
-    int grouptotalsize = localsize;
-
-    MPI_Allreduce(MPI_IN_PLACE, &grouptotalsize, 1, MPI_INT, MPI_SUM, comm);
-
     for(i = 0; i < nrank; i ++) {
         recvdispls[i + 1] = recvdispls[i] + recvcounts[i];
     }
+
+    size_t grouptotalsize = recvdispls[nrank];
 
     MPI_Datatype mpidtype;
     MPI_Type_contiguous(elsize, MPI_BYTE, &mpidtype);
@@ -516,7 +514,7 @@ _aggregated(
 
     if(rank == root) {
         gbuf = malloc(grouptotalsize * elsize);
-        big_array_init(garray, gbuf, block->dtype, 2, (size_t[]){(size_t) grouptotalsize, (size_t) block->nmemb}, NULL);
+        big_array_init(garray, gbuf, block->dtype, 2, (size_t[]){grouptotalsize, (size_t) block->nmemb}, NULL);
     }
 
     if(write) {
