@@ -828,6 +828,14 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
                 ex_eof,
                 "Reading beyond the block `%s` at (%d:%td)",
                 bb->basename, ptr->fileid, ptr->roffset * felsize);
+    fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r", 1);
+    RAISEIF(fp == NULL,
+            ex_open,
+            NULL);
+    RAISEIF(0 > fseek(fp, ptr->roffset * felsize, SEEK_SET),
+            ex_seek,
+            "Failed to seek in block `%s' at (%d:%td) (%s)",
+            bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
 
     while(toread > 0 && ! big_block_eof(bb, ptr)) {
         size_t chunk_size = CHUNK_SIZE;
@@ -847,39 +855,40 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         /* read to the beginning of chunk */
         big_array_iter_init(&chunk_iter, &chunk_array);
 
-        fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r", 1);
-        RAISEIF(fp == NULL,
-                ex_open,
-                NULL);
-        RAISEIF(0 > fseek(fp, ptr->roffset * felsize, SEEK_SET),
-                ex_seek,
-                "Failed to seek in block `%s' at (%d:%td) (%s)",
-                bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
         RAISEIF(chunk_size != fread(chunkbuf, felsize, chunk_size, fp),
                 ex_read,
                 "Failed to read in block `%s' at (%d:%td) (%s)",
                 bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
-        fclose(fp);
-        fp = NULL;
 
         /* now translate the data from chunkbuf to mptr */
         RAISEIF(0 != _dtype_convert(&array_iter, &chunk_iter, chunk_size * bb->nmemb),
             ex_convert, NULL);
 
         toread -= chunk_size;
+        /* big_block_seek may change the fileid (because the physical file is full up)
+         * Check for this case and re-open the new file*/
+        int fileid = ptr->fileid;
         RAISEIF(0 != big_block_seek_rel(bb, ptr, chunk_size),
                 ex_blockseek,
                 NULL);
+        if(ptr->fileid != fileid) {
+            fclose(fp);
+            fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r", 1);
+            RAISEIF(fp == NULL,
+                ex_open,
+                NULL);
+        }
     }
 
+    fclose(fp);
     free(chunkbuf);
     return 0;
 ex_read:
 ex_seek:
-    fclose(fp);
 ex_insuf:
 ex_convert:
 ex_blockseek:
+    fclose(fp);
 ex_open:
 ex_eof:
     free(chunkbuf);
