@@ -14,7 +14,7 @@ static void * verbose_mpiu_malloc_func(const char * name, size_t size, const cha
     int rank;
     MPI_Comm_rank(comm, &rank);
     void * ptr = malloc(size);
-    fprintf(stderr, "MPIU_Malloc: T%04d %16p : %s size = %ld, %s:%d\n", rank, ptr, name, size, file, line);
+    fprintf(stderr, "MPIU_Malloc: T%04d %16p : %s size = %zu, %s:%d\n", rank, ptr, name, size, file, line);
     return ptr;
 }
 
@@ -462,7 +462,7 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
     MPI_Comm_rank(segmenter->Group, &rank);
 
     /* rank with most data in a group is the leader of the group. */
-    segmenter->group_leader_rank = MPIU_GetLoc(&sizes[ThisTask], MPI_LONG, MPI_MAX, segmenter->Group);
+    segmenter->group_leader_rank = MPIU_GetLoc(&sizes[ThisTask], MPI_UNSIGNED_LONG, MPI_MAX, segmenter->Group);
 
     segmenter->is_group_leader = rank == segmenter->group_leader_rank;
 
@@ -471,7 +471,7 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
     MPI_Comm_split(segmenter->Group, segmenter->ThisSegment, ThisTask, &segmenter->Segment);
 
     /* rank with least data in a segment is the leader of the segment. */
-    segmenter->segment_leader_rank = MPIU_GetLoc(&sizes[ThisTask], MPI_LONG, MPI_MIN, segmenter->Segment);
+    segmenter->segment_leader_rank = MPIU_GetLoc(&sizes[ThisTask], MPI_UNSIGNED_LONG, MPI_MIN, segmenter->Segment);
 }
 
 void

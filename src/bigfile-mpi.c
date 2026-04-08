@@ -444,7 +444,7 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
 
         /* use the offset on the first task in the SegGroup */
         size_t offset = myoffset;
-        MPI_Bcast(&offset, 1, MPI_LONG, 0, seggrp->Segment);
+        MPI_Bcast(&offset, 1, MPI_UNSIGNED_LONG, 0, seggrp->Segment);
 
         rt = _aggregated(block, ptr, offset, localsize, array, write, seggrp->segment_leader_rank, seggrp->Segment);
 
