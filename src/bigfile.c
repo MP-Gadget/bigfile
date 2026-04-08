@@ -798,8 +798,8 @@ big_block_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 {
     char * chunkbuf = (char *) malloc(CHUNK_BYTES);
 
-    int nmemb = bb->nmemb ? bb->nmemb : 1;
-    int felsize = big_file_dtype_itemsize(bb->dtype) * nmemb;
+    int64_t nmemb = bb->nmemb ? bb->nmemb : 1;
+    int64_t felsize = big_file_dtype_itemsize(bb->dtype) * nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
 
     BigArray chunk_array = {0};
@@ -902,8 +902,8 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
     /* the file header is modified */
     bb->dirty = 1;
     char * chunkbuf = (char *) malloc(CHUNK_BYTES);
-    int nmemb = bb->nmemb ? bb->nmemb : 1;
-    int felsize = big_file_dtype_itemsize(bb->dtype) * nmemb;
+    int64_t nmemb = bb->nmemb ? bb->nmemb : 1;
+    int64_t felsize = big_file_dtype_itemsize(bb->dtype) * nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
 
     BigArray chunk_array = {0};
