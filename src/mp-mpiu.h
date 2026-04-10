@@ -68,11 +68,8 @@ typedef struct MPIU_Segmenter {
     int segment_start; /* segments responsible in this group */
     int segment_end;
 
-    int is_group_leader;
-    int group_leader_rank;
     int segment_leader_rank;
     MPI_Comm Group;  /* communicator for all ranks in the group */
-    MPI_Comm Leaders; /* communicator for all ranks by leaders vs nonleaders */
     MPI_Comm Segment; /* communicator for all ranks in this segment */
 } MPIU_Segmenter;
 

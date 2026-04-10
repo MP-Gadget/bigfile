@@ -416,16 +416,7 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
     segmenter->segment_end ++;
 
     int rank;
-
     MPI_Comm_rank(segmenter->Group, &rank);
-
-    /* rank with most data in a group is the leader of the group. */
-    segmenter->group_leader_rank = MPIU_GetLoc(&sizes[ThisTask], MPI_UNSIGNED_LONG, MPI_MAX, segmenter->Group);
-
-    segmenter->is_group_leader = rank == segmenter->group_leader_rank;
-
-    MPI_Comm_split(comm, (rank == segmenter->group_leader_rank)? 0 : 1, ThisTask, &segmenter->Leaders);
-
     MPI_Comm_split(segmenter->Group, segmenter->ThisSegment, ThisTask, &segmenter->Segment);
 
     /* rank with least data in a segment is the leader of the segment. */
@@ -437,6 +428,5 @@ MPIU_Segmenter_destroy(MPIU_Segmenter * segmenter)
 {
     MPI_Comm_free(&segmenter->Segment);
     MPI_Comm_free(&segmenter->Group);
-    MPI_Comm_free(&segmenter->Leaders);
 }
 
