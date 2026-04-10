@@ -430,7 +430,7 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
     /* no segment shall exceed the memory bound set by maxsegsize, since it will be collected to a single rank */
     if(avgsegsize > _BigFileAggThreshold) avgsegsize = _BigFileAggThreshold;
 
-    MPIU_Segmenter_init(seggrp, sizes, NULL, avgsegsize, concurrency, comm);
+    MPIU_Segmenter_init(seggrp, sizes, avgsegsize, concurrency, comm);
 
     free(sizes);
 

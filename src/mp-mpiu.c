@@ -349,85 +349,41 @@ MPIU_Scatter (MPI_Comm comm, int root, const void * sendbuffer, void * recvbuffe
 }
 
 int
-_MPIU_Segmenter_assign_colors(size_t glocalsize, size_t * sizes, size_t * sizes2, int * ncolor, MPI_Comm comm)
+_MPIU_Segmenter_assign_segment_numbers(size_t glocalsize, size_t * sizes, int * nsegment, MPI_Comm comm)
 {
     int NTask;
     int ThisTask;
     MPI_Comm_rank(comm, &ThisTask);
     MPI_Comm_size(comm, &NTask);
 
-    if (sizes2 == NULL) {
-        sizes2 = sizes;
-    }
-
     int i;
-    int mycolor = -1;
+    /* no data for color of -1; exclude them later with special cases */
+    int mysegment = -1;
     size_t current_size = 0;
-    size_t current_sizes2 = 0;
-    int current_color = 0;
-    int lastcolor = 0;
+    int current_segment = 0;
     for(i = 0; i < NTask; i ++) {
         current_size += sizes[i];
-        current_sizes2 += sizes2[i];
-
-        lastcolor = current_color;
-
-        if(i == ThisTask) {
-            mycolor = lastcolor;
+        /* Assign a colour to this task,
+         * maximally equal to the number of
+         * tasks with data before this one.*/
+        if(i == ThisTask && sizes[i] > 0) {
+            mysegment = current_segment;
         }
 
-        if(current_size > glocalsize || current_sizes2 > glocalsize) {
+        /* Start a new segment if we have too much data
+         * for this one and more tasks to assign*/
+        if(current_size > glocalsize && i < NTask -1) {
             current_size = 0;
-            current_sizes2 = 0;
-            current_color ++;
+            current_segment ++;
         }
     }
-    /* no data for color of -1; exclude them later with special cases */
-    if(sizes[ThisTask] == 0 && sizes2[ThisTask] == 0) {
-        mycolor = -1;
-    }
-
-    *ncolor = lastcolor + 1;
-    return mycolor;
-}
-
-size_t
-MPIU_Segmenter_collect_sizes(size_t localsize, size_t * sizes, size_t * myoffset, MPI_Comm comm)
-{
-
-    int ThisTask, NTask;
-
-    MPI_Comm_size(comm, &NTask);
-    MPI_Comm_rank(comm, &ThisTask);
-
-    size_t totalsize;
-
-    sizes[ThisTask] = localsize;
-
-    MPI_Datatype MPI_PTRDIFFT;
-
-    if(sizeof(ptrdiff_t) == sizeof(long)) {
-        MPI_PTRDIFFT = MPI_LONG;
-    } else if(sizeof(ptrdiff_t) == sizeof(int)) {
-        MPI_PTRDIFFT = MPI_INT;
-    } else { abort(); }
-
-    MPI_Allreduce(&sizes[ThisTask], &totalsize, 1, MPI_PTRDIFFT, MPI_SUM, comm);
-    MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, sizes, 1, MPI_PTRDIFFT, comm);
-
-    int i;
-    *myoffset = 0;
-    for(i = 0; i < ThisTask; i ++) {
-        (*myoffset) += sizes[i];
-    }
-
-    return totalsize;
+    *nsegment = current_segment + 1;
+    return mysegment;
 }
 
 void
 MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
                size_t * sizes,
-               size_t * sizes2,
                size_t avgsegsize,
                int Ngroup,
                MPI_Comm comm)
@@ -437,7 +393,9 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
     MPI_Comm_size(comm, &NTask);
     MPI_Comm_rank(comm, &ThisTask);
 
-    segmenter->ThisSegment = _MPIU_Segmenter_assign_colors(avgsegsize, sizes, sizes2, &segmenter->Nsegments, comm);
+    /* If avgsegsize == 0, this assigns a segment number to every rank which has non-zero data.
+       If avgsegsize > 0, a new segment number is assigned every time a rank exceeds avgsegsize. */
+    segmenter->ThisSegment = _MPIU_Segmenter_assign_segment_numbers(avgsegsize, sizes, &segmenter->Nsegments, comm);
 
     if(segmenter->ThisSegment >= 0) {
         /* assign segments to groups.
