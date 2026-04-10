@@ -418,12 +418,16 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
 
     segmenter->segment_end ++;
 
-    int rank;
-    MPI_Comm_rank(segmenter->Group, &rank);
     MPI_Comm_split(segmenter->Group, segmenter->ThisSegment, ThisTask, &segmenter->Segment);
 
-    /* rank with least data in a segment is the leader of the segment. */
-    segmenter->segment_leader_rank = MPIU_GetLoc(&sizes[ThisTask], MPI_UNSIGNED_LONG, MPI_MIN, segmenter->Segment);
+    /* rank with least data in a segment is the leader of the segment.
+     * Use the rank within Segment (not the global rank) as the identifier. */
+    int segment_rank;
+    MPI_Comm_rank(segmenter->Segment, &segment_rank);
+    struct { long val; int rank; } local = { (long)sizes[ThisTask], segment_rank };
+    struct { long val; int rank; } result;
+    MPI_Allreduce(&local, &result, 1, MPI_LONG_INT, MPI_MINLOC, segmenter->Segment);
+    segmenter->segment_leader_rank = result.rank;
 }
 
 void
