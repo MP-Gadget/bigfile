@@ -408,12 +408,19 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
         concurrency = NTask;
     }
 
+    size_t totalsize = 0;
     size_t avgsegsize;
     size_t localsize = array->dims[0];
-    size_t myoffset;
+    size_t myoffset = 0;
     size_t * sizes = (size_t *) malloc(sizeof(sizes[0]) * NTask);
+    sizes[ThisTask] = localsize;
 
-    size_t totalsize = MPIU_Segmenter_collect_sizes(localsize, sizes, &myoffset, comm);
+    MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, sizes, 1, MPI_UNSIGNED_LONG, comm);
+    int i;
+    for(i = 0; i < ThisTask; i ++)
+        myoffset += sizes[i];
+    for(i = 0; i < NTask; i ++)
+        totalsize += sizes[i];
 
     /* try to create as many segments as number of groups (thus one segment per group) */
     avgsegsize = totalsize / concurrency;
