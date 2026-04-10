@@ -430,6 +430,9 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
     /* no segment shall exceed the memory bound set by maxsegsize, since it will be collected to a single rank */
     if(avgsegsize > _BigFileAggThreshold) avgsegsize = _BigFileAggThreshold;
 
+    /* Creates segments and groups. The number of groups is roughly equal
+     * to the number of writing processes (with a complexity if some processes have no data to write).
+     * The number of segments is set by the average size of data to write to a file.*/
     MPIU_Segmenter_init(seggrp, sizes, avgsegsize, concurrency, comm);
 
     free(sizes);
@@ -441,10 +444,12 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
         segment < seggrp->segment_end;
         segment ++) {
 
+        /* Ensures that ranks in this group, but not in this segment do not try to write at the same time*/
         MPI_Barrier(seggrp->Group);
 
+        /* This extra broadcast is so that the error-ing segment stops trying to write.*/
         if(0 != (rt = big_file_mpi_broadcast_anyerror(rt, seggrp->Group))) {
-            /* failed , abort. */
+            /* failed , no more writes to segment. */
             continue;
         }
         if(seggrp->ThisSegment != segment) continue;

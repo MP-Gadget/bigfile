@@ -393,7 +393,7 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
     MPI_Comm_size(comm, &NTask);
     MPI_Comm_rank(comm, &ThisTask);
 
-    /* If avgsegsize == 0, this assigns a segment number to every rank which has non-zero data.
+    /* If avgsegsize == 0, this assigns a segment number in order to every rank which has non-zero data.
        If avgsegsize > 0, a new segment number is assigned every time a rank exceeds avgsegsize. */
     segmenter->ThisSegment = _MPIU_Segmenter_assign_segment_numbers(avgsegsize, sizes, &segmenter->Nsegments, comm);
 
@@ -402,14 +402,17 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
          * if Nsegments < Ngroup, some groups will have no segments, and thus no ranks belong to them. */
         segmenter->GroupID = ((size_t) segmenter->ThisSegment) * Ngroup / segmenter->Nsegments;
     } else {
+        /* Ranks with no data end up here and in a special group with nothing to do*/
         segmenter->GroupID = Ngroup + 1;
         segmenter->ThisSegment = NTask + 1;
     }
 
     segmenter->Ngroup = Ngroup;
 
+    /* Split the communicator into groups of segments*/
     MPI_Comm_split(comm, segmenter->GroupID, ThisTask, &segmenter->Group);
 
+    /* Find the minimum and maximum rank of this segment in this group*/
     MPI_Allreduce(&segmenter->ThisSegment, &segmenter->segment_start, 1, MPI_INT, MPI_MIN, segmenter->Group);
     MPI_Allreduce(&segmenter->ThisSegment, &segmenter->segment_end, 1, MPI_INT, MPI_MAX, segmenter->Group);
 
