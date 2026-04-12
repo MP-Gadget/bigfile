@@ -898,6 +898,12 @@ ex_eof:
 int
 big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
 {
+    return _big_block_write_mode(bb, ptr, array, "r+");
+}
+
+int
+_big_block_write_mode(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, const char * mode)
+{
     if(array->size == 0) return 0;
     /* the file header is modified */
     bb->dirty = 1;
@@ -932,7 +938,7 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         "Writing beyond the block `%s` at (%d:%td)",
         bb->basename, ptr->fileid, ptr->roffset * felsize);
 
-    fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r+", 1);
+    fp = _big_file_open_a_file(bb->basename, ptr->fileid, mode, 1);
         RAISEIF(fp == NULL,
                 ex_open,
                 NULL);
@@ -940,8 +946,20 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         ex_seek,
         "Failed to seek in block `%s' at (%d:%td) (%s)",
         bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
+    int fileid = ptr->fileid;
 
     while(towrite > 0 && ! big_block_eof(bb, ptr)) {
+        if(ptr->fileid != fileid) {
+            fclose(fp);
+            RAISEIF(strcmp(mode, "r+") != 0,
+                ex_open,
+                NULL);
+            fp = _big_file_open_a_file(bb->basename, ptr->fileid, mode, 1);
+            RAISEIF(fp == NULL,
+                ex_open,
+                NULL);
+            fileid = ptr->fileid;
+        }
         size_t chunk_size = CHUNK_SIZE;
         /* remaining items in the file */
         if(chunk_size > bb->fsize[ptr->fileid] - ptr->roffset) {
@@ -967,16 +985,8 @@ big_block_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array)
         towrite -= chunk_size;
         /* big_block_seek may change the fileid (because the physical file is full up)
          * Check for this case and re-open the new file*/
-        int fileid = ptr->fileid;
         RAISEIF(0 != big_block_seek_rel(bb, ptr, chunk_size),
                 ex_blockseek, NULL);
-        if(ptr->fileid != fileid) {
-            fclose(fp);
-            fp = _big_file_open_a_file(bb->basename, ptr->fileid, "r+", 1);
-            RAISEIF(fp == NULL,
-                ex_open,
-                NULL);
-        }
     }
     fclose(fp);
     free(chunkbuf);
