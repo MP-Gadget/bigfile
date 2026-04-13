@@ -389,6 +389,7 @@ _aggregated(
             BigArray * array,
             int write,
             int root,
+            const char * mode,
             MPI_Comm comm);
 
 static int
@@ -449,8 +450,7 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
         size_t offset = myoffset;
         MPI_Bcast(&offset, 1, MPI_UNSIGNED_LONG, 0, seggrp->Segment);
 
-        rt = _aggregated(block, ptr, offset, localsize, array, write, seggrp->segment_leader_rank, seggrp->Segment);
-
+        rt = _aggregated(block, ptr, offset, localsize, array, write, seggrp->segment_leader_rank, "r+", seggrp->Segment);
     }
 
     if(0 == (rt = big_file_mpi_broadcast_anyerror(rt, comm))) {
@@ -467,10 +467,11 @@ _aggregated(
             BigBlock * block,
             BigBlockPtr * ptr,
             ptrdiff_t offset, /* offset of the entire comm */
-            size_t localsize, /* offset of the entire comm */
+            size_t localsize,
             BigArray * array,
             int write,
             int root,
+            const char * mode,
             MPI_Comm comm)
 {
     size_t elsize = big_file_dtype_itemsize(block->dtype) * block->nmemb;
@@ -528,7 +529,7 @@ _aggregated(
     if(rank == root) {
         big_block_seek_rel(block, ptr1, offset);
         if(write)
-            e = big_block_write(block, ptr1, garray);
+            e = _big_block_write_mode(block, ptr1, garray, mode);
         else
             e = big_block_read(block, ptr1, garray);
     }
