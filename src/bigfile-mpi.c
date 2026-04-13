@@ -551,6 +551,116 @@ _aggregated(
 }
 
 int
+big_block_mpi_create_and_write(BigFile * bf,
+        const char * blockname,
+        BigArray * array,
+        int concurrency,
+        MPI_Comm comm)
+{
+    int NTask, ThisTask;
+    int rt = 0;
+
+    if(comm == MPI_COMM_NULL) return 0;
+
+    MPI_Comm_size(comm, &NTask);
+    MPI_Comm_rank(comm, &ThisTask);
+
+    if (ThisTask == 0) {
+        rt = _big_file_mksubdir_r(bf->basename, blockname);
+    }
+
+    BCAST_AND_RAISEIF(rt, comm);
+
+    MPIU_Segmenter seggrp[1];
+
+    if(concurrency <= 0) {
+        concurrency = NTask;
+    }
+
+    size_t totalsize = 0;
+    size_t localsize = array->dims[0];
+    size_t * sizes = (size_t *) malloc(sizeof(sizes[0]) * NTask);
+    sizes[ThisTask] = localsize;
+
+    MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, sizes, 1, MPI_UNSIGNED_LONG, comm);
+    int i;
+    for(i = 0; i < NTask; i ++)
+        totalsize += sizes[i];
+
+    /* Creates segments and groups. The number of groups is roughly equal
+     * to the number of writing processes (with a complexity if some processes have no data to write).
+     * We create one file per segment group.*/
+    MPIU_Segmenter_init(seggrp, sizes, totalsize, totalsize, concurrency, comm);
+
+    size_t group_total;
+    MPI_Allreduce(&sizes[ThisTask], &group_total, 1, MPI_UNSIGNED_LONG, MPI_SUM, seggrp->Group);
+    /* Work out the sizes of each group. This will become the sizes for the files*/
+    size_t * gsizes = calloc(seggrp->Ngroup, sizeof(size_t));
+    if(seggrp->GroupID < seggrp->Ngroup)
+        gsizes[seggrp->GroupID] = group_total;
+    MPI_Allreduce(MPI_IN_PLACE, gsizes, seggrp->Ngroup, MPI_UNSIGNED_LONG, MPI_SUM, comm);
+
+    BigBlock block = {0};
+    if(ThisTask == 0) {
+        /* Now we know the groups and segments, create the files*/
+        size_t stringlen = strlen(bf->basename) + strnlen(blockname, 512) + 128;
+        char * basename = (char *) malloc(stringlen);
+        snprintf(basename, stringlen, "%s/%s/", bf->basename, blockname);
+        rt = _big_block_create_internal(&block, basename, array->dtype, array->dims[1], seggrp->Ngroup, gsizes);
+        free(basename);
+    }
+
+    size_t myoffset = 0;
+    for(i = 0; i < ThisTask; i ++)
+        myoffset += sizes[i];
+
+    free(gsizes);
+    free(sizes);
+
+    if(0 != (rt = big_file_mpi_broadcast_anyerror(rt, comm))) {
+        /* No need to close the block as if rt != 0 we didn't open it correctly*/
+        MPIU_Segmenter_destroy(seggrp);
+        return rt;
+    }
+
+    big_block_mpi_broadcast(&block, 0, comm);
+
+    BigBlockPtr ptr = {0};
+
+    int segment;
+
+    for(segment = seggrp->segment_start;
+        segment < seggrp->segment_end;
+        segment ++) {
+
+        /* Ensures that ranks in this group, but not in this segment do not try to write at the same time*/
+        MPI_Barrier(seggrp->Group);
+
+        /* This extra broadcast is so that the error-ing segment stops trying to write.*/
+        if(0 != (rt = big_file_mpi_broadcast_anyerror(rt, seggrp->Group))) {
+            /* failed , no more writes to segment. */
+            continue;
+        }
+        if(seggrp->ThisSegment != segment) continue;
+
+        /* use the offset on the first task in the SegGroup */
+        size_t offset = myoffset;
+        MPI_Bcast(&offset, 1, MPI_UNSIGNED_LONG, 0, seggrp->Segment);
+
+        /* write = 1 : Always writing here and we use mode 'w' so we create the files.*/
+        rt = _aggregated(&block, &ptr, offset, localsize, array, 1, seggrp->segment_leader_rank, "w", seggrp->Segment);
+    }
+
+    MPIU_Segmenter_destroy(seggrp);
+
+    /* Block written, close it*/
+    big_block_mpi_close(&block, comm);
+
+    return rt;
+}
+
+
+int
 big_block_mpi_write(BigBlock * block, BigBlockPtr * ptr, BigArray * array, int concurrency, MPI_Comm comm)
 {
     int rt = _throttle_action(comm, concurrency, block, ptr, array, 1);
