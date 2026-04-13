@@ -907,7 +907,6 @@ _big_block_write_mode(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, const 
     if(array->size == 0) return 0;
     /* the file header is modified */
     bb->dirty = 1;
-    char * chunkbuf = (char *) malloc(CHUNK_BYTES);
     int64_t nmemb = bb->nmemb ? bb->nmemb : 1;
     int64_t felsize = big_file_dtype_itemsize(bb->dtype) * nmemb;
     size_t CHUNK_SIZE = CHUNK_BYTES / felsize;
@@ -919,9 +918,8 @@ _big_block_write_mode(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, const 
 
     BigArrayIter chunk_iter;
     BigArrayIter array_iter;
-    ptrdiff_t towrite = 0;
-    FILE * fp;
 
+    char * chunkbuf = (char *) malloc(CHUNK_BYTES);
     if(chunkbuf == NULL) {
         _big_file_raise("not enough memory for chunkbuf of size %zu bytes", __FILE__, __LINE__,  CHUNK_BYTES);
         return -1;
@@ -930,34 +928,42 @@ _big_block_write_mode(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, const 
     big_array_init(&chunk_array, chunkbuf, bb->dtype, 2, dims, NULL);
     big_array_iter_init(&array_iter, array);
 
-    towrite = array->size / nmemb;
+    ptrdiff_t towrite = array->size / nmemb;
 
     ptrdiff_t abs = bb->foffset[ptr->fileid] + ptr->roffset + towrite;
-    RAISEIF(abs > bb->size,
-        ex_eof,
-        "Writing beyond the block `%s` at (%d:%td)",
+    if(abs > bb->size) {
+        free(chunkbuf);
+        _big_file_raise("Writing beyond the block `%s` at (%d:%td)", __FILE__, __LINE__,
         bb->basename, ptr->fileid, ptr->roffset * felsize);
+        return -1;
+    }
+    FILE * fp = _big_file_open_a_file(bb->basename, ptr->fileid, mode, 1);
+    if(fp == NULL) {
+        free(chunkbuf);
+        _big_file_raise("Could not open file '%s:%d'", __FILE__, __LINE__,  bb->basename, ptr->fileid);
+        return -1;
+    }
+    int fileid = ptr->fileid;
 
-    fp = _big_file_open_a_file(bb->basename, ptr->fileid, mode, 1);
-        RAISEIF(fp == NULL,
-                ex_open,
-                NULL);
     RAISEIF(0 > fseek(fp, ptr->roffset * felsize, SEEK_SET),
         ex_seek,
         "Failed to seek in block `%s' at (%d:%td) (%s)",
         bb->basename, ptr->fileid, ptr->roffset * felsize, strerror(errno));
-    int fileid = ptr->fileid;
 
     while(towrite > 0 && ! big_block_eof(bb, ptr)) {
         if(ptr->fileid != fileid) {
             fclose(fp);
-            RAISEIF(strcmp(mode, "r+") != 0,
-                ex_open,
-                NULL);
+            if(strcmp(mode, "r+") != 0) {
+                free(chunkbuf);
+                _big_file_raise("Opened second file with mode w in one call, not allowed: '%d->%d'", __FILE__, __LINE__,  fileid, ptr->fileid);
+                return -1;
+            }
             fp = _big_file_open_a_file(bb->basename, ptr->fileid, mode, 1);
-            RAISEIF(fp == NULL,
-                ex_open,
-                NULL);
+            if(fp == NULL) {
+                free(chunkbuf);
+                _big_file_raise("Could not open file '%s:%d'", __FILE__, __LINE__,  bb->basename, ptr->fileid);
+                return -1;
+            }
             fileid = ptr->fileid;
         }
         size_t chunk_size = CHUNK_SIZE;
@@ -996,8 +1002,6 @@ ex_seek:
 ex_convert:
 ex_blockseek:
     fclose(fp);
-ex_open:
-ex_eof:
     free(chunkbuf);
     return -1;
 }
