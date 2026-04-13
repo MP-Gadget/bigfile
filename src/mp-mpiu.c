@@ -53,6 +53,9 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
     MPI_Comm_size(comm, &NTask);
     MPI_Comm_rank(comm, &ThisTask);
 
+    if(Ngroup <= 0 || Ngroup > NTask)
+        Ngroup = NTask;
+
     /* try to create as many segments as number of groups (thus one segment per group) */
     size_t avgsegsize = totalsize / Ngroup;
 

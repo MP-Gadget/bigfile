@@ -405,10 +405,6 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
 
     MPIU_Segmenter seggrp[1];
 
-    if(concurrency <= 0) {
-        concurrency = NTask;
-    }
-
     size_t totalsize = 0;
     size_t localsize = array->dims[0];
     size_t myoffset = 0;
@@ -572,10 +568,6 @@ big_block_mpi_create_and_write(BigFile * bf,
     BCAST_AND_RAISEIF(rt, comm);
 
     MPIU_Segmenter seggrp[1];
-
-    if(concurrency <= 0) {
-        concurrency = NTask;
-    }
 
     size_t totalsize = 0;
     size_t localsize = array->dims[0];
