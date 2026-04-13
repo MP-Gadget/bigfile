@@ -653,9 +653,12 @@ big_block_mpi_create_and_write(BigFile * bf,
 
     MPIU_Segmenter_destroy(seggrp);
 
-    /* Block written, close it*/
-    big_block_mpi_close(&block, comm);
-
+    /* Block written, close it: we need to close even if we have a write error,
+     * but we want to preserve the write error in that case.*/
+    int close_rt = big_block_mpi_close(&block, comm);
+    if(rt == 0)
+        rt = close_rt;
+    rt = big_file_mpi_broadcast_anyerror(rt, comm);
     return rt;
 }
 
