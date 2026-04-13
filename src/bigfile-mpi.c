@@ -409,7 +409,6 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
     }
 
     size_t totalsize = 0;
-    size_t avgsegsize;
     size_t localsize = array->dims[0];
     size_t myoffset = 0;
     size_t * sizes = (size_t *) malloc(sizeof(sizes[0]) * NTask);
@@ -422,18 +421,10 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
     for(i = 0; i < NTask; i ++)
         totalsize += sizes[i];
 
-    /* try to create as many segments as number of groups (thus one segment per group) */
-    avgsegsize = totalsize / concurrency;
-
-    if(avgsegsize <= 0) avgsegsize = 1;
-
-    /* no segment shall exceed the memory bound set by maxsegsize, since it will be collected to a single rank */
-    if(avgsegsize > _BigFileAggThreshold) avgsegsize = _BigFileAggThreshold;
-
     /* Creates segments and groups. The number of groups is roughly equal
      * to the number of writing processes (with a complexity if some processes have no data to write).
      * The number of segments is set by the average size of data to write to a file.*/
-    MPIU_Segmenter_init(seggrp, sizes, avgsegsize, concurrency, comm);
+    MPIU_Segmenter_init(seggrp, sizes, totalsize, _BigFileAggThreshold, concurrency, comm);
 
     free(sizes);
 

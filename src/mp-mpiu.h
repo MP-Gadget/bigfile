@@ -27,7 +27,8 @@ typedef struct MPIU_Segmenter {
 void
 MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
                size_t * sizes,   /* IN: size per rank, used to bound the number of ranks in a group. */
-               size_t expected_segsize, /* desired size per segment */
+               size_t totalsize, /* Total size of data to segment into groups. */
+               size_t maxsegsize, /* Maximum desired segment size. Can still be exceeded if a single rank has more data than this.*/
                int Ngroup,  /* number of groups to form. */
                MPI_Comm comm);
 void

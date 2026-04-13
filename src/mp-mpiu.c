@@ -43,7 +43,8 @@ _MPIU_Segmenter_assign_segment_numbers(size_t glocalsize, size_t * sizes, int * 
 void
 MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
                size_t * sizes,
-               size_t avgsegsize,
+               size_t totalsize,
+               size_t maxsegsize,
                int Ngroup,
                MPI_Comm comm)
 {
@@ -51,6 +52,13 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
 
     MPI_Comm_size(comm, &NTask);
     MPI_Comm_rank(comm, &ThisTask);
+
+    /* try to create as many segments as number of groups (thus one segment per group) */
+    size_t avgsegsize = totalsize / Ngroup;
+
+    /* no segment shall exceed the memory bound set by maxsegsize, since it will be collected to a single rank */
+    if(avgsegsize > maxsegsize)
+        avgsegsize = maxsegsize;
 
     /* If avgsegsize == 0, this assigns a segment number in order to every rank which has non-zero data.
        If avgsegsize > 0, a new segment number is assigned every time a rank exceeds avgsegsize. */
