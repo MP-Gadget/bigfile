@@ -45,6 +45,7 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
                size_t * sizes,
                size_t totalsize,
                size_t maxsegsize,
+               size_t minsegsize,
                int Ngroup,
                MPI_Comm comm)
 {
@@ -58,6 +59,10 @@ MPIU_Segmenter_init(MPIU_Segmenter * segmenter,
 
     /* try to create as many segments as number of groups (thus one segment per group) */
     size_t avgsegsize = totalsize / Ngroup;
+
+    /* For small segments it is more efficient to gather all the data to a single rank in the group and write it at once*/
+    if(avgsegsize < minsegsize)
+        avgsegsize = minsegsize;
 
     /* no segment shall exceed the memory bound set by maxsegsize, since it will be collected to a single rank */
     if(avgsegsize > maxsegsize)

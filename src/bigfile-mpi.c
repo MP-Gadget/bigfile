@@ -418,10 +418,12 @@ _throttle_action(MPI_Comm comm, int concurrency, BigBlock * block,
     for(i = 0; i < NTask; i ++)
         totalsize += sizes[i];
 
+
+    size_t minsegsize = 32 * 1024 * 1024;
     /* Creates segments and groups. The number of groups is roughly equal
      * to the number of writing processes (with a complexity if some processes have no data to write).
      * The number of segments is set by the average size of data to write to a file.*/
-    MPIU_Segmenter_init(seggrp, sizes, totalsize, _BigFileAggThreshold, concurrency, comm);
+    MPIU_Segmenter_init(seggrp, sizes, totalsize, _BigFileAggThreshold, minsegsize, concurrency, comm);
 
     free(sizes);
 
@@ -579,10 +581,16 @@ big_block_mpi_create_and_write(BigFile * bf,
     for(i = 0; i < NTask; i ++)
         totalsize += sizes[i];
 
+    /* For datasets smaller than some value, it is more efficient
+     * to gather them to one rank, rather than opening the file on each rank
+     * in the group in turn. The number here is not rigorously chosen, but is smaller
+     * than CHUNK_BYTES so we can definitely do it in one write*/
+    size_t minsegsize = 32 * 1024 * 1024;
+
     /* Creates segments and groups. The number of groups is roughly equal
      * to the number of writing processes (with a complexity if some processes have no data to write).
      * We create one file per segment group.*/
-    MPIU_Segmenter_init(seggrp, sizes, totalsize, totalsize, concurrency, comm);
+    MPIU_Segmenter_init(seggrp, sizes, totalsize, totalsize, minsegsize, concurrency, comm);
 
     size_t group_total;
     MPI_Allreduce(&sizes[ThisTask], &group_total, 1, MPI_UNSIGNED_LONG, MPI_SUM, seggrp->Group);
