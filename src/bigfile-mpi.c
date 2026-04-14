@@ -590,7 +590,9 @@ big_block_mpi_create_and_write(BigFile * bf,
     size_t * gsizes = calloc(seggrp->Ngroup, sizeof(size_t));
     if(seggrp->GroupID < seggrp->Ngroup)
         gsizes[seggrp->GroupID] = group_total;
-    MPI_Allreduce(MPI_IN_PLACE, gsizes, seggrp->Ngroup, MPI_UNSIGNED_LONG, MPI_SUM, comm);
+    /* At this point elements in the group have gsizes = group_total for their own group, and
+     * zero for the other groups. Propagate the group sizes below, noting we use MPI_MAX */
+    MPI_Allreduce(MPI_IN_PLACE, gsizes, seggrp->Ngroup, MPI_UNSIGNED_LONG, MPI_MAX, comm);
 
     BigBlock block = {0};
     if(ThisTask == 0) {
