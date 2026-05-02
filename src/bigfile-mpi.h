@@ -94,10 +94,14 @@ int big_block_mpi_grow_simple(BigBlock * block, int Nfile_grow, size_t fsize_gro
  *  the data is aggregated to the leader rank of the writer group for writing, to reduce
  *  the total number of IO requests issued to the file server.
  *
+ * Note! Multiple writers may write to the same file at the same time! The filesystem
+ * locking needs to be reliable. This is a dangerous mode to use.
+ *
  * */
 void big_file_mpi_set_aggregated_threshold(size_t bytes);
 size_t big_file_mpi_get_aggregated_threshold();
 
+/* This function has no effect and is here only for API compatibility purposes.*/
 void big_file_mpi_set_verbose(int verbose);
 
 /** Write data stored in a BigArray to a BigBlock.
@@ -115,6 +119,27 @@ void big_file_mpi_set_verbose(int verbose);
  * @returns 0 if successful. */
 int big_block_mpi_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, int concurrency, MPI_Comm comm);
 
+/** Create a BigBlock and write data stored in a BigArray to it.
+ * This is similar to doing big_file_mpi_create_block(),
+ * big_block_mpi_write() and big_block_mpi_close() in a single call.
+ *
+ * Using a single call allows us to enforce that each rank writes only to a single file.
+ * This is done by ensuring that file boundaries match up to rank boundaries.
+ * Useful especially when the parallel locking in the filesystem is not reliable.
+ *
+ * The BigBlock pointed to by blockname should not exist and will be destroyed if it does.
+ *
+ * This is a collective MPI operation.
+ *
+ * Arguments:
+ * @param bf - Opened BigFile
+ * @param blockname - the name of the block to create.
+ * @param array - BigArray containing the data which should be written.
+ * @param concurrency - Max number of MPI ranks that issues write operation at the same time and the number of files in the block.
+ * @param comm - MPI Communicator
+ * @returns 0 if successful. */
+int big_block_mpi_create_and_write(BigFile * bf, const char * blockname, BigArray * array, int concurrency, MPI_Comm comm);
+
 /** Read from a block to a BigArray
  *
  * This is a collective MPI operation. The read operation will start from ptr.
@@ -128,7 +153,7 @@ int big_block_mpi_write(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, int 
  */
 int big_block_mpi_read(BigBlock * bb, BigBlockPtr * ptr, BigArray * array, int concurrency, MPI_Comm comm);
 
-/** Flush the BigBlock 
+/** Flush the BigBlock
  *
  *  Flush will write the attrset from root rank, and gather the checksums from all ranks.
  *
